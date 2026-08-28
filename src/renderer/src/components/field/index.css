@@ -1,0 +1,22 @@
+/* ─── Form field (prototype `.imb-field`) ──────────────────────────── */
+.imb-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: var(--imb-space-5);
+}
+.imb-field label {
+  font-size: var(--imb-text-sm);
+  color: var(--imb-muted);
+}
+.imb-field.imb-has-error label {
+  color: var(--imb-danger);
+}
+.imb-field-help {
+  font-size: var(--imb-text-xs);
+  color: var(--imb-muted);
+}
+.imb-field-error {
+  font-size: var(--imb-text-xs);
+  color: var(--imb-danger);
+}

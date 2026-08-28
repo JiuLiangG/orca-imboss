@@ -1,0 +1,213 @@
+import { useRef, useState } from "react";
+import type { MessageAttachment } from "../../../../../../shared/types";
+import { t } from "../../../../../../shared/libs/l10n";
+import { useClickOutside, useEscapeKey } from "../../../../hooks";
+import { IconAttach, IconFile, IconImage, IconSend } from "../../../icons";
+import "./index.css";
+
+export interface ChatInputBarProps {
+  disabled?: boolean;
+  onSend: (text: string, attachments: MessageAttachment[]) => void;
+}
+
+const MAX_PREVIEW_CHARS = 2_000_000; // keep DB sane (matches main's cap)
+
+/**
+ * Chat composer (`.chat-input-card`): attachment thumbnails row, autosize
+ * textarea (72→160), attach popup (图片 / 文件) + circular send button.
+ * Enter sends, Shift+Enter inserts a newline.
+ */
+export function ChatInputBar({
+  disabled = false,
+  onSend,
+}: ChatInputBarProps): React.JSX.Element {
+  const [text, setText] = useState("");
+  const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
+  const [popupOpen, setPopupOpen] = useState(false);
+  const popupRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useClickOutside(popupRef, () => setPopupOpen(false), popupOpen);
+  useEscapeKey(() => setPopupOpen(false), popupOpen);
+
+  const send = (): void => {
+    const value = text.trim();
+    if (disabled) return;
+    if (!value && attachments.length === 0) return;
+    const meta = attachments.map(({ name, size, type, preview }) => ({
+      name,
+      size,
+      type,
+      preview,
+    }));
+    onSend(value, meta);
+    setText("");
+    setAttachments([]);
+  };
+
+  const addFiles = (files: FileList | null): void => {
+    if (!files) return;
+    const next: AttachmentDraft[] = [];
+    for (const file of Array.from(files).slice(0, 16 - attachments.length)) {
+      const draft: AttachmentDraft = {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        preview: null,
+      };
+      if (file.type.startsWith("image/")) {
+        void readPreview(file).then((preview) => {
+          setAttachments((current) =>
+            current.map((a) => (a === draft ? { ...a, preview } : a)),
+          );
+        });
+      }
+      next.push(draft);
+    }
+    setAttachments((current) => [...current, ...next]);
+    setPopupOpen(false);
+  };
+
+  const onKeyDown = (event: React.KeyboardEvent): void => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      send();
+    }
+  };
+
+  return (
+    <div className="imb-chat-input-wrap">
+      <div className="imb-chat-input-card">
+        {attachments.length > 0 && (
+          <div className="imb-attached-files">
+            {attachments.map((file, index) => (
+              <div
+                className="imb-attached-file-thumb"
+                key={`${file.name}-${index}`}
+              >
+                {file.preview ? (
+                  <img src={file.preview} alt={file.name} />
+                ) : (
+                  <div className="imb-file-icon-placeholder">
+                    <IconFile />
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="imb-attached-file-remove"
+                  aria-label={`${t("Remove")} ${file.name}`}
+                  onClick={() =>
+                    setAttachments((current) =>
+                      current.filter((_, i) => i !== index),
+                    )
+                  }
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <textarea
+          className="imb-chat-input-textarea"
+          rows={2}
+          value={text}
+          placeholder={t("Describe what you want…")}
+          disabled={disabled}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={onKeyDown}
+        />
+        <div className="imb-chat-input-actions">
+          <div className="imb-attach-anchor" ref={popupRef}>
+            <button
+              type="button"
+              className="imb-attach-btn"
+              aria-label={t("Attach")}
+              title={t("Attach")}
+              onClick={() => setPopupOpen((v) => !v)}
+            >
+              <IconAttach />
+            </button>
+            {popupOpen && (
+              <div className="imb-attach-popup imb-open" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="imb-attach-popup-item"
+                  onClick={() => {
+                    setPopupOpen(false);
+                    imageInputRef.current?.click();
+                  }}
+                >
+                  <IconImage />
+                  <span>{t("Image")}</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="imb-attach-popup-item"
+                  onClick={() => {
+                    setPopupOpen(false);
+                    fileInputRef.current?.click();
+                  }}
+                >
+                  <IconFile />
+                  <span>{t("File")}</span>
+                </button>
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            className="imb-send-btn-circle"
+            aria-label={t("Send")}
+            disabled={disabled || (!text.trim() && attachments.length === 0)}
+            onClick={send}
+          >
+            <IconSend />
+          </button>
+        </div>
+      </div>
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={(e) => {
+          addFiles(e.target.files);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        hidden
+        onChange={(e) => {
+          addFiles(e.target.files);
+          e.target.value = "";
+        }}
+      />
+    </div>
+  );
+}
+
+interface AttachmentDraft extends MessageAttachment {
+  preview: string | null;
+}
+
+async function readPreview(file: File): Promise<string> {
+  try {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error("read failed"));
+      reader.readAsDataURL(file);
+    });
+    return dataUrl.length > MAX_PREVIEW_CHARS ? "" : dataUrl;
+  } catch {
+    return "";
+  }
+}

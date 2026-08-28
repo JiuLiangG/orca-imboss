@@ -1,0 +1,36 @@
+/* ─── Text input (prototype `.imb-input`) ──────────────────────────── */
+.imb-input {
+  width: 100%;
+  padding: 10px 13px;
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-md);
+  background: var(--imb-surface);
+  color: var(--imb-fg);
+  font: inherit;
+  font-size: var(--imb-text-base);
+  transition:
+    border-color var(--imb-motion-fast) var(--imb-ease-standard),
+    box-shadow var(--imb-motion-fast) var(--imb-ease-standard);
+}
+.imb-input:focus {
+  outline: none;
+  border-color: var(--imb-accent);
+  box-shadow: var(--imb-focus-ring);
+}
+.imb-input::placeholder {
+  color: var(--imb-muted);
+}
+.imb-input:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.imb-input.imb-is-invalid {
+  border-color: var(--imb-danger);
+}
+.imb-input.imb-is-invalid:focus {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--imb-danger), transparent 70%);
+}
+.imb-input.imb-mono {
+  font-family: var(--imb-font-mono);
+  font-size: var(--imb-text-sm);
+}

@@ -11,9 +11,9 @@
     "jsx": "react-jsx",
     "noUnusedParameters": false,
     "paths": {
-      "@renderer/*": [
-        "./src/renderer/src/*"
-      ]
+      // "@renderer/*": [
+      //   "./src/renderer/src/*"
+      // ]
     }
   }
 }

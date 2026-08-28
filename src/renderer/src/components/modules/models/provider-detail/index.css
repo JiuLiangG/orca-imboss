@@ -1,0 +1,21 @@
+/* ─── Provider detail ──────────────────────────────────────────── */
+.imb-provider-info {
+  display: block;
+  padding: 10px 13px;
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-md);
+  background: var(--imb-surface);
+  color: var(--imb-fg);
+  font-size: var(--imb-text-sm);
+  word-break: break-all;
+}
+.imb-provider-model-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.imb-provider-remove-note {
+  color: var(--imb-muted);
+  font-size: var(--imb-text-sm);
+  margin: var(--imb-space-2) 0;
+}

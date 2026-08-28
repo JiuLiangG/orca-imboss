@@ -1,0 +1,113 @@
+/* ─── Custom select (`.imb-select-wrap` / `.imb-select-panel`) ─────────── */
+.imb-select-wrap {
+  position: relative;
+}
+.imb-select {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 34px 10px 13px;
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-md);
+  background: var(--imb-surface);
+  color: var(--imb-fg);
+  font: inherit;
+  font-size: var(--imb-text-base);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--imb-motion-fast) var(--imb-ease-standard),
+    box-shadow var(--imb-motion-fast) var(--imb-ease-standard);
+}
+.imb-select:hover:not(:disabled) {
+  border-color: var(--imb-fg);
+}
+.imb-select:focus-visible {
+  outline: none;
+  border-color: var(--imb-accent);
+  box-shadow: var(--imb-focus-ring);
+}
+.imb-select[aria-expanded="true"] {
+  border-color: var(--imb-accent);
+  box-shadow: var(--imb-focus-ring);
+}
+.imb-select:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.imb-select-wrap.imb-has-error .imb-select {
+  border-color: var(--imb-danger);
+}
+.imb-select-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.imb-select-value.imb-is-placeholder {
+  color: var(--imb-muted);
+}
+.imb-select-caret {
+  position: absolute;
+  right: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--imb-muted);
+  pointer-events: none;
+  transition: transform var(--imb-motion-fast) var(--imb-ease-standard);
+}
+.imb-select-caret.imb-is-open {
+  transform: translateY(-50%) rotate(180deg);
+}
+.imb-select-panel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--imb-surface);
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  max-height: 210px;
+  overflow-y: auto;
+  padding: 6px;
+  margin: 0;
+  list-style: none;
+}
+.imb-select-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: var(--imb-radius-sm);
+  cursor: pointer;
+  font-size: var(--imb-text-base);
+  color: var(--imb-fg);
+}
+.imb-select-option:hover,
+.imb-select-option.imb-is-active {
+  background: var(--imb-fg-soft);
+}
+.imb-select-option.imb-is-selected {
+  color: var(--imb-accent-active);
+  font-weight: 500;
+}
+.imb-select-option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.imb-select-check {
+  color: var(--imb-accent);
+  font-weight: 700;
+  flex: none;
+}
+.imb-select-empty {
+  padding: 9px 10px;
+  color: var(--imb-muted);
+  text-align: center;
+}

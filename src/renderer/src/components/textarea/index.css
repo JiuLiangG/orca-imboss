@@ -1,0 +1,39 @@
+/* ─── Textarea (prototype `.imb-textarea`) ─────────────────────────── */
+.imb-textarea {
+  width: 100%;
+  padding: 10px 13px;
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-md);
+  background: var(--imb-surface);
+  color: var(--imb-fg);
+  font: inherit;
+  font-size: var(--imb-text-base);
+  min-height: 96px;
+  resize: vertical;
+  line-height: var(--imb-leading-body);
+  transition:
+    border-color var(--imb-motion-fast) var(--imb-ease-standard),
+    box-shadow var(--imb-motion-fast) var(--imb-ease-standard);
+}
+.imb-textarea:focus {
+  outline: none;
+  border-color: var(--imb-accent);
+  box-shadow: var(--imb-focus-ring);
+}
+.imb-textarea::placeholder {
+  color: var(--imb-muted);
+}
+.imb-textarea:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.imb-textarea.imb-is-invalid {
+  border-color: var(--imb-danger);
+}
+.imb-textarea.imb-is-invalid:focus {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--imb-danger), transparent 70%);
+}
+.imb-textarea.imb-mono {
+  font-family: var(--imb-font-mono);
+  font-size: var(--imb-text-sm);
+}

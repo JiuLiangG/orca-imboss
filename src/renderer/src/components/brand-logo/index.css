@@ -1,0 +1,21 @@
+/* ─── Brand logo (`.imb-nav-logo` host) ────────────────────────────── */
+.imb-brand-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--imb-accent);
+  color: var(--imb-accent-on);
+  display: grid;
+  place-items: center;
+  font-family: var(--imb-font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.imb-brand-logo svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}

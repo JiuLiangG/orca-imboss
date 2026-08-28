@@ -1,0 +1,84 @@
+/* ─── Employee detail ──────────────────────────────────────────── */
+.imb-detail-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: var(--imb-space-4);
+  margin-bottom: var(--imb-space-2);
+}
+.imb-detail-avatar-wrap {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: var(--imb-radius-pill);
+  cursor: pointer;
+  outline: none;
+  flex-shrink: 0;
+}
+.imb-detail-avatar-wrap:focus-visible {
+  box-shadow: var(--imb-focus-ring);
+}
+.imb-detail-avatar-img {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--imb-radius-pill);
+  object-fit: cover;
+  display: block;
+}
+.imb-detail-avatar-placeholder {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--imb-radius-pill);
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklch, var(--imb-accent) 15%, var(--imb-surface));
+  color: var(--imb-accent);
+  font-weight: 600;
+  font-size: 28px;
+}
+.imb-detail-avatar-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.imb-detail-avatar-info h2 {
+  font-family: var(--imb-font-display);
+  font-size: var(--imb-fs-h2);
+  font-weight: 600;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.imb-detail-avatar-info .imb-sub {
+  color: var(--imb-muted);
+  font-size: var(--imb-text-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.imb-detail-avatar-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--imb-radius-pill);
+  background: rgba(0, 0, 0, 0.35);
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transition: opacity var(--imb-motion-fast) var(--imb-ease-standard);
+  pointer-events: none;
+}
+.imb-detail-avatar-wrap:hover .imb-detail-avatar-overlay,
+.imb-detail-avatar-wrap:focus-visible .imb-detail-avatar-overlay {
+  opacity: 1;
+}
+.imb-detail-avatar-overlay svg {
+  width: 28px;
+  height: 28px;
+  color: #fff;
+}
+.imb-employee-delete-note {
+  color: var(--imb-muted);
+  font-size: var(--imb-text-sm);
+  margin: var(--imb-space-2) 0;
+}

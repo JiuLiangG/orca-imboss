@@ -1,0 +1,38 @@
+/* ─── Settings → About ─────────────────────────────────────────── */
+.imb-about-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.imb-about-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+}
+.imb-about-name {
+  font-size: var(--imb-text-2xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.imb-about-kv {
+  margin-top: var(--imb-space-6);
+}
+.imb-kv {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--imb-border);
+  font-size: var(--imb-text-base);
+}
+.imb-kv:last-child {
+  border-bottom: 0;
+}
+.imb-kv .imb-k {
+  color: var(--imb-muted);
+}
+.imb-kv .imb-v {
+  font-family: var(--imb-font-mono);
+  font-size: var(--imb-text-sm);
+  color: var(--imb-fg);
+  text-align: right;
+}

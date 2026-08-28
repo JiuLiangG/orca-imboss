@@ -15,7 +15,7 @@ files:
   - "!**/*.{ttf,woff}"
 asar: true
 asarUnpack:
-  - "**/*.{dll,dylib,so,so.*}"
+  - "**/*.{node,dll,dylib,so,so.*}"
   - resources/**
 win:
   executableName: orca-imboss
@@ -25,25 +25,20 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
-  entitlementsInherit: build/entitlements.mac.plist
-  extendInfo:
-    - NSCameraUsageDescription: Application requests access to the device's camera.
-    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
-    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+  icon: resources/icon.png
   notarize: false
 dmg:
   artifactName: ${name}-${version}.${ext}
 linux:
   target:
     - AppImage
-    - snap
-    - deb
-  maintainer: electronjs.org
+  maintainer: sethyuan@qq.com
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
 publish:
-  provider: generic
-  url: https://example.com/auto-updates
+  provider: github
+  owner: sethyuan
+  repo: orca-imboss
+  releaseType: release

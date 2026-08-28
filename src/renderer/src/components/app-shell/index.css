@@ -1,0 +1,20 @@
+/* ─── App frame (`.imb-app`) ───────────────────────────────────────── */
+.imb-app {
+  display: grid;
+  grid-template-columns: 208px 300px 1fr;
+  height: 100vh;
+  min-height: 0;
+  width: 100vw;
+}
+@media (max-width: 920px) {
+  .imb-app {
+    grid-template-columns: 64px 300px 1fr;
+  }
+  .imb-nav-item span,
+  .imb-nav-brandname {
+    display: none;
+  }
+  .imb-field-row {
+    grid-template-columns: 1fr;
+  }
+}

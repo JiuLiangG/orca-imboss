@@ -1,0 +1,33 @@
+/* ─── List pane (col 2) ────────────────────────────────────────── */
+.imb-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--imb-surface);
+}
+.imb-listpane {
+  border-right: 1px solid var(--imb-border);
+}
+.imb-pane-header {
+  padding: var(--imb-space-4) var(--imb-space-4) var(--imb-space-2);
+  flex: none;
+}
+.imb-pane-title {
+  font-size: var(--imb-text-xl);
+  font-weight: 600;
+}
+.imb-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 8px;
+}
+.imb-pane-footer {
+  flex: none;
+  padding: var(--imb-space-3) var(--imb-space-4) var(--imb-space-4);
+  border-top: 1px solid var(--imb-border);
+}
+.imb-pane-footer .imb-btn {
+  width: 100%;
+  justify-content: center;
+}

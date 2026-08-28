@@ -1,0 +1,51 @@
+/* ─── Password field (`.imb-key-readonly`) ─────────────────────────── */
+.imb-key-readonly {
+  font-family: var(--imb-font-mono);
+  font-size: var(--imb-text-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 13px;
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-md);
+  background: var(--imb-surface);
+  color: var(--imb-fg);
+}
+.imb-key-readonly.imb-has-error {
+  border-color: var(--imb-danger);
+}
+.imb-key-readonly .imb-masked {
+  letter-spacing: 0.05em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.imb-key-readonly .imb-reveal {
+  flex: none;
+  padding-inline: 4px;
+  color: var(--imb-accent-active);
+  min-height: 28px;
+  font-size: var(--imb-text-sm);
+}
+
+/* Key input (add forms) */
+.imb-key-input-wrap {
+  position: relative;
+}
+.imb-key-input-wrap .imb-key-input {
+  padding-left: 38px;
+}
+.imb-key-input-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--imb-muted);
+  pointer-events: none;
+  display: flex;
+}
+.imb-key-input-icon svg {
+  width: 16px;
+  height: 16px;
+}

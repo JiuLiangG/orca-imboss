@@ -1,17 +1,37 @@
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, shell } from "electron";
 import { join } from "path";
 import icon from "../../resources/icon.png?asset";
+import { initDatabase } from "./db";
+import { registerIpcHandlers, setupNativeTheme } from "./ipc";
+import { getResolvedLocale } from "./locale";
+import { initUpdater } from "./updater";
 
-// Single instance handling
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) {
   app.quit();
 }
 
-function createWindow(): void {
-  const locale = "en";
+app.on("second-instance", () => {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win) {
+    if (win.isMinimized()) win.restore();
+    win.focus();
+  }
+});
 
-  // Create the browser window.
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
+    app.quit();
+  }
+});
+
+app.on("activate", () => {
+  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});
+
+function createWindow(): void {
+  const locale = getResolvedLocale();
+
   const mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
@@ -21,21 +41,20 @@ function createWindow(): void {
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       spellcheck: false,
-      additionalArguments: [locale],
+      additionalArguments: [`--locale=${locale}`],
     },
   });
 
   mainWindow.on("ready-to-show", () => {
-    mainWindow.show();
+    mainWindow?.show();
   });
 
+  // Open external links in the OS browser; never allow in-app popups.
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url);
     return { action: "deny" };
   });
 
-  // HMR for renderer base on electron-vite cli.
-  // Load the remote URL for development or the local html file for production.
   if (process.env["ELECTRON_RENDERER_URL"]) {
     mainWindow.loadURL(process.env["ELECTRON_RENDERER_URL"]);
   } else {
@@ -43,33 +62,15 @@ function createWindow(): void {
   }
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
-  // Set app user model id for windows
-  app.setAppUserModelId("com.electron");
+  // Matches `appId` in electron-builder.yml.
+  app.setAppUserModelId("com.orcastudio.imboss");
 
-  // IPC test
-  ipcMain.on("ping", () => console.log("pong"));
+  initDatabase();
+  registerIpcHandlers();
+  setupNativeTheme();
 
   createWindow();
 
-  app.on("activate", function () {
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
+  if (app.isPackaged) initUpdater();
 });
-
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
-});
-
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and require them here.

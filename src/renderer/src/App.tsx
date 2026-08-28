@@ -1,29 +1,38 @@
-import electronLogo from "./assets/electron.svg";
+import { useApp, type AppModule } from "./app-store";
+import { AppShell } from "./components/app-shell";
+import { ChatModule } from "./components/modules/chat/chat-module";
+import { EmployeesModule } from "./components/modules/employees/employees-module";
+import { ModelsModule } from "./components/modules/models/models-module";
+import { McpModule } from "./components/modules/mcp/mcp-module";
+import { SkillsModule } from "./components/modules/skills/skills-module";
+import { SettingsModule } from "./components/modules/settings/settings-module";
+import {
+  isPlaceholderModule,
+  PlaceholderModule,
+} from "./components/modules/placeholder/placeholder-module";
+
+const MODULE_VIEWS: Partial<Record<AppModule, () => React.JSX.Element>> = {
+  chat: ChatModule,
+  employees: EmployeesModule,
+  models: ModelsModule,
+  mcp: McpModule,
+  skills: SkillsModule,
+  settings: SettingsModule,
+};
+
+function ActiveModule(): React.JSX.Element {
+  const { module } = useApp();
+  const View = MODULE_VIEWS[module];
+  if (View) return <View />;
+  if (isPlaceholderModule(module)) return <PlaceholderModule />;
+  return <ChatModule />;
+}
 
 function App(): React.JSX.Element {
   return (
     <>
-      <img alt="logo" className="logo" src={electronLogo} />
-      <div className="creator">Powered by electron-vite</div>
-      <div className="text">
-        Build an Electron app with <span className="react">React</span>
-        &nbsp;and <span className="ts">TypeScript</span>
-      </div>
-      <p className="tip">
-        Please try pressing <code>F12</code> to open the devTool
-      </p>
-      <div className="actions">
-        <div className="action">
-          <a href="https://electron-vite.org/" target="_blank" rel="noreferrer">
-            Documentation
-          </a>
-        </div>
-        <div className="action">
-          <a target="_blank" rel="noreferrer">
-            Send IPC
-          </a>
-        </div>
-      </div>
+      <AppShell />
+      <ActiveModule />
     </>
   );
 }

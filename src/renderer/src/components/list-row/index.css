@@ -1,0 +1,83 @@
+/* ─── List row (`.imb-list-row`) ───────────────────────────────────── */
+.imb-list-row {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 10px;
+  border: 0;
+  background: transparent;
+  border-radius: var(--imb-radius-md);
+  transition: background var(--imb-motion-fast) var(--imb-ease-standard);
+}
+.imb-list-row:hover {
+  background: var(--imb-fg-soft);
+}
+.imb-list-row:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+}
+.imb-list-row.imb-is-active {
+  background: color-mix(in oklch, var(--imb-accent) 15%, var(--imb-surface));
+}
+.imb-list-row.imb-is-selected {
+  background: color-mix(in oklch, var(--imb-accent) 12%, var(--imb-surface)) !important;
+}
+.imb-list-row-body {
+  min-width: 0;
+  flex: 1;
+}
+.imb-list-row-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.imb-list-row-name {
+  font-size: var(--imb-text-base);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.imb-list-row.imb-is-active .imb-list-row-name {
+  font-weight: 600;
+  color: var(--imb-fg);
+}
+.imb-list-row-time {
+  font-family: var(--imb-font-mono);
+  font-size: var(--imb-text-xs);
+  color: var(--imb-muted);
+  flex: none;
+}
+.imb-list-row-sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 3px;
+}
+.imb-list-row-desc {
+  color: var(--imb-text-2);
+  font-size: var(--imb-text-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.imb-list-row.imb-is-active .imb-list-row-desc {
+  color: var(--imb-muted);
+}
+.imb-unread {
+  flex: none;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--imb-accent);
+  color: var(--imb-accent-on);
+  font-size: 11px;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+}

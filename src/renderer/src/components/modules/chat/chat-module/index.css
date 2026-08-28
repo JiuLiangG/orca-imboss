@@ -1,0 +1,59 @@
+/* ─── Chat module ──────────────────────────────────────────────── */
+.imb-chat-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: var(--imb-space-3) var(--imb-space-5);
+  background: var(--imb-surface);
+  border-bottom: 1px solid var(--imb-border);
+  min-height: 0;
+}
+.imb-chat-header-avatar {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: flex;
+}
+.imb-chat-header-avatar svg {
+  border-radius: var(--imb-radius-pill);
+}
+.imb-chat-title {
+  font-size: var(--imb-text-xl);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.imb-thread {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--imb-space-5) var(--imb-space-6) var(--imb-space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--imb-space-4);
+  min-height: 0;
+}
+.imb-chat-empty-detail {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--imb-muted);
+}
+.imb-chat-delete-note {
+  color: var(--imb-muted);
+  font-size: var(--imb-text-sm);
+  margin: var(--imb-space-2) 0;
+}
+.imb-chat-error {
+  position: fixed;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 60;
+  background: color-mix(in oklch, var(--imb-danger) 12%, var(--imb-surface));
+  border: 1px solid var(--imb-danger);
+  border-radius: var(--imb-radius-md);
+  padding: 6px 14px;
+  max-width: 60vw;
+  box-shadow: var(--imb-elev-raised);
+}

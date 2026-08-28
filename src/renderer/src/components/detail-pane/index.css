@@ -1,0 +1,43 @@
+/* ─── Detail pane (col 3) ──────────────────────────────────────── */
+.imb-detailpane {
+  background: var(--imb-bg);
+}
+.imb-detail-scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+.imb-detail-head {
+  padding: var(--imb-space-6) var(--imb-space-6) var(--imb-space-4);
+  border-bottom: 1px solid var(--imb-border);
+  position: relative;
+}
+.imb-detail-head-eyebrow {
+  font-family: var(--imb-font-mono);
+  font-size: var(--imb-text-xs);
+  color: var(--imb-accent-active);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.imb-detail-head h2 {
+  font-family: var(--imb-font-display);
+  font-size: var(--imb-fs-h2);
+  font-weight: 600;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.imb-detail-head .imb-sub {
+  color: var(--imb-muted);
+  font-size: var(--imb-text-sm);
+  margin-top: 4px;
+}
+.imb-detail-head-actions {
+  position: absolute;
+  right: var(--imb-space-6);
+  top: var(--imb-space-5);
+  display: flex;
+  gap: var(--imb-space-2);
+}
+.imb-detail-body {
+  padding: var(--imb-space-6);
+}
