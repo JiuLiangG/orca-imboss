@@ -5,6 +5,14 @@ import { initDatabase } from "./db";
 import { registerIpcHandlers, setupNativeTheme } from "./ipc";
 import { getResolvedLocale } from "./locale";
 import { initUpdater } from "./updater";
+import {
+  DEFAULT_WINDOW_HEIGHT,
+  DEFAULT_WINDOW_WIDTH,
+  loadWindowBounds,
+  MIN_WINDOW_HEIGHT,
+  MIN_WINDOW_WIDTH,
+  saveWindowBounds,
+} from "./window-state";
 
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) {
@@ -31,12 +39,17 @@ app.on("activate", () => {
 
 function createWindow(): void {
   const locale = getResolvedLocale();
+  // Restore the last session's position+size; fall back to centered defaults when
+  // the saved bounds are invalid (missing, below minimum, or outside every display).
+  const savedBounds = loadWindowBounds();
 
   const mainWindow = new BrowserWindow({
-    width: 950,
-    height: 670,
-    minWidth: 800,
-    minHeight: 600,
+    ...(savedBounds ?? {
+      width: DEFAULT_WINDOW_WIDTH,
+      height: DEFAULT_WINDOW_HEIGHT,
+    }),
+    minWidth: MIN_WINDOW_WIDTH,
+    minHeight: MIN_WINDOW_HEIGHT,
     show: false,
     autoHideMenuBar: true,
     titleBarStyle: "hidden",
@@ -61,6 +74,10 @@ function createWindow(): void {
   mainWindow.on("unmaximize", () =>
     mainWindow.webContents.send("window:maximized", false),
   );
+
+  // Persist the window's position and size (its normal, unmaximized bounds) so
+  // they can be restored on the next launch.
+  mainWindow.on("close", () => saveWindowBounds(mainWindow));
 
   // Open external links in the OS browser; never allow in-app popups.
   mainWindow.webContents.setWindowOpenHandler((details) => {
