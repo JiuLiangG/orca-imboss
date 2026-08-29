@@ -15,6 +15,9 @@ export type AppModule =
   | "miniapp-worldmap"
   | "chat-product";
 
+/** True when running on macOS (native traffic lights stay, no custom buttons). */
+export const IS_MAC = window.imb.platform === "darwin";
+
 const TRANSLATIONS = { "zh-CN": zhCN };
 
 const NAV_COLLAPSE_KEY = "ui.navCollapsed";

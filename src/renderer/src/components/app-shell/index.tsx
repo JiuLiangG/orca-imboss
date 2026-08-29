@@ -2,6 +2,7 @@ import { useApp, listPaneRef, detailPaneRef } from "../../app-store";
 import { useLayoutEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Nav } from "../nav";
+import { TitleBar } from "../title-bar";
 import "./index.css";
 
 /**
@@ -14,6 +15,7 @@ export function AppShell(): React.JSX.Element {
 
   return (
     <div className={`imb-app${navCollapsed ? " imb-is-collapsed" : ""}`}>
+      <TitleBar />
       <Nav
         collapsed={navCollapsed}
         onToggle={() => setNavCollapsed(!navCollapsed)}

@@ -111,7 +111,7 @@ export function Nav({
       aria-label="Modules"
     >
       <div className="imb-nav-brand">
-        <BrandLogo />
+        <BrandLogo style={{ maxWidth: "41px" }} />
         <span className="imb-nav-brandname">imboss</span>
       </div>
       <div className="imb-nav-items">

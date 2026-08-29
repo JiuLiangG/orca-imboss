@@ -1,21 +1,21 @@
-/* ─── Search box (`.imb-searchbox`) ────────────────────────────────── */
 .imb-searchbox {
-  margin-top: var(--imb-space-3);
   display: flex;
   align-items: center;
   gap: 8px;
   background: var(--imb-bg);
   border: 1px solid var(--imb-border);
-  border-radius: var(--imb-radius-lg);
-  padding: 8px 12px;
+  border-radius: var(--imb-radius-md);
+  padding: 2px 12px;
   transition:
     border-color var(--imb-motion-fast) var(--imb-ease-standard),
     box-shadow var(--imb-motion-fast) var(--imb-ease-standard);
 }
+
 .imb-searchbox .imb-icon {
   color: var(--imb-muted);
   flex: none;
 }
+
 .imb-searchbox input {
   border: 0;
   background: transparent;
@@ -26,14 +26,17 @@
   width: 100%;
   min-width: 0;
 }
+
 .imb-searchbox input::placeholder {
   color: var(--imb-muted);
 }
+
 .imb-searchbox:focus-within,
 .imb-searchbox.imb-is-focused {
   border-color: var(--imb-accent);
   box-shadow: var(--imb-focus-ring);
 }
+
 .imb-searchbox-clear {
   border: none;
   background: none;
@@ -43,6 +46,7 @@
   cursor: pointer;
   flex: none;
 }
+
 .imb-searchbox-clear:hover {
   color: var(--imb-fg);
 }

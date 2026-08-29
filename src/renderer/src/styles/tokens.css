@@ -85,10 +85,10 @@
   --imb-container: 1120px;
   --imb-gutter: 24px;
   --imb-radius: var(--imb-radius-md);
-  --imb-radius-lg: var(--imb-radius-lg);
   --imb-accent-soft: color-mix(in oklch, var(--imb-accent) 14%, transparent);
   --imb-fg-soft: color-mix(in oklch, var(--imb-fg) 6%, transparent);
   --imb-text-2: color-mix(in oklch, var(--imb-muted) 32%, var(--imb-fg));
+  --imb-titlebar-h: 20px;
 }
 
 /* ─── dark mode ──────────────────────────────────────────────── */
@@ -106,6 +106,7 @@
     --imb-bubble-text: #f7f7f7;
   }
 }
+
 :root[data-theme-mode="dark"] {
   --imb-bg: #1a1a1a;
   --imb-surface: #2c2c2c;

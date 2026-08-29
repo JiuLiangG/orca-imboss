@@ -32,6 +32,7 @@ function on<T>(channel: string, cb: (payload: T) => void): () => void {
 const runtimeLocale = readArg("locale") ?? "en";
 
 const api = {
+  platform: process.platform,
   locale: runtimeLocale,
   getLocale: () => ipcRenderer.invoke("locale:get") as Promise<string>,
   setLocale: (locale: string) =>
@@ -44,6 +45,16 @@ const api = {
       ipcRenderer.invoke("settings:set", key, value) as Promise<void>,
   },
   getVersion: () => ipcRenderer.invoke("app:getVersion") as Promise<string>,
+
+  windowControls: {
+    minimize: () => ipcRenderer.invoke("window:minimize"),
+    toggleMaximize: () => ipcRenderer.invoke("window:toggleMaximize"),
+    close: () => ipcRenderer.invoke("window:close"),
+    isMaximized: () =>
+      ipcRenderer.invoke("window:isMaximized") as Promise<boolean>,
+    onMaximized: (cb: (maximized: boolean) => void) =>
+      on<boolean>("window:maximized", cb),
+  },
 
   theme: {
     get: () => ipcRenderer.invoke("theme:get") as Promise<ThemeState>,

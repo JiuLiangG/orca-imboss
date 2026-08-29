@@ -1,19 +1,32 @@
-/* ─── App frame (`.imb-app`) ───────────────────────────────────────── */
 .imb-app {
   display: grid;
   grid-template-columns: 208px 300px 1fr;
   height: 100vh;
   min-height: 0;
   width: 100vw;
+  position: relative;
+  user-select: none;
 }
+
+.imb-app::before,
+.imb-app::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background-color: var(--imb-bg);
+}
+
+.imb-app::before {
+  top: 0;
+}
+
+.imb-app::after {
+  bottom: 0;
+}
+
 @media (max-width: 920px) {
-  .imb-app {
-    grid-template-columns: 64px 300px 1fr;
-  }
-  .imb-nav-item span,
-  .imb-nav-brandname {
-    display: none;
-  }
   .imb-field-row {
     grid-template-columns: 1fr;
   }

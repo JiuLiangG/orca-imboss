@@ -17,6 +17,7 @@ import type {
 } from "../shared/types";
 
 interface IMB {
+  platform: string;
   locale: string;
   getLocale(): Promise<string>;
   setLocale(locale: string): Promise<string>;
@@ -26,6 +27,14 @@ interface IMB {
     set(key: string, value: string): Promise<void>;
   };
   getVersion(): Promise<string>;
+
+  windowControls: {
+    minimize(): Promise<void>;
+    toggleMaximize(): Promise<void>;
+    close(): Promise<void>;
+    isMaximized(): Promise<boolean>;
+    onMaximized(cb: (maximized: boolean) => void): () => void;
+  };
 
   theme: {
     get(): Promise<ThemeState>;

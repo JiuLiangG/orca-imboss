@@ -1,10 +1,9 @@
-/* ─── Buttons (prototype `.imb-btn` family + disabled/loading states) ── */
 .imb-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 10px 18px;
+  padding: 6px 18px;
   border-radius: var(--imb-radius-md);
   border: 1px solid transparent;
   font-size: var(--imb-text-lg);
@@ -16,59 +15,73 @@
   min-height: 44px;
   white-space: nowrap;
 }
+
 .imb-btn:focus-visible {
   outline: none;
   box-shadow: var(--imb-focus-ring);
 }
+
 .imb-btn:disabled {
   opacity: 0.5;
   cursor: default;
   pointer-events: none;
 }
+
 .imb-btn-block {
   width: 100%;
 }
+
 .imb-btn-primary {
   background: var(--imb-accent);
   color: var(--imb-accent-on);
   border-color: var(--imb-accent);
 }
+
 .imb-btn-primary:hover:not(:disabled) {
   background: var(--imb-accent-hover);
 }
+
 .imb-btn-primary:active:not(:disabled) {
   background: var(--imb-accent-active);
 }
+
 .imb-btn-secondary {
   background: transparent;
   color: var(--imb-fg);
   border-color: var(--imb-border);
 }
+
 .imb-btn-secondary:hover:not(:disabled) {
   border-color: var(--imb-fg);
 }
+
 .imb-btn-danger {
   background: var(--imb-danger);
   color: #fff;
   border-color: var(--imb-danger);
 }
+
 .imb-btn-danger:hover:not(:disabled) {
   filter: brightness(0.94);
 }
+
 .imb-btn-ghost {
   background: transparent;
   color: var(--imb-fg);
   border-color: transparent;
   padding-inline: 8px;
 }
+
 .imb-btn-ghost:hover:not(:disabled) {
   background: var(--imb-fg-soft);
 }
+
 .imb-btn-sm {
   min-height: 36px;
   padding: 6px 12px;
   font-size: var(--imb-text-base);
 }
+
 .imb-btn-spinner {
   width: 14px;
   height: 14px;
@@ -78,6 +91,7 @@
   animation: btn-spin 0.8s linear infinite;
   flex: none;
 }
+
 @keyframes btn-spin {
   to {
     transform: rotate(360deg);

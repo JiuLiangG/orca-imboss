@@ -33,10 +33,15 @@ function createWindow(): void {
   const locale = getResolvedLocale();
 
   const mainWindow = new BrowserWindow({
-    width: 900,
+    width: 950,
     height: 670,
+    minWidth: 800,
+    minHeight: 600,
     show: false,
     autoHideMenuBar: true,
+    titleBarStyle: "hidden",
+    // macOS: nudge the native traffic lights into the collapsed sidebar column.
+    // ...(isMac ? { trafficLightPosition: { x: 8, y: 9 } } : {}),
     ...(process.platform === "linux" ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
@@ -48,6 +53,14 @@ function createWindow(): void {
   mainWindow.on("ready-to-show", () => {
     mainWindow?.show();
   });
+
+  // Forward maximize state to the renderer (drives the custom window buttons).
+  mainWindow.on("maximize", () =>
+    mainWindow.webContents.send("window:maximized", true),
+  );
+  mainWindow.on("unmaximize", () =>
+    mainWindow.webContents.send("window:maximized", false),
+  );
 
   // Open external links in the OS browser; never allow in-app popups.
   mainWindow.webContents.setWindowOpenHandler((details) => {

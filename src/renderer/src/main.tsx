@@ -11,6 +11,8 @@ import { initApp } from "./app-store";
 setupL10N(window.imb.locale, { "zh-CN": zhCN });
 initApp();
 
+document.documentElement.dataset.platform = window.imb.platform;
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />
