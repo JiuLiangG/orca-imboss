@@ -2,6 +2,7 @@ import { app, BrowserWindow, shell } from "electron";
 import { join } from "path";
 import icon from "../../resources/icon.png?asset";
 import { initDatabase } from "./db";
+import { refreshModelStore } from "./agent/model-runtime";
 import { registerIpcHandlers, setupNativeTheme } from "./ipc";
 import { getResolvedLocale } from "./locale";
 import { initUpdater } from "./updater";
@@ -101,6 +102,11 @@ app.whenReady().then(() => {
   setupNativeTheme();
 
   createWindow();
+
+  // Warm the app's model store over the network so configured provider/model
+  // catalogs are fresh for the whole session. Fire-and-forget (non-blocking):
+  // startup stays responsive and a failed refresh is only logged, never shown.
+  void refreshModelStore(new AbortController().signal);
 
   if (app.isPackaged) initUpdater();
 });

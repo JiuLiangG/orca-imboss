@@ -145,9 +145,10 @@ The agent is powered by the **Pi SDK** (`@earendil-works/pi-coding-agent`) and r
 - The app maintains its **own** Pi environment under **`~/.imboss/agent`** (`src/main/agent/environment.ts`): `auth.json` (provider API keys, 0600), `models.json` (custom providers/models), `skills/` and `sessions/` — so it **never touches your system Pi agent** (`~/.pi/agent`).
 - **Model providers** are managed in the models module (curated list or custom base URL + API key); configuration files are the source of truth, exclusively managed in the main process. API keys are masked in the UI (last 4 chars) and only revealed on explicit user action.
 - **Skills** can be imported from a local folder (`SKILL.md` is the source of truth) and uninstalled from the skills module; the UI is read-only for skill metadata.
-- Custom tools (`defineTool`) executed by the agent will access the data layer directly; agent events stream to the renderer over IPC.
+- **MCP servers** are bridged app-side (`src/main/agent/mcp.ts`): Pi has no native MCP, so stdio / sse / streamable-http servers are connected by the main process and their tools are surfaced to the Pi session as custom tools. stdio servers are spawned with `{ ...process.env, ...userEnv, ...serverEnv }`.
+- **User env vars** (Settings → General → “Environment variables”) reach every subprocess: the bash / PowerShell tools inject them via `spawnHook`, and stdio MCP servers get the merged env. Values support `$VAR` / `${VAR}` expansion against the app's own environment; precedence is process env → user env → per-server env.
 
-> **Deferred:** live session creation/streaming wiring (Pi SDK packages not yet installed).
+> **Current state:** `chat:send` runs a real per-message Pi session (`createAgentSession`) with the env-aware tools + the assistant's MCP servers, and persists the final assistant reply. Streaming events to the renderer and persistent per-chat sessions are still deferred.
 
 ---
 
@@ -242,7 +243,7 @@ All app data lives in a dedicated folder under the user's home directory:
 
 These areas are scoped for upcoming iterations and are intentionally left as stubs or extension points:
 
-- **Live Pi agent integration** — createAgentSession, streaming events over IPC, group-chat session orchestration (Pi SDK packages not installed yet); `chat:send` currently appends a canned reply.
+- **Live Pi agent integration** — `createAgentSession` is wired per user message (env-aware shell tools + app-side MCP bridge, final reply persisted); remaining: streaming events over IPC, per-chat session persistence (`SessionManager.create` via the `sessions` table), group-chat session orchestration.
 - **Progress messages** — `task_progress` kind is renderable from DB rows; nothing generates `steps` yet (placeholder pipeline only).
 - **Mini Apps (世界地图) and 产品网站改版** — nav entries exist as "暂未开放" placeholder pages.
 - **Notification rules** — which events trigger OS notifications in the background.

@@ -1,18 +1,225 @@
+import { homedir } from "os";
+import { getEmployee } from "../db/services/employees";
+import { listMcpServers } from "../db/services/mcp";
+import { getSetting } from "../db/services/settings";
 import type { AgentEnvironment } from "./environment";
+import { createMcpToolDefinitions, type AnyPiTool } from "./mcp";
+import { getModelRuntime, type ModelRuntimeInstance } from "./model-runtime";
+import { loadPiSdk, type PiSdk } from "./pi-sdk";
+import { createShellToolDefinitions } from "./tools";
 
-export interface AgentEvent {
-  type: string;
-  payload?: unknown;
+/** Model instance returned by the runtime's model registry. */
+type PiModel = NonNullable<ReturnType<ModelRuntimeInstance["getModel"]>>;
+
+/**
+ * Pi-backed agent session.
+ *
+ * Each `prompt()` call spins up an isolated, in-memory Pi session
+ * (`SessionManager.inMemory` / `SettingsManager.inMemory`) rooted at the
+ * app's own `~/.imboss/agent` dir — never the host system's `~/.pi/agent`.
+ * Environment guarantees for every subprocess the agent spawns:
+ *
+ * - bash + PowerShell tools are replaced by env-injected definitions
+ *   (user env via each tool's `spawnHook` — see `tools.ts`);
+ * - the employee's configured MCP servers are connected by the app-side
+ *   bridge and their tools are registered (see `mcp.ts`; stdio servers get
+ *   the merged user env too).
+ *
+ * Event streaming to the renderer is deferred work; for now the final
+ * assistant reply text is captured from `turn_end` and returned to the
+ * caller (`replyText`), which the chat pipeline persists.
+ */
+
+/** Settings key holding the `provider/model` default (written by settings UI). */
+const DEFAULT_MODEL_KEY = "defaultModel";
+
+export interface AgentSessionContext {
+  employeeId: number;
+  chatId: number;
+}
+
+export interface AgentPromptResult {
+  /** True when a real agent turn ran (a model was configured and answered). */
+  replied: boolean;
+  /** Final assistant reply text (all text content of the last `turn_end`). */
+  replyText?: string;
 }
 
 export class AgentSession {
-  constructor(private readonly _env: AgentEnvironment) {}
+  private _disposed = false;
 
-  /** Send a user message (prompt) to the assistant agent. */
-  async prompt(_message: string): Promise<void> {
-    // TODO(agent): create a Pi session via createAgentSession(...), subscribe
-    // with session.subscribe(...), and forward streaming events (message_update,
-    // tool_execution_*, message_*, turn_*, agent_*) to the renderer over IPC.
-    void this._env;
+  constructor(
+    private readonly _env: AgentEnvironment,
+    private readonly _context?: AgentSessionContext,
+  ) {}
+
+  /**
+   * Run one agent turn for `message`.
+   *
+   * Returns `{ replied: false }` when no usable model is configured
+   * (no `modelId` on the employee, no `defaultModel` setting, or the model
+   * has no credentials) so callers can fall back gracefully.
+   */
+  async prompt(message: string): Promise<AgentPromptResult> {
+    if (this._disposed) {
+      throw new Error("AgentSession has been disposed.");
+    }
+    const pi = await loadPiSdk();
+
+    const employee = this._context
+      ? getEmployee(this._context.employeeId)
+      : null;
+    // The app's shared model store — a single ModelRuntime for the whole
+    // process. Its default create-time availability check populates
+    // `hasConfiguredAuth` from stored credentials; the network refresh runs
+    // once at startup and after provider mutations (see model-runtime.ts).
+    const modelRuntime = await getModelRuntime();
+
+    const model = this._resolveModel(modelRuntime, employee?.modelId);
+    if (!model) {
+      return { replied: false };
+    }
+
+    const cwd = homedir();
+    // Working directory for the session & its shell tools: the user's home
+    // dir (a personal agent works on the user's files). Overridable later.
+    return this._runTurn(pi, {
+      cwd,
+      message,
+      model,
+      modelRuntime,
+      employeeSystemPrompt: employee?.systemPrompt ?? "",
+      mcpServerNames: employee?.mcp ?? [],
+    });
   }
+
+  /** Close MCP client connections opened by this session. */
+  async dispose(): Promise<void> {
+    this._disposed = true;
+    if (this._closeMcp) {
+      const close = this._closeMcp;
+      this._closeMcp = undefined;
+      await close();
+    }
+  }
+
+  private _closeMcp: (() => Promise<void>) | undefined;
+
+  private _resolveModel(
+    modelRuntime: ModelRuntimeInstance,
+    employeeModelId: string | null | undefined,
+  ): PiModel | undefined {
+    const ref = employeeModelId?.trim() || getSetting(DEFAULT_MODEL_KEY) || "";
+    const slash = ref.indexOf("/");
+    if (slash <= 0 || slash === ref.length - 1) return undefined;
+    const provider = ref.slice(0, slash);
+    const modelId = ref.slice(slash + 1);
+    const model = modelRuntime.getModel(provider, modelId);
+    if (!model || !modelRuntime.hasConfiguredAuth(model.provider)) {
+      return undefined;
+    }
+    return model;
+  }
+
+  private async _runTurn(
+    pi: PiSdk,
+    args: {
+      cwd: string;
+      message: string;
+      model: PiModel;
+      modelRuntime: ModelRuntimeInstance;
+      employeeSystemPrompt: string;
+      mcpServerNames: string[];
+    },
+  ): Promise<AgentPromptResult> {
+    const { cwd, message, model, modelRuntime } = args;
+
+    // MCP servers configured for the employee (matched by name).
+    const allServers = args.mcpServerNames.length > 0 ? listMcpServers() : [];
+    const selected = allServers.filter((server) =>
+      args.mcpServerNames.includes(server.name),
+    );
+    const mcp = await createMcpToolDefinitions(selected);
+    this._closeMcp = mcp.close;
+
+    try {
+      const shellTools = await createShellToolDefinitions({ cwd });
+      const customTools: AnyPiTool[] = [...shellTools, ...mcp.tools];
+      const activeToolNames = [
+        "read",
+        "bash",
+        "edit",
+        "write",
+        ...(process.platform === "win32" ? ["powershell"] : []),
+        ...customTools.map((tool) => tool.name),
+      ];
+
+      const settingsManager = pi.SettingsManager.inMemory();
+      const systemPromptOverride =
+        args.employeeSystemPrompt.trim().length > 0
+          ? (base: string | undefined): string =>
+              base && base.trim().length > 0
+                ? `${base}\n\n${args.employeeSystemPrompt}`
+                : args.employeeSystemPrompt
+          : undefined;
+      const resourceLoader = new pi.DefaultResourceLoader({
+        cwd,
+        agentDir: this._env.rootDir,
+        settingsManager,
+        systemPromptOverride,
+      });
+      await resourceLoader.reload();
+
+      const { session } = await pi.createAgentSession({
+        cwd,
+        agentDir: this._env.rootDir,
+        modelRuntime,
+        model,
+        tools: activeToolNames,
+        customTools,
+        resourceLoader,
+        sessionManager: pi.SessionManager.inMemory(cwd),
+        settingsManager,
+      });
+
+      let replyText = "";
+      session.subscribe((event) => {
+        if (event.type === "turn_end") {
+          replyText = extractMessageText(event.message);
+        }
+      });
+
+      await session.prompt(message);
+      return { replied: true, replyText };
+    } finally {
+      if (this._closeMcp) {
+        const close = this._closeMcp;
+        this._closeMcp = undefined;
+        await close();
+      }
+    }
+  }
+}
+
+/**
+ * Collect text content from an assistant message (`turn_end`): text blocks
+ * joined by newlines; thinking/image blocks are skipped.
+ */
+export function extractMessageText(message: unknown): string {
+  if (typeof message !== "object" || message === null) return "";
+  const content = (message as { content?: unknown }).content;
+  if (!Array.isArray(content)) return "";
+  const parts: string[] = [];
+  for (const block of content) {
+    if (
+      typeof block === "object" &&
+      block !== null &&
+      (block as { type?: unknown }).type === "text" &&
+      typeof (block as { text?: unknown }).text === "string"
+    ) {
+      const text = (block as { text: string }).text;
+      if (text.trim().length > 0) parts.push(text);
+    }
+  }
+  return parts.join("\n").trim();
 }

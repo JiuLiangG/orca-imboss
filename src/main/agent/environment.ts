@@ -8,17 +8,13 @@ export interface AgentEnvironment {
  * Return the app's *own* Pi environment location under `~/.imboss/agent`,
  * isolated from the host system's Pi agent (i.e. never `~/.pi/agent`).
  *
- * Directory layout managed by this app:
+ * Directory layout managed by this app (used by the runtime wiring in
+ * `src/main/agent/session.ts`):
  *   - auth.json     → provider credentials (see agent/providers.ts)
  *   - models.json   → custom providers/models (see agent/providers.ts)
  *   - skills/       → installed skills (see agent/skills.ts)
- *   - sessions/     → Pi session files (used once runtime wiring lands)
- *
- * TODO(agent): When wiring the Pi SDK, configure it against these paths, e.g.
- *   - `SessionManager.create(cwd, sessionsDir)` for persisted chat sessions
- *   - `SettingsManager.inMemory({...})`
- *   - `ModelRuntime.create({ authPath: auth.json, modelsPath: models.json })`
- *   - `DefaultResourceLoader({ agentDir: rootDir, cwd, ... })`
+ *   - sessions/     → Pi session files (used once persistent sessions land;
+ *                     the runtime currently uses `SessionManager.inMemory`)
  */
 export function getAgentEnvironment(): AgentEnvironment {
   return { rootDir: getAgentRoot() };

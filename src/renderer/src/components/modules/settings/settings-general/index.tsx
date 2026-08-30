@@ -127,7 +127,7 @@ export function SettingsGeneral(): React.JSX.Element {
           </label>
           <span className="imb-settings-env-help">
             {t(
-              "Provides runtime environment variables for MCP servers and agents. One key-value pair per line.",
+              "Provides runtime environment variables for MCP servers and agents. One key-value pair per line. Values support $VAR / ${VAR} references (e.g. $PATH) resolved against the app's own environment.",
             )}
           </span>
           <div className="imb-env-list">

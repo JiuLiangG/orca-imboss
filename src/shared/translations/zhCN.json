@@ -126,6 +126,7 @@
   "Provider": "服务商",
   "Providers": "服务商",
   "Provides runtime environment variables for MCP servers and agents. One key-value pair per line.": "为 MCP Server 和代理提供运行时环境变量。每行一个键值对。",
+  "Provides runtime environment variables for MCP servers and agents. One key-value pair per line. Values support $VAR / ${VAR} references (e.g. $PATH) resolved against the app's own environment.": "为 MCP Server 和代理提供运行时环境变量。每行一个键值对。值支持 $VAR / ${VAR} 引用（如 $PATH），会基于应用自身环境解析。",
   "Recruit": "招募",
   "Remove environment variable": "删除环境变量",
   "Remove provider": "移除服务商",

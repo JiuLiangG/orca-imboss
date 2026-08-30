@@ -25,6 +25,7 @@ import {
   revealProviderKey,
   upsertProvider,
 } from "../agent/providers";
+import { refreshModelStore } from "../agent/model-runtime";
 import { AgentSession } from "../agent/session";
 import {
   installSkillsFromFolders,
@@ -215,9 +216,10 @@ function registerChatHandlers(): void {
   });
 
   /**
-   * Placeholder chat pipeline (decision 6): append the user message →
-   * `AgentSession.prompt` (stub) → canned assistant reply appended after
-   * ~480 ms → both writes broadcast `messages:changed`.
+   * Chat pipeline: append the user message → run the Pi-backed
+   * `AgentSession.prompt` (env-aware shell tools + the employee's MCP
+   * servers) → persist the final assistant reply text. When no model is
+   * configured yet, the canned placeholder reply is used instead.
    */
   ipcMain.handle(
     "chat:send",
@@ -235,27 +237,52 @@ function registerChatHandlers(): void {
       broadcast("messages:changed", safeChatId);
       broadcast("chats:summaries");
 
-      // Canned reply (placeholder business logic — replaced by real agent later).
-      const agentSession = new AgentSession(getAgentEnvironment());
-      setTimeout(() => {
-        void (async () => {
-          try {
-            await agentSession.prompt(safeContent);
+      void (async () => {
+        const agentSession = new AgentSession(getAgentEnvironment(), {
+          employeeId: employeesService.ASSISTANT_ID,
+          chatId: safeChatId,
+        });
+        try {
+          const result = await agentSession.prompt(safeContent);
+          if (
+            result.replied &&
+            result.replyText &&
+            result.replyText.length > 0
+          ) {
             messagesService.appendMessage(
               safeChatId,
               employeesService.ASSISTANT_ID,
-              "收到，已把任务拆解并派发给相关员工，完成后我会第一时间汇总给你。",
+              result.replyText,
             );
-            broadcast("messages:changed", safeChatId);
-            broadcast("chats:summaries");
-          } catch {
-            // Chat may have been deleted before the reply lands; ignore.
+          } else {
+            appendCannedReply(safeChatId);
           }
-        })();
-      }, 480);
+        } catch {
+          // A failing agent run must never lose the user's message; fall back.
+          appendCannedReply(safeChatId);
+        } finally {
+          await agentSession.dispose();
+        }
+      })();
+
       return userMessage;
     },
   );
+}
+
+/** Canned placeholder reply (no model configured / agent run failed). */
+function appendCannedReply(chatId: number): void {
+  try {
+    messagesService.appendMessage(
+      chatId,
+      employeesService.ASSISTANT_ID,
+      "收到，已把任务拆解并派发给相关员工，完成后我会第一时间汇总给你。",
+    );
+    broadcast("messages:changed", chatId);
+    broadcast("chats:summaries");
+  } catch {
+    // Chat may have been deleted before the reply lands; ignore.
+  }
 }
 
 /** Validate the optional attachments payload before touching the DB. */
@@ -339,12 +366,18 @@ function registerAgentEnvHandlers(): void {
   ipcMain.handle("providers:listPage", (_event, page: unknown) =>
     listProvidersPage(parsePageQuery(page)),
   );
-  ipcMain.handle("providers:upsert", (_event, input: ProviderUpsert) =>
-    upsertProvider(input),
-  );
-  ipcMain.handle("providers:remove", (_event, id: unknown) =>
-    removeProvider(assertString(id, "provider id")),
-  );
+  ipcMain.handle("providers:upsert", async (_event, input: ProviderUpsert) => {
+    // Persist the provider first, then refresh the app's model store so the
+    // newly added/updated provider is immediately available. Best-effort:
+    // a refresh failure is logged and never fails the save.
+    await upsertProvider(input);
+    await refreshModelStore(new AbortController().signal);
+  });
+  ipcMain.handle("providers:remove", async (_event, id: unknown) => {
+    // Same for removal: keep the model store in sync after deleting a provider.
+    await removeProvider(assertString(id, "provider id"));
+    await refreshModelStore(new AbortController().signal);
+  });
   ipcMain.handle("providers:listModels", (_event, input: unknown) =>
     listModels(input as ProviderModelsQuery),
   );

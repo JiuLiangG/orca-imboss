@@ -16,6 +16,7 @@ files:
 asar: true
 asarUnpack:
   - "**/*.{node,dll,dylib,so,so.*}"
+  - "**/*.wasm"
   - resources/**
 win:
   executableName: orca-imboss

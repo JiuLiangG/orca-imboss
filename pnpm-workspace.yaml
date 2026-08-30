@@ -1,6 +1,8 @@
 allowBuilds:
+  '@google/genai': false
   better-sqlite3: true
   electron-winstaller: true
   esbuild: true
+  protobufjs: false
 minimumReleaseAgeExclude:
   - electron@44.0.0
