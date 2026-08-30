@@ -1,6 +1,9 @@
 import type {
+  PageQuery,
+  PageResult,
   ProviderApiType,
   ProviderInfo,
+  ProviderModelsQuery,
   ProviderUpsert,
 } from "../../shared/types";
 import { CURATED_PROVIDERS, PROVIDER_API_TYPES } from "../../shared/types";
@@ -159,17 +162,20 @@ export async function listProviders(): Promise<ProviderInfo[]> {
 
   const infos: ProviderInfo[] = [];
 
+  // Built-in (curated) providers appear only once configured (a key is set);
+  // unconfigured built-ins are not shown ("no prefilled providers").
   for (const id of CURATED_PROVIDERS) {
     const credential = auth[id];
     const key =
       credential && typeof credential.key === "string"
         ? credential.key
         : undefined;
+    if (!key) continue; // skip unconfigured built-ins
     infos.push({
       id,
       kind: "built-in",
       label: id,
-      hasKey: Boolean(key),
+      hasKey: true,
       keyHint: maskKey(key),
       modelIds: [],
     });
@@ -198,6 +204,60 @@ export async function listProviders(): Promise<ProviderInfo[]> {
   }
 
   return infos;
+}
+
+// --- paged provider list (keyset cursor over `id ASC`, JSON source) ---------
+
+const MAX_PAGE_SIZE = 200;
+const DEFAULT_PAGE_SIZE = 50;
+
+/**
+ * One page of providers, ordered `id ASC` (the full list is curated-first;
+ * the paged path uses the plain `id` order for a stable string keyset).
+ * Optional `LIKE`-style filter on `id OR label` (the models module has no
+ * search box today, but the endpoint stays symmetric with the others).
+ * Source is `auth.json`/`models.json` (not SQLite), so the page is derived
+ * from the in-memory array. Cursor = the last row's `id` (provider ids are
+ * `[A-Za-z0-9._-]+`, so raw embedding is safe).
+ */
+export async function listProvidersPage(
+  page: PageQuery = {},
+): Promise<PageResult<ProviderInfo>> {
+  const limit = Math.min(
+    Math.max(Math.trunc(page.limit ?? DEFAULT_PAGE_SIZE), 1),
+    MAX_PAGE_SIZE,
+  );
+  const needle = (page.query ?? "").trim().toLowerCase();
+  const all = (await listProviders()).sort((a, b) =>
+    a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+  );
+
+  let start = 0;
+  if (page.cursor) {
+    const cursor = page.cursor;
+    start = all.findIndex((provider) => provider.id.localeCompare(cursor) > 0);
+    if (start < 0) start = all.length;
+  }
+
+  const selected =
+    needle.length === 0
+      ? all.slice(start)
+      : all
+          .slice(start)
+          .filter(
+            (provider) =>
+              provider.id.toLowerCase().includes(needle) ||
+              provider.label.toLowerCase().includes(needle),
+          );
+
+  const hasMore = selected.length > limit;
+  const items = selected.slice(0, limit);
+  const last = items[items.length - 1];
+  return {
+    items,
+    nextCursor: hasMore && last ? last.id : null,
+    hasMore,
+  };
 }
 
 /**
@@ -244,6 +304,96 @@ export async function upsertProvider(input: ProviderUpsert): Promise<void> {
 
   await writeJson(getAuthPath(), auth);
   await writeJson(getModelsPath(), models);
+}
+
+const MODELS_FETCH_TIMEOUT_MS = 10_000;
+
+/** Model-list endpoint for a custom provider, derived from its base URL + api type. */
+function modelsEndpoint(baseUrl: string, apiType: ProviderApiType): string {
+  const base = baseUrl.replace(/\/+$/, "");
+  switch (apiType) {
+    case "google-generative-ai":
+      return `${base}/models`;
+    case "anthropic-messages": {
+      const v1 = base.endsWith("/v1") ? base : `${base}/v1`;
+      return `${v1}/models`;
+    }
+    default:
+      // OpenAI-compatible: assume the base already includes the API root (e.g. /v1).
+      return `${base}/models`;
+  }
+}
+
+/** Map a models response payload to a list of model ids, per api type. */
+function parseModelIds(apiType: ProviderApiType, data: unknown): string[] {
+  const obj = data as Record<string, unknown>;
+  if (apiType === "google-generative-ai") {
+    const models = (obj.models ?? []) as Array<{ name?: string }>;
+    return models
+      .map((m) =>
+        typeof m.name === "string" ? m.name.replace(/^models\//, "") : "",
+      )
+      .filter(Boolean);
+  }
+  const dataList = (obj.data ?? []) as Array<{ id?: string }>;
+  return dataList
+    .map((m) => (typeof m.id === "string" ? m.id : ""))
+    .filter(Boolean);
+}
+
+/**
+ * Fetch the model list for a custom provider from its base URL + api type.
+ * Used by the add-provider flow's "Fetch models" button. The API key is only
+ * used for this request and is never persisted here.
+ */
+export async function listModels(
+  input: ProviderModelsQuery,
+): Promise<string[]> {
+  const baseUrl = validateBaseUrl(input.baseUrl);
+  const apiKey = (input.apiKey ?? "").trim();
+  if (!apiKey) throw new Error("An API key is required.");
+  if (!PROVIDER_API_TYPES.includes(input.apiType)) {
+    throw new Error("Unsupported API type.");
+  }
+  const apiType = input.apiType;
+
+  let url = modelsEndpoint(baseUrl, apiType);
+  const headers: Record<string, string> = {};
+  if (apiType === "google-generative-ai") {
+    const parsed = new URL(url);
+    parsed.searchParams.set("key", apiKey);
+    url = parsed.toString();
+  } else if (apiType === "anthropic-messages") {
+    headers["x-api-key"] = apiKey;
+    headers["anthropic-version"] = "2023-06-01";
+  } else {
+    headers["Authorization"] = `Bearer ${apiKey}`;
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MODELS_FETCH_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(url, { headers, signal: controller.signal });
+  } catch (err) {
+    throw new Error(
+      err instanceof Error && err.name === "AbortError"
+        ? "Timed out fetching models."
+        : "Could not reach the provider to fetch models.",
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!res.ok) {
+    throw new Error(`Models request failed (HTTP ${res.status}).`);
+  }
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error("Provider returned a non-JSON response.");
+  }
+  return [...new Set(parseModelIds(apiType, data))];
 }
 
 /** Remove credentials for a provider, plus its models.json entry when custom. */

@@ -1,14 +1,21 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useClickOutside, useEscapeKey } from "../../hooks";
 import "./index.css";
 
-export interface ContextMenuItem {
+export interface ContextMenuDivider {
+  divider: true;
+  key: string;
+}
+
+export interface ContextMenuAction {
   key: string;
   label: ReactNode;
   danger?: boolean;
   onSelect: () => void;
 }
+
+export type ContextMenuItem = ContextMenuAction | ContextMenuDivider;
 
 export interface ContextMenuState {
   x: number;
@@ -33,8 +40,11 @@ export function ContextMenu({
     top: number;
   } | null>(null);
 
-  useEffect(() => {
-    if (!state) return;
+  useLayoutEffect(() => {
+    if (!state) {
+      setAdjusted(null);
+      return;
+    }
     const el = ref.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
@@ -48,29 +58,41 @@ export function ContextMenu({
   useClickOutside(ref, onClose, state !== null);
   useEscapeKey(onClose, state !== null);
 
-  if (!state || !adjusted) return null;
+  if (!state) return null;
+  const { left, top } = adjusted ?? { left: state.x, top: state.y };
 
   return createPortal(
     <div
       ref={ref}
       className="imb-ctx-menu imb-open"
       role="menu"
-      style={{ left: adjusted.left, top: adjusted.top }}
+      style={{ left, top }}
     >
-      {state.items.map((item) => (
-        <button
-          key={item.key}
-          type="button"
-          role="menuitem"
-          className={`imb-ctx-menu-item${item.danger ? " imb-danger" : ""}`}
-          onClick={() => {
-            onClose();
-            item.onSelect();
-          }}
-        >
-          {item.label}
-        </button>
-      ))}
+      {state.items.map((item) => {
+        if ("divider" in item) {
+          return (
+            <div
+              key={item.key}
+              className="imb-ctx-menu-divider"
+              role="separator"
+            />
+          );
+        }
+        return (
+          <button
+            key={item.key}
+            type="button"
+            role="menuitem"
+            className={`imb-ctx-menu-item${item.danger ? " imb-danger" : ""}`}
+            onClick={() => {
+              onClose();
+              item.onSelect();
+            }}
+          >
+            {item.label}
+          </button>
+        );
+      })}
     </div>,
     document.body,
   );

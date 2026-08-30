@@ -8,24 +8,6 @@
   user-select: none;
 }
 
-.imb-app::before,
-.imb-app::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background-color: var(--imb-bg);
-}
-
-.imb-app::before {
-  top: 0;
-}
-
-.imb-app::after {
-  bottom: 0;
-}
-
 @media (max-width: 920px) {
   .imb-field-row {
     grid-template-columns: 1fr;

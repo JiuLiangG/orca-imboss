@@ -1,3 +1,4 @@
+import { cls } from "reactutils";
 import "./index.css";
 
 export interface DetailPaneProps {
@@ -42,8 +43,16 @@ export function DetailHead({
 
 export function DetailBody({
   children,
+  className,
+  style,
 }: {
   children: React.ReactNode;
+  className?: string;
+  style?: React.CSSProperties;
 }): React.JSX.Element {
-  return <div className="imb-detail-body">{children}</div>;
+  return (
+    <div className={cls("imb-detail-body", className)} style={style}>
+      {children}
+    </div>
+  );
 }

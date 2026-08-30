@@ -1,31 +1,39 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { t } from "../../../../../../shared/libs/l10n";
 import type {
   Employee,
   EmployeeInput,
   InstalledSkill,
   McpServer,
+  PageQuery,
+  PageResult,
   ProviderInfo,
 } from "../../../../../../shared/types";
-import { t } from "../../../../../../shared/libs/l10n";
 import { ModuleView } from "../../../app-shell";
-import "../../../modules/module-common.css";
 import { Avatar } from "../../../avatar";
-import { EmptyState } from "../../../empty-state";
+import { Button } from "../../../button";
+import { ContextMenu, type ContextMenuState } from "../../../context-menu";
+import { ItemList } from "../../../item-list";
 import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
+import { Modal } from "../../../modal";
+import "../../../modules/module-common.css";
 import { SearchInput } from "../../../search-input";
-import { Button } from "../../../button";
+import { useInfiniteList } from "../../../useInfiniteList";
+import { useMultiSelect } from "../../../useMultiSelect";
 import { EmployeeDetail } from "../employee-detail";
 import { EmployeeRecruitModal } from "../employee-recruit-modal";
 
+const PAGE_SIZE = 50;
+
 /** Employees module: list (id 0 assistant hidden) + detail + recruit. */
 export function EmployeesModule(): React.JSX.Element {
-  const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(true);
   const [recruitOpen, setRecruitOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
 
   // Options for the multiselects / model select.
   const [mcpOptions, setMcpOptions] = useState<McpServer[]>([]);
@@ -43,31 +51,51 @@ export function EmployeesModule(): React.JSX.Element {
     setProviders(results[2]);
   }, []);
 
+  const fetchPage = useCallback(
+    (page: PageQuery): Promise<PageResult<Employee>> =>
+      window.imb.employees.listPage(page),
+    [],
+  );
+  const {
+    items: employees,
+    loading,
+    loadingMore,
+    hasMore,
+    error: listError,
+    loadMore,
+    reset,
+    mutate,
+    resetVersion,
+  } = useInfiniteList(fetchPage, { query, pageSize: PAGE_SIZE });
+
   useEffect(() => {
-    let alive = true;
-    void (async () => {
-      try {
-        const data = await window.imb.employees.list();
-        if (!alive) return;
-        setEmployees(data.filter((e) => e.id !== 0));
-        setMcpOptions(await window.imb.mcp.list());
-        setSkillOptions(await window.imb.skills.list());
-        setProviders(await window.imb.providers.list());
-        if (data.length > 1)
-          setSelectedId(data.filter((e) => e.id !== 0)[0]?.id ?? null);
-      } catch (err) {
-        if (alive) setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
+    void refreshOptions();
     const off = window.imb.skills.onChanged(() => void refreshOptions());
-    return () => {
-      alive = false;
-      off();
-    };
+    return off;
+  }, [refreshOptions]);
+
+  const multi = useMultiSelect<Employee, number>({
+    getKey: (employee) => employee.id,
+    items: employees,
+    onActivate: (employee) => setSelectedId(employee.id),
+    resetVersion,
+  });
+
+  // Auto-select the first employee after page 1 loads (and recover when the
+  // selected employee disappears, e.g. bulk delete).
+  useEffect(() => {
+    if (loading) return;
+    if (employees.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+    setSelectedId((current) =>
+      current !== null && employees.some((employee) => employee.id === current)
+        ? current
+        : employees[0].id,
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [employees, loading]);
 
   const modelOptions = useMemo(() => {
     return providers
@@ -75,15 +103,18 @@ export function EmployeesModule(): React.JSX.Element {
       .flatMap((p) => p.modelIds.map((m) => `${p.id}/${m}`));
   }, [providers]);
 
-  const selected = employees.find((e) => e.id === selectedId) ?? null;
+  const selected =
+    employees.find((employee) => employee.id === selectedId) ?? null;
 
   const patch = useCallback(
     async (id: number, input: EmployeeInput): Promise<boolean> => {
       try {
         const updated = await window.imb.employees.update(id, input);
         if (updated) {
-          setEmployees((current) =>
-            current.map((e) => (e.id === id ? updated : e)),
+          mutate((current) =>
+            current.map((employee) =>
+              employee.id === id ? updated : employee,
+            ),
           );
         }
         setError(null);
@@ -93,15 +124,33 @@ export function EmployeesModule(): React.JSX.Element {
         return false;
       }
     },
-    [],
+    [mutate],
+  );
+
+  const matchesQuery = useCallback(
+    (employee: Employee): boolean => {
+      const needle = query.trim().toLowerCase();
+      if (!needle) return true;
+      return (
+        employee.name.toLowerCase().includes(needle) ||
+        employee.role.toLowerCase().includes(needle)
+      );
+    },
+    [query],
   );
 
   const create = useCallback(
     async (input: EmployeeInput): Promise<Employee | null> => {
       try {
         const created = await window.imb.employees.create(input);
-        setEmployees((current) => [...current, created]);
-        setSelectedId(created.id);
+        if (matchesQuery(created)) {
+          // Newest id sorts last (id ASC) — append locally so the created
+          // employee is immediately visible and selected.
+          mutate((current) => [...current, created]);
+          setSelectedId(created.id);
+        } else {
+          reset();
+        }
         setError(null);
         return created;
       } catch (err) {
@@ -109,7 +158,7 @@ export function EmployeesModule(): React.JSX.Element {
         return null;
       }
     },
-    [],
+    [matchesQuery, mutate, reset],
   );
 
   const remove = useCallback(
@@ -117,28 +166,38 @@ export function EmployeesModule(): React.JSX.Element {
       try {
         const removed = await window.imb.employees.remove(id);
         if (removed) {
-          setEmployees((current) => {
-            const next = current.filter((e) => e.id !== id);
-            if (selectedId === id) {
-              setSelectedId(next[0]?.id ?? null);
-            }
-            return next;
-          });
+          mutate((current) => current.filter((employee) => employee.id !== id));
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       }
     },
-    [selectedId],
+    [mutate],
   );
 
-  const filtered = employees.filter((e) => {
-    const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return e.name.toLowerCase().includes(q) || e.role.toLowerCase().includes(q);
-  });
+  const deleteSelected = useCallback(async (): Promise<void> => {
+    const ids = [...multi.selectedKeys];
+    if (ids.length === 0) return;
+    try {
+      setDeleteOpen(false);
+      for (const id of ids) {
+        await window.imb.employees.remove(id);
+      }
+      reset();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [multi.selectedKeys, reset]);
 
-  const list = (
+  const toggleSelectAll = useCallback((): void => {
+    if (multi.selectedKeys.size === employees.length && employees.length > 0) {
+      multi.clear();
+    } else {
+      multi.selectAll();
+    }
+  }, [multi, employees.length]);
+
+  const listPane = (
     <ListPane
       title={t("Employees")}
       search={
@@ -154,15 +213,24 @@ export function EmployeesModule(): React.JSX.Element {
         </Button>
       }
     >
-      {loading ? (
-        <EmptyState>{t("Loading…")}</EmptyState>
-      ) : filtered.length === 0 ? (
-        <EmptyState>{t("No matching employees")}</EmptyState>
-      ) : (
-        filtered.map((employee) => (
+      <ItemList
+        items={employees}
+        getItemKey={(employee) => employee.id}
+        loading={loading}
+        loadingMore={loadingMore}
+        hasMore={hasMore}
+        loadMore={() => void loadMore()}
+        loadError={listError}
+        emptyMessage={t("No matching employees")}
+        selectable
+        selectedKeys={multi.selectedKeys}
+        onItemClick={(employee, index, mods) =>
+          multi.onItemClick(employee, index, mods)
+        }
+        renderItem={(employee, { selected: isSelectedRow }) => (
           <ListRow
-            key={employee.id}
             active={employee.id === selectedId}
+            selected={isSelectedRow}
             avatar={
               <Avatar
                 src={employee.avatarUrl}
@@ -173,10 +241,32 @@ export function EmployeesModule(): React.JSX.Element {
             }
             name={employee.name || t("Unnamed")}
             sub={employee.role || "—"}
-            onClick={() => setSelectedId(employee.id)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setCtxMenu({
+                x: e.clientX,
+                y: e.clientY,
+                items: [
+                  {
+                    key: "select-all",
+                    label: t("Select all"),
+                    onSelect: toggleSelectAll,
+                  },
+                  {
+                    key: "delete",
+                    label: t("Delete"),
+                    danger: true,
+                    onSelect: () => {
+                      if (multi.selectedKeys.size === 0) multi.selectAll();
+                      setDeleteOpen(true);
+                    },
+                  },
+                ],
+              });
+            }}
           />
-        ))
-      )}
+        )}
+      />
     </ListPane>
   );
 
@@ -201,7 +291,29 @@ export function EmployeesModule(): React.JSX.Element {
 
   return (
     <>
-      <ModuleView list={list} detail={detail} />
+      <ModuleView list={listPane} detail={detail} />
+      <ContextMenu state={ctxMenu} onClose={() => setCtxMenu(null)} />
+      <Modal
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        title={t("Delete employees")}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setDeleteOpen(false)}>
+              {t("Cancel")}
+            </Button>
+            <Button variant="danger" onClick={() => void deleteSelected()}>
+              {t("Delete")}
+            </Button>
+          </>
+        }
+      >
+        <p className="imb-module-note">
+          {t(
+            "The employee's conversation records will also be cleared. This cannot be undone.",
+          )}
+        </p>
+      </Modal>
       <EmployeeRecruitModal
         open={recruitOpen}
         onClose={() => setRecruitOpen(false)}

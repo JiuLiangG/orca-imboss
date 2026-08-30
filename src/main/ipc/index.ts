@@ -1,26 +1,38 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme } from "electron";
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  nativeTheme,
+} from "electron";
 import type {
   ChatParticipantUpdate,
   Employee,
   EmployeeInput,
   McpServerInput,
   MessageAttachment,
+  PageQuery,
+  ProviderModelsQuery,
   ProviderUpsert,
 } from "../../shared/types";
-import { deleteAvatarFiles, saveAvatar } from "../avatars";
+import { getAgentEnvironment } from "../agent/environment";
 import {
+  listModels,
   listProviders,
+  listProvidersPage,
   removeProvider,
   revealProviderKey,
   upsertProvider,
 } from "../agent/providers";
+import { AgentSession } from "../agent/session";
 import {
-  installSkillFromFolder,
+  installSkillsFromFolders,
   listSkills,
+  listSkillsPage,
   uninstallSkill,
 } from "../agent/skills";
-import { AgentSession } from "../agent/session";
-import { getAgentEnvironment } from "../agent/environment";
+import { deleteAvatarFiles, saveAvatar } from "../avatars";
 import * as chatsService from "../db/services/chats";
 import * as employeesService from "../db/services/employees";
 import * as mcpService from "../db/services/mcp";
@@ -109,6 +121,10 @@ function registerSettingsHandlers(): void {
 function registerEmployeeHandlers(): void {
   ipcMain.handle("employees:list", () => employeesService.listEmployees());
 
+  ipcMain.handle("employees:listPage", (_event, page: unknown) =>
+    employeesService.listEmployeesPage(parsePageQuery(page)),
+  );
+
   ipcMain.handle("employees:create", (_event, input: EmployeeInput): Employee =>
     employeesService.createEmployee(input),
   );
@@ -152,6 +168,10 @@ function registerEmployeeHandlers(): void {
 function registerChatHandlers(): void {
   ipcMain.handle("chats:list", () => chatsService.listChats());
   ipcMain.handle("chats:summaries", () => chatsService.listChatSummaries());
+
+  ipcMain.handle("chats:summariesPage", (_event, page: unknown) =>
+    chatsService.listChatSummariesPage(parsePageQuery(page)),
+  );
 
   ipcMain.handle("chats:markRead", (_event, id: unknown) => {
     const safeId = assertInteger(id, "chat id");
@@ -316,20 +336,36 @@ function registerSessionHandlers(): void {
 
 function registerAgentEnvHandlers(): void {
   ipcMain.handle("providers:list", () => listProviders());
+  ipcMain.handle("providers:listPage", (_event, page: unknown) =>
+    listProvidersPage(parsePageQuery(page)),
+  );
   ipcMain.handle("providers:upsert", (_event, input: ProviderUpsert) =>
     upsertProvider(input),
   );
   ipcMain.handle("providers:remove", (_event, id: unknown) =>
     removeProvider(assertString(id, "provider id")),
   );
-  ipcMain.handle("providers:revealKey", (_event, id: unknown) =>
-    revealProviderKey(assertString(id, "provider id")),
+  ipcMain.handle("providers:listModels", (_event, input: unknown) =>
+    listModels(input as ProviderModelsQuery),
   );
+  ipcMain.handle("providers:copyKey", async (_event, id: unknown) => {
+    const key = await revealProviderKey(assertString(id, "provider id"));
+    if (!key) throw new Error("No API key set for this provider.");
+    clipboard.writeText(key);
+    return true;
+  });
 
   ipcMain.handle("skills:list", () => listSkills());
-  ipcMain.handle("skills:install", async () =>
-    installFromDialog((path) => installSkillFromFolder(path)),
+  ipcMain.handle("skills:listPage", (_event, page: unknown) =>
+    listSkillsPage(parsePageQuery(page)),
   );
+  ipcMain.handle("skills:install", async () => {
+    const paths = await pickSkillFolders();
+    if (paths === null) return null;
+    const imported = await installSkillsFromFolders(paths);
+    if (imported.length > 0) broadcast("skills:changed");
+    return imported;
+  });
   ipcMain.handle("skills:uninstall", async (_event, name: unknown) => {
     await uninstallSkill(assertString(name, "skill name"));
     broadcast("skills:changed");
@@ -340,6 +376,9 @@ function registerAgentEnvHandlers(): void {
 
 function registerMcpHandlers(): void {
   ipcMain.handle("mcp:list", () => mcpService.listMcpServers());
+  ipcMain.handle("mcp:listPage", (_event, page: unknown) =>
+    mcpService.listMcpServersPage(parsePageQuery(page)),
+  );
   ipcMain.handle("mcp:get", (_event, id: unknown) =>
     mcpService.getMcpServer(assertInteger(id, "mcp id")),
   );
@@ -384,25 +423,21 @@ function registerThemeHandlers(): void {
 
 /**
  * Open a directory picker (attached to the focused window when available)
- * and import the selected folder. Returns the installed entry name, or
- * `null` when the user cancels.
+ * letting the user select multiple skill folders at once. Returns the chosen
+ * paths, or `null` when the user cancels.
  */
-async function installFromDialog(
-  importFn: (path: string) => string | Promise<string>,
-): Promise<string | null> {
+async function pickSkillFolders(): Promise<string[] | null> {
   const win =
     BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
   const options: Electron.OpenDialogOptions = {
-    title: "Select skill folder",
-    properties: ["openDirectory"],
+    title: "Select skill folders",
+    properties: ["openDirectory", "multiSelections"],
   };
   const result = win
     ? await dialog.showOpenDialog(win, options)
     : await dialog.showOpenDialog(options);
   if (result.canceled || result.filePaths.length === 0) return null;
-  const name = await importFn(result.filePaths[0]);
-  broadcast("skills:changed");
-  return name;
+  return result.filePaths;
 }
 
 /** Call once after DB init: apply persisted mode + forward OS flips. */
@@ -427,6 +462,30 @@ function assertInteger(value: unknown, field: string): number {
     throw new Error(`${field} must be an integer.`);
   }
   return value;
+}
+
+/** Validate a `PageQuery` payload defensively (cursor/query strings, sane limit). */
+function parsePageQuery(value: unknown): PageQuery {
+  if (value === undefined || value === null) return {};
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("page query must be an object.");
+  }
+  const record = value as Record<string, unknown>;
+  const page: PageQuery = {};
+  if (record["cursor"] !== undefined && record["cursor"] !== null) {
+    page.cursor = assertString(record["cursor"], "cursor");
+  }
+  if (record["query"] !== undefined && record["query"] !== null) {
+    page.query = assertString(record["query"], "query");
+  }
+  if (record["limit"] !== undefined) {
+    const limit = assertInteger(record["limit"], "limit");
+    if (limit < 1 || limit > 200) {
+      throw new Error("limit must be between 1 and 200.");
+    }
+    page.limit = limit;
+  }
+  return page;
 }
 
 /** Send an event to every live window (single-window app, kept for safety). */

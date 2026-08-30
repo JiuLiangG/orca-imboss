@@ -12,7 +12,10 @@ import type {
   Message,
   MessageAttachment,
   MessageSearchResult,
+  PageQuery,
+  PageResult,
   ProviderInfo,
+  ProviderModelsQuery,
   ProviderUpsert,
   ThemeState,
 } from "../shared/types";
@@ -65,6 +68,10 @@ const api = {
 
   employees: {
     list: () => ipcRenderer.invoke("employees:list") as Promise<Employee[]>,
+    listPage: (page: PageQuery) =>
+      ipcRenderer.invoke("employees:listPage", page) as Promise<
+        PageResult<Employee>
+      >,
     create: (input: EmployeeInput) =>
       ipcRenderer.invoke("employees:create", input) as Promise<Employee>,
     update: (id: number, input: EmployeeInput) =>
@@ -88,6 +95,10 @@ const api = {
     list: () => ipcRenderer.invoke("chats:list") as Promise<Chat[]>,
     summaries: () =>
       ipcRenderer.invoke("chats:summaries") as Promise<ChatSummary[]>,
+    summariesPage: (page: PageQuery) =>
+      ipcRenderer.invoke("chats:summariesPage", page) as Promise<
+        PageResult<ChatSummary>
+      >,
     markRead: (id: number) =>
       ipcRenderer.invoke("chats:markRead", id) as Promise<void>,
     create: (title: string, participants: number[]) =>
@@ -163,16 +174,26 @@ const api = {
 
   providers: {
     list: () => ipcRenderer.invoke("providers:list") as Promise<ProviderInfo[]>,
+    listPage: (page: PageQuery) =>
+      ipcRenderer.invoke("providers:listPage", page) as Promise<
+        PageResult<ProviderInfo>
+      >,
     upsert: (input: ProviderUpsert) =>
       ipcRenderer.invoke("providers:upsert", input) as Promise<void>,
     remove: (id: string) =>
       ipcRenderer.invoke("providers:remove", id) as Promise<void>,
-    revealKey: (id: string) =>
-      ipcRenderer.invoke("providers:revealKey", id) as Promise<string | null>,
+    copyKey: (id: string) =>
+      ipcRenderer.invoke("providers:copyKey", id) as Promise<boolean>,
+    listModels: (input: ProviderModelsQuery) =>
+      ipcRenderer.invoke("providers:listModels", input) as Promise<string[]>,
   },
 
   mcp: {
     list: () => ipcRenderer.invoke("mcp:list") as Promise<McpServer[]>,
+    listPage: (page: PageQuery) =>
+      ipcRenderer.invoke("mcp:listPage", page) as Promise<
+        PageResult<McpServer>
+      >,
     create: (input: McpServerInput) =>
       ipcRenderer.invoke("mcp:create", input) as Promise<McpServer>,
     update: (id: number, input: McpServerInput) =>
@@ -183,8 +204,12 @@ const api = {
 
   skills: {
     list: () => ipcRenderer.invoke("skills:list") as Promise<InstalledSkill[]>,
+    listPage: (page: PageQuery) =>
+      ipcRenderer.invoke("skills:listPage", page) as Promise<
+        PageResult<InstalledSkill>
+      >,
     install: () =>
-      ipcRenderer.invoke("skills:install") as Promise<string | null>,
+      ipcRenderer.invoke("skills:install") as Promise<string[] | null>,
     uninstall: (name: string) =>
       ipcRenderer.invoke("skills:uninstall", name) as Promise<void>,
     onChanged: (cb: () => void) => on("skills:changed", cb),

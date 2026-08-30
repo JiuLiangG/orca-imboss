@@ -2,9 +2,12 @@ import type {
   Chat,
   ChatParticipantUpdate,
   ChatSummary,
+  PageQuery,
+  PageResult,
 } from "../../../shared/types";
 import { getDB } from "../index";
 import { parseNumberArray, stringifyArray } from "./json";
+import { escapeLike, toFtsPhrase } from "./text-search";
 
 interface ChatRow {
   id: number;
@@ -72,6 +75,106 @@ export function markRead(id: number): void {
 /** Increment the unread counter (messages from employees). */
 export function bumpUnread(id: number): void {
   getDB().prepare("UPDATE chats SET unread = unread + 1 WHERE id = ?").run(id);
+}
+
+// --- paged chat list (keyset cursor over `(created_at, id) DESC`) -----------
+
+const MAX_PAGE_SIZE = 200;
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_QUERY_LENGTH = 200;
+
+/** Cursor payload: `"<createdAt>:<id>"` of the last row of the previous page. */
+function encodeChatCursor(createdAt: number, id: number): string {
+  return `${createdAt}:${id}`;
+}
+
+function decodeChatCursor(cursor: string): {
+  createdAt: number;
+  id: number;
+} | null {
+  const split = cursor.lastIndexOf(":");
+  if (split <= 0) return null;
+  const createdAt = Number(cursor.slice(0, split));
+  const id = Number(cursor.slice(split + 1));
+  if (!Number.isFinite(createdAt) || !Number.isSafeInteger(id)) return null;
+  return { createdAt, id };
+}
+
+/**
+ * One page of chat summaries, ordered `created_at DESC, id DESC` (unchanged
+ * from the full list). Search semantics (pushes the module's client-side
+ * filter to the server):
+ * - `query.length >= 3` → title LIKE  **OR** FTS5 trigram match over any
+ *   message content (phrase-quoted, same as `searchMessages`);
+ * - shorter queries → title LIKE **OR** plain `content LIKE` scan (no
+ *   trigram index; keeps 1–2 char / Chinese queries working).
+ *
+ * Cursor stability: seeks with the row-value comparison `(created_at, id) <`
+ * so inserts/deletes during scrolling never skip or duplicate rows.
+ */
+export function listChatSummariesPage(
+  page: PageQuery = {},
+): PageResult<ChatSummary> {
+  const limit = Math.min(
+    Math.max(Math.trunc(page.limit ?? DEFAULT_PAGE_SIZE), 1),
+    MAX_PAGE_SIZE,
+  );
+  const needle = (page.query ?? "").trim().slice(0, MAX_QUERY_LENGTH);
+  const db = getDB();
+  const params: Array<string | number> = [];
+  const conditions: string[] = [];
+
+  // Keyset seek — always the first predicate so the index is usable.
+  if (page.cursor) {
+    const cursor = decodeChatCursor(page.cursor);
+    if (cursor) {
+      conditions.push("(c.created_at, c.id) < (?, ?)");
+      params.push(cursor.createdAt, cursor.id);
+    }
+  }
+
+  if (needle.length > 0) {
+    const pattern = `%${escapeLike(needle)}%`;
+    if (needle.length >= 3) {
+      conditions.push(
+        "(c.title LIKE ? ESCAPE '\\' OR c.id IN " +
+          "(SELECT DISTINCT m.chat_id FROM messages_fts " +
+          " JOIN messages m ON m.id = messages_fts.rowid " +
+          " WHERE messages_fts MATCH ?))",
+      );
+      params.push(pattern, toFtsPhrase(needle));
+    } else {
+      conditions.push(
+        "(c.title LIKE ? ESCAPE '\\' OR c.id IN " +
+          "(SELECT DISTINCT chat_id FROM messages WHERE content LIKE ? ESCAPE '\\'))",
+      );
+      params.push(pattern, pattern);
+    }
+  }
+
+  const rows = db
+    .prepare(
+      `SELECT c.id, c.title, c.participants, c.unread, c.created_at,
+              (SELECT m.content FROM messages m WHERE m.chat_id = c.id
+               ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
+              (SELECT m.created_at FROM messages m WHERE m.chat_id = c.id
+               ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_at
+       FROM chats c
+       WHERE ${conditions.length > 0 ? conditions.join(" AND ") : "1 = 1"}
+       ORDER BY c.created_at DESC, c.id DESC
+       LIMIT ?`,
+    )
+    .all(...params, limit + 1) as ChatSummaryRow[];
+
+  const hasMore = rows.length > limit;
+  const items = rows.slice(0, limit).map(toChatSummary);
+  const last = items[items.length - 1];
+  return {
+    items,
+    nextCursor:
+      hasMore && last ? encodeChatCursor(last.createdAt, last.id) : null,
+    hasMore,
+  };
 }
 
 /**

@@ -97,6 +97,15 @@ const MIGRATIONS: Array<(db: Database) => void> = [
       );
     `);
   },
+  // 1 — keyset-pagination support for the chat list: the page queries order
+  // by `(created_at, id) DESC` and seek with a row-value comparison, so this
+  // composite index keeps the scan bounded per page.
+  (db) => {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_chats_created_id
+        ON chats(created_at, id);
+    `);
+  },
 ];
 
 export function migrate(db: Database): void {

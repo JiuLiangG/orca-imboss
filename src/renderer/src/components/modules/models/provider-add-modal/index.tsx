@@ -1,18 +1,21 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { t } from "../../../../../../shared/libs/l10n";
 import {
   CURATED_PROVIDERS,
+  CURATED_PROVIDERS_LABELS,
   PROVIDER_API_TYPES,
   type ProviderApiType,
   type ProviderUpsert,
 } from "../../../../../../shared/types";
-import { t } from "../../../../../../shared/libs/l10n";
 import { Button } from "../../../button";
 import { Field } from "../../../field";
 import { Input } from "../../../input";
-import { Textarea } from "../../../textarea";
 import { Modal } from "../../../modal";
-import { SegmentedControl } from "../../../segmented-control";
 import { PasswordInput } from "../../../password-field";
+import { SegmentedControl } from "../../../segmented-control";
+import { Select } from "../../../select";
+import { Textarea } from "../../../textarea";
+import "./index.css";
 
 export interface ProviderAddModalProps {
   open: boolean;
@@ -37,6 +40,8 @@ export function ProviderAddModal({
   const [apiKey, setApiKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const reset = (): void => {
     setMode("built-in");
@@ -47,6 +52,8 @@ export function ProviderAddModal({
     setModelIds("");
     setApiKey("");
     setError(null);
+    setFetching(false);
+    setFetchError(null);
   };
 
   const submit = async (): Promise<void> => {
@@ -98,6 +105,37 @@ export function ProviderAddModal({
     }
   };
 
+  const fetchModels = useCallback(async (): Promise<void> => {
+    if (fetching) return;
+    const key = apiKey.trim();
+    if (!baseUrl.trim()) {
+      setFetchError(t("Enter the base URL first."));
+      return;
+    }
+    if (!key) {
+      setFetchError(t("Enter the API key first."));
+      return;
+    }
+    setFetching(true);
+    setFetchError(null);
+    try {
+      const models = await window.imb.providers.listModels({
+        baseUrl: baseUrl.trim(),
+        apiType,
+        apiKey: key,
+      });
+      if (models.length === 0) {
+        setFetchError(t("No models returned."));
+        return;
+      }
+      setModelIds(models.join("\n"));
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setFetching(false);
+    }
+  }, [apiKey, apiType, baseUrl, fetching]);
+
   return (
     <Modal
       open={open}
@@ -107,7 +145,7 @@ export function ProviderAddModal({
           onClose();
         }
       }}
-      title={t("Add provider")}
+      title={t("Add Provider")}
       sub={t("Connect a new model provider.")}
       error={error ?? undefined}
       actions={
@@ -140,13 +178,26 @@ export function ProviderAddModal({
       </Field>
 
       {mode === "built-in" ? (
-        <Field label={t("Provider")}>
-          <SegmentedControl<string>
-            value={builtinId}
-            onChange={setBuiltinId}
-            options={CURATED_PROVIDERS.map((id) => ({ value: id, label: id }))}
-          />
-        </Field>
+        <>
+          <Field label={t("Provider")}>
+            <Select
+              value={builtinId}
+              options={CURATED_PROVIDERS.map((id) => ({
+                value: id,
+                label: CURATED_PROVIDERS_LABELS[id],
+              }))}
+              onChange={setBuiltinId}
+            />
+          </Field>
+          <Field label={t("API key")}>
+            <PasswordInput
+              value={apiKey}
+              onChange={setApiKey}
+              placeholder="sk-…"
+              invalid={error !== null}
+            />
+          </Field>
+        </>
       ) : (
         <>
           <Field label={t("Provider id")}>
@@ -157,6 +208,16 @@ export function ProviderAddModal({
               onChange={(e) => setCustomId(e.target.value)}
             />
           </Field>
+          <Field label={t("API type")}>
+            <Select
+              value={apiType}
+              options={PROVIDER_API_TYPES.map((type) => ({
+                value: type,
+                label: type,
+              }))}
+              onChange={(next) => setApiType(next as ProviderApiType)}
+            />
+          </Field>
           <Field label={t("Base URL")}>
             <Input
               value={baseUrl}
@@ -164,14 +225,12 @@ export function ProviderAddModal({
               onChange={(e) => setBaseUrl(e.target.value)}
             />
           </Field>
-          <Field label={t("API type")}>
-            <SegmentedControl<ProviderApiType>
-              value={apiType}
-              onChange={setApiType}
-              options={PROVIDER_API_TYPES.map((type) => ({
-                value: type,
-                label: type,
-              }))}
+          <Field label={t("API key")}>
+            <PasswordInput
+              value={apiKey}
+              onChange={setApiKey}
+              placeholder="sk-…"
+              invalid={error !== null}
             />
           </Field>
           <Field label={t("Model ids (one per line)")}>
@@ -181,20 +240,28 @@ export function ProviderAddModal({
 model-b"
               minHeight={72}
               mono
-              onChange={(e) => setModelIds(e.target.value)}
+              onChange={(e) => {
+                setModelIds(e.target.value);
+                if (fetchError !== null) setFetchError(null);
+              }}
             />
+            <div className="imb-model-fetch-row">
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={fetching}
+                disabled={fetching}
+                onClick={() => void fetchModels()}
+              >
+                {t("Fetch models")}
+              </Button>
+              {fetchError !== null && (
+                <span className="imb-error-text">{fetchError}</span>
+              )}
+            </div>
           </Field>
         </>
       )}
-
-      <Field label={t("API key")}>
-        <PasswordInput
-          value={apiKey}
-          onChange={setApiKey}
-          placeholder="sk-…"
-          invalid={error !== null}
-        />
-      </Field>
     </Modal>
   );
 }

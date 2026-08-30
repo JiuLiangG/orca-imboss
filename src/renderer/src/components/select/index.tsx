@@ -1,5 +1,6 @@
-import { useId, useRef, useState } from "react";
-import { useClickOutside, useEscapeKey } from "../../hooks";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useEscapeKey } from "../../hooks";
 import { IconChevronDown } from "../icons";
 import "./index.css";
 
@@ -19,9 +20,25 @@ export interface SelectProps {
   label?: string;
 }
 
+interface PanelStyle {
+  top: number;
+  left: number;
+  width: number;
+  maxHeight: number;
+  openUp: boolean;
+}
+
+const PANEL_GAP = 6;
+const PANEL_MAX_HEIGHT = 210;
+
 /**
  * Custom combobox (prototype used a native select; upgraded to a custom one
  * for keyboard/ARIA parity with the rest of the form controls).
+ *
+ * The dropdown panel is portaled to `document.body` and positioned from the
+ * trigger's bounding rect. This escapes the overflow clipping of ancestors
+ * such as the modal body, which would otherwise truncate a long list. It also
+ * flips upward when there is more room above the trigger than below it.
  */
 export function Select({
   value,
@@ -36,8 +53,10 @@ export function Select({
   const uid = useId();
   const listboxId = `select-${uid}`;
   const rootRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLUListElement>(null);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [panelStyle, setPanelStyle] = useState<PanelStyle | null>(null);
 
   // Type-ahead buffer.
   const bufferRef = useRef("");
@@ -46,22 +65,70 @@ export function Select({
   const selectedIndex = options.findIndex((o) => o.value === value);
   const selected = selectedIndex >= 0 ? options[selectedIndex] : null;
 
-  const openPanel = (): void => {
+  const positionPanel = useCallback((): void => {
+    const el = rootRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const below = window.innerHeight - rect.bottom - PANEL_GAP;
+    const above = rect.top - PANEL_GAP;
+    // Flip upward when there's more room above than below (and below is tight).
+    const openUp = below < Math.min(PANEL_MAX_HEIGHT, 220) && above > below;
+    const avail = Math.max(80, openUp ? above : below);
+    setPanelStyle({
+      top: openUp ? rect.top - PANEL_GAP : rect.bottom + PANEL_GAP,
+      left: rect.left,
+      width: rect.width,
+      maxHeight: Math.min(PANEL_MAX_HEIGHT, avail),
+      openUp,
+    });
+  }, []);
+
+  const openPanel = useCallback((): void => {
     if (disabled) return;
+    positionPanel();
     setOpen(true);
     setActiveIndex(selectedIndex >= 0 ? selectedIndex : 0);
-  };
-  const closePanel = (): void => {
+  }, [disabled, positionPanel, selectedIndex]);
+
+  const closePanel = useCallback((): void => {
     setOpen(false);
     setActiveIndex(-1);
-  };
-  const commit = (index: number): void => {
-    if (index < 0 || index >= options.length) return;
-    onChange(options[index].value);
-    closePanel();
-  };
+  }, []);
 
-  useClickOutside(rootRef, closePanel, open);
+  const commit = useCallback(
+    (index: number): void => {
+      if (index < 0 || index >= options.length) return;
+      onChange(options[index].value);
+      closePanel();
+    },
+    [closePanel, onChange, options.length],
+  );
+
+  // Close on pointerdown outside the trigger OR the portaled panel.
+  useEffect(() => {
+    if (!open) return;
+    const listener = (event: MouseEvent): void => {
+      const target = event.target as Node | null;
+      if (rootRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      closePanel();
+    };
+    document.addEventListener("mousedown", listener);
+    return () => document.removeEventListener("mousedown", listener);
+  }, [closePanel, open]);
+
+  // Reposition the portaled panel if the viewport scrolls/resizes while open.
+  useEffect(() => {
+    if (!open) return;
+    const reposition = (): void => positionPanel();
+    window.addEventListener("resize", reposition);
+    document.addEventListener("scroll", reposition, true);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      document.removeEventListener("scroll", reposition, true);
+    };
+  }, [open, positionPanel]);
+
   useEscapeKey(closePanel, open);
 
   const onTriggerKeyDown = (event: React.KeyboardEvent): void => {
@@ -122,7 +189,10 @@ export function Select({
   const optionId = (index: number): string => `${listboxId}-opt-${index}`;
 
   return (
-    <div className={`imb-select-wrap${invalid ? " imb-has-error" : ""}`} ref={rootRef}>
+    <div
+      className={`imb-select-wrap${invalid ? " imb-has-error" : ""}`}
+      ref={rootRef}
+    >
       <button
         type="button"
         className="imb-select"
@@ -140,40 +210,59 @@ export function Select({
         onClick={() => (open ? closePanel() : openPanel())}
         onKeyDown={onTriggerKeyDown}
       >
-        <span className={`imb-select-value${selected ? "" : " imb-is-placeholder"}`}>
+        <span
+          className={`imb-select-value${selected ? "" : " imb-is-placeholder"}`}
+        >
           {selected ? selected.label : placeholder}
         </span>
         <IconChevronDown
           className={`imb-icon imb-sm imb-select-caret${open ? " imb-is-open" : ""}`}
         />
       </button>
-      {open && (
-        <ul className="imb-select-panel" id={listboxId} role="listbox">
-          {options.length === 0 && (
-            <li className="imb-select-empty" role="presentation">
-              —
-            </li>
-          )}
-          {options.map((option, index) => (
-            <li
-              key={option.value}
-              id={optionId(index)}
-              role="option"
-              aria-selected={option.value === value}
-              className={`imb-select-option${index === activeIndex ? " imb-is-active" : ""}${option.value === value ? " imb-is-selected" : ""}`}
-              onMouseEnter={() => setActiveIndex(index)}
-              onClick={() => commit(index)}
-            >
-              <span className="imb-select-option-label">{option.label}</span>
-              {option.value === value && (
-                <span className="imb-select-check" aria-hidden="true">
-                  ✓
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      {open &&
+        panelStyle &&
+        createPortal(
+          <ul
+            ref={panelRef}
+            className={`imb-select-panel${panelStyle.openUp ? " imb-select-panel-up" : ""}`}
+            id={listboxId}
+            role="listbox"
+            style={{
+              position: "fixed",
+              top: panelStyle.top,
+              left: panelStyle.left,
+              width: panelStyle.width,
+              maxHeight: panelStyle.maxHeight,
+              right: "auto",
+              zIndex: 50,
+            }}
+          >
+            {options.length === 0 && (
+              <li className="imb-select-empty" role="presentation">
+                —
+              </li>
+            )}
+            {options.map((option, index) => (
+              <li
+                key={option.value}
+                id={optionId(index)}
+                role="option"
+                aria-selected={option.value === value}
+                className={`imb-select-option${index === activeIndex ? " imb-is-active" : ""}${option.value === value ? " imb-is-selected" : ""}`}
+                onMouseEnter={() => setActiveIndex(index)}
+                onClick={() => commit(index)}
+              >
+                <span className="imb-select-option-label">{option.label}</span>
+                {option.value === value && (
+                  <span className="imb-select-check" aria-hidden="true">
+                    ✓
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>,
+          document.body,
+        )}
     </div>
   );
 }

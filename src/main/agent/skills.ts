@@ -1,8 +1,8 @@
 import { cpSync, existsSync, mkdirSync, statSync } from "fs";
 import { readdir, readFile, rm } from "fs/promises";
-import { basename, join, resolve } from "path";
+import { join, resolve } from "path";
 import { getAgentSkillsDir } from "../data-dir";
-import type { InstalledSkill } from "../../shared/types";
+import type { InstalledSkill, PageQuery, PageResult } from "../../shared/types";
 
 /**
  * Install / uninstall of skills under `~/.imboss/agent/skills/<name>/`.
@@ -33,7 +33,7 @@ export async function listSkills(): Promise<InstalledSkill[]> {
       if (!statSync(dir).isDirectory()) continue;
       const skillFile = join(dir, SKILL_FILE);
       if (!existsSync(skillFile)) continue;
-      installed.push({ name, description: await readDescription(skillFile) });
+      installed.push({ name, description: (await readSkillMetadata(skillFile)).description });
     } catch {
       continue;
     }
@@ -41,63 +41,146 @@ export async function listSkills(): Promise<InstalledSkill[]> {
   return installed.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// --- paged skill list (keyset cursor over `name ASC`, in-memory source) -----
+
+const MAX_PAGE_SIZE = 200;
+const DEFAULT_PAGE_SIZE = 50;
+
 /**
- * Best-effort extraction of the `description:` line from SKILL.md YAML
- * frontmatter. Purely informational (list UI); malformed files simply yield
- * `null` rather than failing the listing.
+ * One page of installed skills, ordered `name ASC` (unchanged from the full
+ * list). Source is the SKILL.md folder (not SQLite), so the page is derived
+ * from the in-memory array: filter (`LIKE`-style substring on `name OR
+ * description`), seek past the cursor name, then slice. Cursor = the last
+ * row's `name` (skill names are `[A-Za-z0-9._-]+`, so raw embedding is safe).
  */
-async function readDescription(skillFilePath: string): Promise<string | null> {
+export async function listSkillsPage(
+  page: PageQuery = {},
+): Promise<PageResult<InstalledSkill>> {
+  const limit = Math.min(
+    Math.max(Math.trunc(page.limit ?? DEFAULT_PAGE_SIZE), 1),
+    MAX_PAGE_SIZE,
+  );
+  const needle = (page.query ?? "").trim().toLowerCase();
+  const all = await listSkills();
+
+  let start = 0;
+  if (page.cursor) {
+    // `localeCompare` mirrors the sort order of `listSkills`.
+    const cursor = page.cursor;
+    start = all.findIndex((skill) => skill.name.localeCompare(cursor) > 0);
+    if (start < 0) start = all.length;
+  }
+
+  const selected =
+    needle.length === 0
+      ? all.slice(start)
+      : all
+          .slice(start)
+          .filter(
+            (skill) =>
+              skill.name.toLowerCase().includes(needle) ||
+              (skill.description ?? "").toLowerCase().includes(needle),
+          );
+
+  const hasMore = selected.length > limit;
+  const items = selected.slice(0, limit);
+  const last = items[items.length - 1];
+  return {
+    items,
+    nextCursor: hasMore && last ? last.name : null,
+    hasMore,
+  };
+}
+
+/**
+ * Best-effort extraction of `name:` and `description:` from SKILL.md YAML
+ * frontmatter. Purely informational (list UI); malformed files simply yield
+ * `null` rather than failing.
+ */
+async function readSkillMetadata(skillFilePath: string): Promise<{
+  name: string | null;
+  description: string | null;
+}> {
   try {
     const head = (await readFile(skillFilePath, "utf8")).slice(0, 4096);
-    const match = /^description:\s*(.+)$/m.exec(head);
-    if (!match) return null;
-    const value = match[1].trim().replace(/^["']|["']$/g, "");
-    return value.length > 0 ? value.slice(0, 500) : null;
+    const nameMatch = /^name:\s*(.+)$/m.exec(head);
+    const descMatch = /^description:\s*(.+)$/m.exec(head);
+    const clean = (raw: string | undefined): string | null =>
+      raw ? raw.trim().replace(/^["']|["']$/g, "") : null;
+    const name = clean(nameMatch?.[1]);
+    const description = clean(descMatch?.[1]);
+    return {
+      name: name && name.length > 0 ? name : null,
+      description:
+        description && description.length > 0
+          ? description.slice(0, 500)
+          : null,
+    };
   } catch {
-    return null;
+    return { name: null, description: null };
   }
 }
 
-/** Import a local folder as a skill; requires a `SKILL.md` inside. */
-export function installSkillFromFolder(sourcePath: string): string {
-  if (typeof sourcePath !== "string" || sourcePath.length === 0) {
-    throw new Error("Source path is required.");
-  }
+/**
+ * Import one local folder as a skill. Best-effort: the folder is skipped
+ * (returns `null`) when it is not a directory, has no `SKILL.md`, has a
+ * missing/invalid `name` in the SKILL.md frontmatter, is already installed,
+ * or fails to copy — never throws for a single invalid folder.
+ *
+ * The installed skill name comes from the SKILL.md `name` frontmatter (the
+ * Agent Skills standard); a folder is skipped rather than falling back to
+ * its folder name when that field is missing/invalid.
+ */
+export async function installSkillFromFolder(
+  sourcePath: string,
+): Promise<string | null> {
+  if (typeof sourcePath !== "string" || sourcePath.length === 0) return null;
   const src = resolve(sourcePath);
-  let srcIsDirectory = false;
   try {
-    srcIsDirectory = statSync(src).isDirectory();
+    if (!statSync(src).isDirectory()) return null;
   } catch {
-    throw new Error("Source folder does not exist.");
-  }
-  if (!srcIsDirectory) {
-    throw new Error("Source path is not a folder.");
+    return null;
   }
 
-  const name = basename(src);
-  if (!isValidSkillName(name)) {
-    throw new Error(
-      'Folder name must use letters, digits, ".", "_" or "-" only.',
-    );
-  }
+  const skillFile = join(src, SKILL_FILE);
+  if (!existsSync(skillFile)) return null;
+
+  const metadata = await readSkillMetadata(skillFile);
+  const name = metadata.name;
+  if (!name || !isValidSkillName(name)) return null;
 
   const root = getAgentSkillsDir();
   mkdirSync(root, { recursive: true });
   // `name` has no separators (SAFE_NAME_RE), so join() stays inside the root.
   const dest = join(resolve(root), name);
-  if (existsSync(dest)) {
-    throw new Error(`Skill "${name}" is already installed.`);
-  }
-  if (!existsSync(join(src, SKILL_FILE))) {
-    throw new Error("Source folder does not contain a SKILL.md.");
-  }
+  if (existsSync(dest)) return null;
 
-  cpSync(src, dest, {
-    recursive: true,
-    errorOnExist: true,
-    force: false,
-  });
+  try {
+    cpSync(src, dest, {
+      recursive: true,
+      errorOnExist: true,
+      force: false,
+    });
+  } catch {
+    return null;
+  }
   return name;
+}
+
+/**
+ * Import several local folders in one pass (best-effort). Returns the names
+ * of the skills that were actually installed; invalid/already-installed
+ * folders are silently skipped.
+ */
+export async function installSkillsFromFolders(
+  paths: string[],
+): Promise<string[]> {
+  const installed: string[] = [];
+  for (const path of paths) {
+    const name = await installSkillFromFolder(path);
+    if (name) installed.push(name);
+  }
+  return installed;
 }
 
 export async function uninstallSkill(name: string): Promise<void> {

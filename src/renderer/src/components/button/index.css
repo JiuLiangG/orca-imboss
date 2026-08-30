@@ -12,7 +12,6 @@
     background var(--imb-motion-fast) var(--imb-ease-standard),
     border-color var(--imb-motion-fast) var(--imb-ease-standard),
     color var(--imb-motion-fast) var(--imb-ease-standard);
-  min-height: 44px;
   white-space: nowrap;
 }
 
@@ -79,7 +78,7 @@
 .imb-btn-sm {
   min-height: 36px;
   padding: 6px 12px;
-  font-size: var(--imb-text-base);
+  font-size: var(--imb-text-sm);
 }
 
 .imb-btn-spinner {

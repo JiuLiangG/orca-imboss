@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { ProviderInfo } from "../../../../../../shared/types";
 import { t } from "../../../../../../shared/libs/l10n";
+import type { ProviderInfo } from "../../../../../../shared/types";
 import { Button } from "../../../button";
 import { Chip } from "../../../chip";
 import { DetailBody, DetailHead } from "../../../detail-pane";
@@ -14,7 +14,7 @@ export interface ProviderDetailProps {
   onRemove: () => void;
 }
 
-/** Provider detail: kind badge, custom config info, masked key + reveal. */
+/** Provider detail: kind badge, custom config info, masked key + copy. */
 export function ProviderDetail({
   provider,
   onRemove,
@@ -22,14 +22,12 @@ export function ProviderDetail({
   const [removeOpen, setRemoveOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const reveal = async (): Promise<string | null> => {
+  const copy = async (): Promise<void> => {
     try {
-      const key = await window.imb.providers.revealKey(provider.id);
+      await window.imb.providers.copyKey(provider.id);
       setError(null);
-      return key;
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
-      return null;
     }
   };
 
@@ -79,15 +77,12 @@ export function ProviderDetail({
             )}
           </>
         )}
-        <Field
-          label={t("API key")}
-          hint={
-            provider.hasKey
-              ? t("Key ending in ${hint}", { hint: provider.keyHint ?? "" })
-              : t("No key set")
-          }
-        >
-          <PasswordField value={masked} onReveal={reveal} />
+        <Field label={t("API key")}>
+          <PasswordField
+            value={masked}
+            onCopy={copy}
+            disabled={!provider.hasKey}
+          />
         </Field>
         {error !== null && <p className="imb-error-text">{error}</p>}
       </DetailBody>
@@ -96,9 +91,6 @@ export function ProviderDetail({
         open={removeOpen}
         onClose={() => setRemoveOpen(false)}
         title={t("Remove provider")}
-        sub={t('Are you sure you want to remove "${name}"?', {
-          name: provider.id,
-        })}
         actions={
           <>
             <Button variant="secondary" onClick={() => setRemoveOpen(false)}>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { t } from "../../../../shared/libs/l10n";
 import { IconKey } from "../icons";
 import { Button } from "../button";
@@ -7,60 +7,62 @@ import "./index.css";
 export interface PasswordFieldProps {
   /** Masked value or empty string (e.g. `sk-••••3fA2`). */
   value: string;
-  /** What the reveal action resolves to (may be null when unavailable). */
-  onReveal: () => Promise<string | null>;
+  /** Copy the real API key to the system clipboard; reject on failure. */
+  onCopy: () => Promise<void>;
   placeholder?: string;
-  /** Fired when the user replaces the key via the field. */
-  onChange?: (value: string) => void;
-  invalid?: boolean;
   id?: string;
+  /** Disable the copy action (e.g. no key configured). */
+  disabled?: boolean;
 }
 
 /**
- * Masked API-key readout (`.key-readonly` + `显示/隐藏` reveal). The real key
- * is only fetched from main on explicit reveal and only kept in local state.
+ * Masked API-key readout with a "Copy" action. The real key never enters the
+ * renderer: `onCopy` triggers a main-process clipboard write and only returns
+ * success/failure; the copy button shows transient "Copied" feedback.
  */
 export function PasswordField({
   value,
-  onReveal,
+  onCopy,
   placeholder,
-  onChange,
-  invalid = false,
   id,
+  disabled = false,
 }: PasswordFieldProps): React.JSX.Element {
-  const [revealed, setRevealed] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const toggle = async (): Promise<void> => {
-    if (revealed !== null) {
-      setRevealed(null);
-      return;
-    }
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    };
+  }, []);
+
+  const copy = async (): Promise<void> => {
     setBusy(true);
     try {
-      const key = await onReveal();
-      setRevealed(key ?? value);
+      await onCopy();
+      setCopied(true);
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = setTimeout(() => setCopied(false), 1500);
     } finally {
       setBusy(false);
     }
   };
 
-  const showing = revealed !== null;
-
   return (
-    <div className={`imb-key-readonly${invalid ? " imb-has-error" : ""}`}>
+    <div className="imb-key-readonly">
       <span className="imb-masked" id={id}>
-        {showing ? revealed : value || placeholder || "••••••••"}
+        {value || placeholder || "••••••••"}
       </span>
       <Button
         variant="ghost"
         size="sm"
         className="imb-reveal"
         loading={busy}
-        disabled={!value && !showing}
-        onClick={() => void toggle()}
+        disabled={disabled || !value}
+        onClick={() => void copy()}
       >
-        {showing ? t("Hide") : t("Reveal")}
+        {copied ? t("Copied") : t("Copy")}
       </Button>
     </div>
   );

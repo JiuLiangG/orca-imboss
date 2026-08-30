@@ -25,7 +25,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   {
     module: "chat",
-    labelKey: "Conversations",
+    labelKey: "Chats",
     icon: IconChat,
     section: "main",
   },

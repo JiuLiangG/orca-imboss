@@ -34,6 +34,12 @@ export function Modal({
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
   const titleId = useRef(`modal-title-${Math.random().toString(36).slice(2)}`);
+  // Keep the latest `onClose` in a ref so the effect below only runs when the
+  // dialog actually opens (not on every re-render caused by a changing inline
+  // `onClose` callback, which would otherwise steal focus back to the
+  // autofocused control on each keystroke).
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
@@ -51,7 +57,7 @@ export function Modal({
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        onClose();
+        onCloseRef.current();
       } else if (event.key === "Tab") {
         trapFocus(dialog, event);
       }
@@ -61,7 +67,7 @@ export function Modal({
       document.removeEventListener("keydown", onKeyDown, true);
       restoreRef.current?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

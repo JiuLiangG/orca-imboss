@@ -1,49 +1,94 @@
 import { useCallback, useEffect, useState } from "react";
-import type { InstalledSkill } from "../../../../../../shared/types";
 import { t } from "../../../../../../shared/libs/l10n";
+import type {
+  InstalledSkill,
+  PageQuery,
+  PageResult,
+} from "../../../../../../shared/types";
 import { ModuleView } from "../../../app-shell";
 import { Avatar } from "../../../avatar";
-import { EmptyState } from "../../../empty-state";
+import { Button } from "../../../button";
+import { ContextMenu, type ContextMenuState } from "../../../context-menu";
+import { DetailBody, DetailHead } from "../../../detail-pane";
+import { ItemList } from "../../../item-list";
 import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
-import { SearchInput } from "../../../search-input";
-import { Button } from "../../../button";
-import { DetailBody, DetailHead } from "../../../detail-pane";
 import { Modal } from "../../../modal";
+import { SearchInput } from "../../../search-input";
+import { useInfiniteList } from "../../../useInfiniteList";
+import { useMultiSelect } from "../../../useMultiSelect";
 import "../../module-common.css";
+
+const PAGE_SIZE = 50;
 
 /** Skills module: read-only list/detail + folder import + uninstall. */
 export function SkillsModule(): React.JSX.Element {
-  const [skills, setSkills] = useState<InstalledSkill[]>([]);
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [uninstallTarget, setUninstallTarget] = useState<InstalledSkill | null>(
     null,
   );
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
 
-  const refresh = useCallback(async (): Promise<void> => {
-    try {
-      const data = await window.imb.skills.list();
-      setSkills(data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }, []);
+  const fetchPage = useCallback(
+    (page: PageQuery): Promise<PageResult<InstalledSkill>> =>
+      window.imb.skills.listPage(page),
+    [],
+  );
+  const {
+    items: skills,
+    loading,
+    loadingMore,
+    hasMore,
+    error: listError,
+    loadMore,
+    reset,
+    mutate,
+    resetVersion,
+  } = useInfiniteList(fetchPage, { query, pageSize: PAGE_SIZE });
 
+  // Re-list when skills change outside this module (install dialog, tools).
   useEffect(() => {
-    void refresh().finally(() => setLoading(false));
-    return window.imb.skills.onChanged(() => void refresh());
-  }, [refresh]);
+    return window.imb.skills.onChanged(() => reset());
+  }, [reset]);
+
+  const multi = useMultiSelect<InstalledSkill, string>({
+    getKey: (skill) => skill.name,
+    items: skills,
+    onActivate: (skill) => setSelectedName(skill.name),
+    resetVersion,
+  });
+
+  // Auto-select the first skill after page 1 loads (and recover when the
+  // selected skill disappears, e.g. uninstall).
+  useEffect(() => {
+    if (loading) return;
+    if (skills.length === 0) {
+      setSelectedName(null);
+      return;
+    }
+    setSelectedName((current) =>
+      current !== null && skills.some((skill) => skill.name === current)
+        ? current
+        : skills[0].name,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skills, loading]);
 
   const importFromFolder = async (): Promise<void> => {
     setBusy(true);
     try {
-      await window.imb.skills.install();
-      await refresh();
+      const names = await window.imb.skills.install();
+      // `null` = user cancelled; `[]` = nothing importable. Best-effort import:
+      // keep any valid skills with no UI feedback beyond re-listing them.
+      if (names !== null && names.length > 0) {
+        // Newest names sort last (name ASC, in-memory source) — refresh so
+        // the imported skills appear in their correct position.
+        reset();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -56,8 +101,7 @@ export function SkillsModule(): React.JSX.Element {
     try {
       await window.imb.skills.uninstall(skill.name);
       setUninstallTarget(null);
-      if (selectedName === skill.name) setSelectedName(null);
-      await refresh();
+      mutate((current) => current.filter((s) => s.name !== skill.name));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -65,18 +109,34 @@ export function SkillsModule(): React.JSX.Element {
     }
   };
 
-  const filtered = skills.filter((s) => {
-    const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      s.name.toLowerCase().includes(q) ||
-      (s.description ?? "").toLowerCase().includes(q)
-    );
-  });
+  const uninstallSelected = async (): Promise<void> => {
+    const names = [...multi.selectedKeys];
+    if (names.length === 0) return;
+    setBusy(true);
+    try {
+      for (const name of names) {
+        await window.imb.skills.uninstall(name);
+      }
+      setBulkOpen(false);
+      reset();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
 
-  const selected = skills.find((s) => s.name === selectedName) ?? null;
+  const toggleSelectAll = useCallback((): void => {
+    if (multi.selectedKeys.size === skills.length && skills.length > 0) {
+      multi.clear();
+    } else {
+      multi.selectAll();
+    }
+  }, [multi, skills.length]);
 
-  const list = (
+  const selected = skills.find((skill) => skill.name === selectedName) ?? null;
+
+  const listPane = (
     <ListPane
       title={t("Skills")}
       search={
@@ -88,28 +148,58 @@ export function SkillsModule(): React.JSX.Element {
       }
       footer={
         <Button block loading={busy} onClick={() => void importFromFolder()}>
-          {t("Import")}
+          {t("Import Skills")}
         </Button>
       }
     >
-      {loading ? (
-        <EmptyState>{t("Loading…")}</EmptyState>
-      ) : filtered.length === 0 ? (
-        <EmptyState>{t("No matching skills")}</EmptyState>
-      ) : (
-        filtered.map((skill) => (
+      <ItemList
+        items={skills}
+        getItemKey={(skill) => skill.name}
+        loading={loading}
+        loadingMore={loadingMore}
+        hasMore={hasMore}
+        loadMore={() => void loadMore()}
+        loadError={listError}
+        selectable
+        selectedKeys={multi.selectedKeys}
+        onItemClick={(skill, index, mods) =>
+          multi.onItemClick(skill, index, mods)
+        }
+        renderItem={(skill, { selected: isSelectedRow }) => (
           <ListRow
-            key={skill.name}
             active={skill.name === selectedName}
+            selected={isSelectedRow}
             avatar={
               <Avatar letter={skill.name.slice(0, 1)} name={skill.name} alt />
             }
             name={skill.name}
             sub={skill.description ?? "—"}
-            onClick={() => setSelectedName(skill.name)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setCtxMenu({
+                x: e.clientX,
+                y: e.clientY,
+                items: [
+                  {
+                    key: "select-all",
+                    label: t("Select all"),
+                    onSelect: toggleSelectAll,
+                  },
+                  {
+                    key: "uninstall",
+                    label: t("Uninstall"),
+                    danger: true,
+                    onSelect: () => {
+                      if (multi.selectedKeys.size === 0) multi.selectAll();
+                      setBulkOpen(true);
+                    },
+                  },
+                ],
+              });
+            }}
           />
-        ))
-      )}
+        )}
+      />
     </ListPane>
   );
 
@@ -129,26 +219,20 @@ export function SkillsModule(): React.JSX.Element {
           </Button>
         }
       />
-      <DetailBody>
+      <DetailBody style={{ paddingTop: "0" }}>
         <DetailReadOnlyDescription description={selected.description} />
       </DetailBody>
     </>
-  ) : (
-    <div className="imb-detail-scroll">
-      <div className="imb-chat-empty-detail">{t("No matching skills")}</div>
-    </div>
-  );
+  ) : null;
 
   return (
     <>
-      <ModuleView list={list} detail={detail} />
+      <ModuleView list={listPane} detail={detail} />
+      <ContextMenu state={ctxMenu} onClose={() => setCtxMenu(null)} />
       <Modal
         open={uninstallTarget !== null}
         onClose={() => setUninstallTarget(null)}
         title={t("Uninstall skill")}
-        sub={t('Are you sure you want to uninstall "${name}"?', {
-          name: uninstallTarget?.name ?? "",
-        })}
         actions={
           <>
             <Button
@@ -169,7 +253,30 @@ export function SkillsModule(): React.JSX.Element {
           </>
         }
       >
-        <p className="imb-skills-uninstall-note">
+        <p className="imb-module-note">
+          {t("The skill directory will be removed from the local environment.")}
+        </p>
+      </Modal>
+      <Modal
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        title={t("Uninstall skills")}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setBulkOpen(false)}>
+              {t("Cancel")}
+            </Button>
+            <Button
+              variant="danger"
+              loading={busy}
+              onClick={() => void uninstallSelected()}
+            >
+              {t("Uninstall")}
+            </Button>
+          </>
+        }
+      >
+        <p className="imb-module-note">
           {t("The skill directory will be removed from the local environment.")}
         </p>
       </Modal>
@@ -188,7 +295,6 @@ function DetailReadOnlyDescription({
 }): React.JSX.Element {
   return (
     <div className="imb-skill-readonly">
-      <div className="imb-skill-readonly-label">{t("Description")}</div>
       <p className="imb-skill-readonly-text">
         {description && description.length > 0 ? description : "—"}
       </p>

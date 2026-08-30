@@ -1,26 +1,30 @@
-/* ─── Context menu (`.imb-ctx-menu`) ───────────────────────────────── */
 .imb-ctx-menu {
   position: fixed;
   z-index: 50;
+  display: none;
+  flex-direction: column;
+  gap: 4px;
   background: var(--imb-surface);
   border: 1px solid var(--imb-border);
   border-radius: var(--imb-radius-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   min-width: 140px;
-  padding: 4px 0;
-  display: none;
+  padding: 4px;
 }
+
 .imb-ctx-menu.imb-open {
-  display: block;
+  display: flex;
 }
+
 .imb-ctx-menu-item {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 10px 16px;
+  padding: 6px 16px;
   border: none;
   background: none;
+  border-radius: var(--imb-radius-sm);
   cursor: pointer;
   font: inherit;
   font-size: var(--imb-text-base);
@@ -28,19 +32,25 @@
   text-align: left;
   transition: background var(--imb-motion-fast);
 }
+
 .imb-ctx-menu-item:hover {
   background: var(--imb-bg);
 }
+
 .imb-ctx-menu-item:focus-visible {
   outline: none;
   box-shadow: var(--imb-focus-ring);
 }
-.imb-ctx-menu-item + .imb-ctx-menu-item {
-  border-top: 1px solid var(--imb-border);
+
+.imb-ctx-menu-divider {
+  height: 1px;
+  background: var(--imb-border);
 }
+
 .imb-ctx-menu-item.imb-danger {
   color: var(--imb-danger);
 }
+
 .imb-ctx-menu-item.imb-danger:hover {
   background: color-mix(in oklch, var(--imb-danger) 10%, var(--imb-surface));
 }

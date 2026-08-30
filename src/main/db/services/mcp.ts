@@ -3,10 +3,13 @@ import type {
   McpServer,
   McpServerInput,
   McpTransport,
+  PageQuery,
+  PageResult,
 } from "../../../shared/types";
 import { MCP_TRANSPORTS } from "../../../shared/types";
 import { getDB } from "../index";
 import { parseJsonObject } from "./json";
+import { escapeLike } from "./text-search";
 
 /**
  * `mcp_servers` service — prototype-level MCP server configuration storage.
@@ -196,6 +199,62 @@ const SELECT_BY_ID = "SELECT * FROM mcp_servers WHERE id = ?";
 
 export function listMcpServers(): McpServer[] {
   return (getDB().prepare(SELECT_ALL).all() as McpRow[]).map(toMcpServer);
+}
+
+// --- paged MCP list (keyset cursor over `id ASC`) ---------------------------
+
+const MAX_PAGE_SIZE = 200;
+const DEFAULT_PAGE_SIZE = 50;
+
+/**
+ * One page of MCP servers, ordered `id ASC` (unchanged from the full list).
+ * Search = `LIKE` on `name OR description` (ESCAPE-safe). Keyset seek on
+ * `id > ?` keeps scrolling stable under concurrent inserts.
+ */
+export function listMcpServersPage(
+  page: PageQuery = {},
+): PageResult<McpServer> {
+  const limit = Math.min(
+    Math.max(Math.trunc(page.limit ?? DEFAULT_PAGE_SIZE), 1),
+    MAX_PAGE_SIZE,
+  );
+  const needle = (page.query ?? "").trim();
+  const db = getDB();
+  const conditions: string[] = [];
+  const params: Array<string | number> = [];
+
+  if (page.cursor) {
+    const cursorId = Number(page.cursor);
+    if (Number.isSafeInteger(cursorId) && cursorId > 0) {
+      conditions.push("id > ?");
+      params.push(cursorId);
+    }
+  }
+  if (needle.length > 0) {
+    const pattern = `%${escapeLike(needle)}%`;
+    conditions.push(
+      "(name LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')",
+    );
+    params.push(pattern, pattern);
+  }
+
+  const rows = db
+    .prepare(
+      `SELECT * FROM mcp_servers
+       WHERE ${conditions.length > 0 ? conditions.join(" AND ") : "1 = 1"}
+       ORDER BY id ASC
+       LIMIT ?`,
+    )
+    .all(...params, limit + 1) as McpRow[];
+
+  const hasMore = rows.length > limit;
+  const items = rows.slice(0, limit).map(toMcpServer);
+  const last = items[items.length - 1];
+  return {
+    items,
+    nextCursor: hasMore && last ? String(last.id) : null,
+    hasMore,
+  };
 }
 
 export function getMcpServer(id: number): McpServer | null {

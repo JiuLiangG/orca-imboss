@@ -1,0 +1,33 @@
+.imb-vlist {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  position: relative;
+}
+
+.imb-vlist-inner {
+  position: relative;
+  width: 100%;
+}
+
+/* Rows are absolutely positioned by the virtualizer; the old `.imb-list`
+   horizontal padding moves here (per row wrapper) so scroll math is exact.
+   The gap between rows is applied in the virtualizer's layout math (via its
+   `gap` option), not CSS `gap`, because rows are absolutely positioned (so a
+   flex gap would not shift `translateY` correctly). */
+.imb-vlist-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding: 0 8px;
+}
+
+.imb-vlist-footer-row {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--imb-muted);
+  font-size: var(--imb-text-sm);
+}

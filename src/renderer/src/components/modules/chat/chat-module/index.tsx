@@ -4,31 +4,34 @@ import type {
   ChatSummary,
   Message,
   MessageAttachment,
+  PageQuery,
+  PageResult,
 } from "../../../../../../shared/types";
 import { ModuleView } from "../../../app-shell";
 import { Avatar } from "../../../avatar";
 import { Button } from "../../../button";
 import { ContextMenu, type ContextMenuState } from "../../../context-menu";
-import { EmptyState } from "../../../empty-state";
+import { ItemList } from "../../../item-list";
 import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
 import { Modal } from "../../../modal";
 import { SearchInput } from "../../../search-input";
+import { useInfiniteList } from "../../../useInfiniteList";
+import { useMultiSelect } from "../../../useMultiSelect";
 import { ChatInputBar } from "../chat-input-bar";
 import { AssistantMark, MessageBubble } from "../message-bubble";
 import { ProgressCard } from "../progress-card";
 import { formatChatTime, previewText } from "../relative-time";
 import "./index.css";
 
+const PAGE_SIZE = 50;
+
 /** Chat module: list + thread + composer (placeholder pipeline). */
 export function ChatModule(): React.JSX.Element {
-  const [summaries, setSummaries] = useState<ChatSummary[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(true);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
-  const [selectedChats, setSelectedChats] = useState<Set<number>>(new Set());
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
@@ -36,15 +39,23 @@ export function ChatModule(): React.JSX.Element {
   selectedIdRef.current = selectedId;
   const locale = getLocale();
 
-  const refreshSummaries = useCallback(async (): Promise<void> => {
-    try {
-      const data = await window.imb.chats.summaries();
-      setSummaries(data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }, []);
+  // Server-side search (title OR message content — FTS/LIKE handled in main).
+  const fetchPage = useCallback(
+    (page: PageQuery): Promise<PageResult<ChatSummary>> =>
+      window.imb.chats.summariesPage(page),
+    [],
+  );
+  const {
+    items: chats,
+    loading: listLoading,
+    loadingMore: listLoadingMore,
+    hasMore: listHasMore,
+    error: listError,
+    loadMore,
+    reset,
+    mutate,
+    resetVersion,
+  } = useInfiniteList(fetchPage, { query, pageSize: PAGE_SIZE });
 
   const loadMessages = useCallback(async (chatId: number): Promise<void> => {
     try {
@@ -55,54 +66,62 @@ export function ChatModule(): React.JSX.Element {
     }
   }, []);
 
-  const selectChat = useCallback(
-    async (chatId: number): Promise<void> => {
-      setSelectedId(chatId);
-      void loadMessages(chatId);
-      void window.imb.chats.markRead(chatId);
-      // Local unread clear keeps the list instant; summaries refresh below.
-      setSummaries((current) =>
-        current.map((c) => (c.id === chatId ? { ...c, unread: 0 } : c)),
-      );
-      setSelectedChats(new Set());
-    },
-    [loadMessages],
-  );
+  // Plain click / auto-select target: the rest (thread, unread) is an effect
+  // on `selectedId` so every selection path stays consistent.
+  const selectChat = useCallback((chatId: number): void => {
+    setSelectedId(chatId);
+  }, []);
+
+  const multi = useMultiSelect<ChatSummary, number>({
+    getKey: (chat) => chat.id,
+    items: chats,
+    onActivate: (chat) => selectChat(chat.id),
+    resetVersion,
+  });
+
+  // Open thread + clear unread whenever the selection changes.
+  useEffect(() => {
+    if (selectedId === null) {
+      setMessages([]);
+      return;
+    }
+    void loadMessages(selectedId);
+    void window.imb.chats.markRead(selectedId);
+    mutate((current) =>
+      current.map((chat) =>
+        chat.id === selectedId ? { ...chat, unread: 0 } : chat,
+      ),
+    );
+  }, [selectedId, loadMessages, mutate]);
+
+  // Auto-select the first chat after page 1 loads (and recover when the
+  // selected chat disappears, e.g. bulk delete).
+  useEffect(() => {
+    if (listLoading) return;
+    if (chats.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+    setSelectedId((current) =>
+      current !== null && chats.some((chat) => chat.id === current)
+        ? current
+        : chats[0].id,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chats, listLoading]);
 
   useEffect(() => {
-    let alive = true;
-    void (async () => {
-      try {
-        const data = await window.imb.chats.summaries();
-        if (!alive) return;
-        setSummaries(data);
-        if (data.length > 0) {
-          const first = data[0];
-          setSelectedId(first.id);
-          void loadMessages(first.id);
-          void window.imb.chats.markRead(first.id);
-        }
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
     const offMessages = window.imb.messages.onChanged((chatId) => {
-      void refreshSummaries();
+      // New/reordered messages change the whole list → back to page 1.
+      reset();
       if (chatId === selectedIdRef.current) {
         // The user is viewing this chat: replies clear unread immediately.
         void window.imb.chats.markRead(chatId);
-        setSummaries((current) =>
-          current.map((c) => (c.id === chatId ? { ...c, unread: 0 } : c)),
-        );
         void loadMessages(chatId);
       }
     });
-    return () => {
-      alive = false;
-      offMessages();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return offMessages;
+  }, [reset, loadMessages]);
 
   // Scroll to bottom when messages change.
   useEffect(() => {
@@ -115,101 +134,85 @@ export function ChatModule(): React.JSX.Element {
       if (selectedId === null) return;
       try {
         await window.imb.chat.send(selectedId, text, attachments);
-        await Promise.all([loadMessages(selectedId), refreshSummaries()]);
+        void loadMessages(selectedId);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       }
     },
-    [selectedId, loadMessages, refreshSummaries],
+    [selectedId, loadMessages],
   );
 
   const newChat = useCallback(async (): Promise<void> => {
     try {
-      const chat = await window.imb.chats.create(t("New chat"), []);
+      const chat = await window.imb.chats.create(t("New Chat"), []);
       await window.imb.messages.append(
         chat.id,
         0,
         t("Hello, I'm your assistant. Tell me what you need."),
       );
-      await refreshSummaries();
-      await selectChat(chat.id);
+      // The new chat is the newest row → page 1 top → auto-selected.
+      reset();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [refreshSummaries, selectChat]);
-
+  }, [reset]);
   const deleteSelected = useCallback(async (): Promise<void> => {
-    if (selectedChats.size === 0) return;
+    const ids = [...multi.selectedKeys];
+    if (ids.length === 0) return;
     try {
-      const ids = [...selectedChats];
+      setDeleteOpen(false);
       for (const id of ids) {
         await window.imb.chats.remove(id);
       }
-      setSelectedChats(new Set());
-      setDeleteOpen(false);
-      const data = await window.imb.chats.summaries();
-      setSummaries(data);
-      if (data.length > 0) {
-        if (selectedId === null || ids.includes(selectedId)) {
-          await selectChat(data[0].id);
-        }
-      } else {
-        setSelectedId(null);
-        setMessages([]);
-      }
+      reset();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [selectedChats, selectedId, selectChat]);
+  }, [multi.selectedKeys, reset]);
 
   const toggleSelectAll = useCallback((): void => {
-    setSelectedChats((current) => {
-      if (current.size === summaries.length) return new Set();
-      return new Set(summaries.map((s) => s.id));
-    });
-  }, [summaries]);
+    if (multi.selectedKeys.size === chats.length && chats.length > 0) {
+      multi.clear();
+    } else {
+      multi.selectAll();
+    }
+  }, [multi, chats.length]);
 
-  const filtered = summaries.filter((c) => {
-    const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      c.title.toLowerCase().includes(q) ||
-      (c.preview ?? "").toLowerCase().includes(q)
-    );
-  });
+  const selected = chats.find((chat) => chat.id === selectedId) ?? null;
 
-  const selected = summaries.find((s) => s.id === selectedId) ?? null;
-
-  const list = (
+  const listPane = (
     <ListPane
-      title={t("Conversations")}
+      title={t("Chats")}
       search={
         <SearchInput
           value={query}
           onValueChange={setQuery}
-          placeholder={t("Filter chat titles")}
+          placeholder={t("Search chats")}
         />
       }
       footer={
-        <Button
-          block
-          icon={<span aria-hidden="true">＋</span>}
-          onClick={() => void newChat()}
-        >
-          {t("New chat")}
+        <Button block onClick={() => void newChat()}>
+          {t("New Chat")}
         </Button>
       }
     >
-      {loading ? (
-        <EmptyState>{t("Loading…")}</EmptyState>
-      ) : filtered.length === 0 ? (
-        <EmptyState>{t("No matching chats")}</EmptyState>
-      ) : (
-        filtered.map((chat) => (
+      <ItemList
+        items={chats}
+        getItemKey={(chat) => chat.id}
+        loading={listLoading}
+        loadingMore={listLoadingMore}
+        hasMore={listHasMore}
+        loadMore={() => void loadMore()}
+        loadError={listError}
+        selectable
+        selectedKeys={multi.selectedKeys}
+        onItemClick={(chat, index, mods) =>
+          multi.onItemClick(chat, index, mods)
+        }
+        renderItem={(chat, { selected: isSelectedRow }) => (
           <ListRow
-            key={chat.id}
             active={chat.id === selectedId}
-            selected={selectedChats.has(chat.id)}
+            selected={isSelectedRow}
             avatar={
               <Avatar letter={chat.title.slice(0, 1)} name={chat.title} />
             }
@@ -223,7 +226,6 @@ export function ChatModule(): React.JSX.Element {
                 </span>
               ) : undefined
             }
-            onClick={() => void selectChat(chat.id)}
             onContextMenu={(e) => {
               e.preventDefault();
               setCtxMenu({
@@ -240,9 +242,7 @@ export function ChatModule(): React.JSX.Element {
                     label: t("Delete"),
                     danger: true,
                     onSelect: () => {
-                      if (selectedChats.size === 0) {
-                        setSelectedChats(new Set(summaries.map((s) => s.id)));
-                      }
+                      if (multi.selectedKeys.size === 0) multi.selectAll();
                       setDeleteOpen(true);
                     },
                   },
@@ -250,8 +250,8 @@ export function ChatModule(): React.JSX.Element {
               });
             }}
           />
-        ))
-      )}
+        )}
+      />
     </ListPane>
   );
 
@@ -299,28 +299,16 @@ export function ChatModule(): React.JSX.Element {
         onSend={(text, attachments) => void handleSend(text, attachments)}
       />
     </>
-  ) : (
-    <div className="imb-detail-scroll">
-      <div className="imb-chat-empty-detail">
-        {t(
-          'No conversations yet. Click "New chat" in the bottom-left to start.',
-        )}
-      </div>
-    </div>
-  );
+  ) : null;
 
   return (
     <>
-      <ModuleView list={list} detail={detail} />
+      <ModuleView list={listPane} detail={detail} />
       <ContextMenu state={ctxMenu} onClose={() => setCtxMenu(null)} />
       <Modal
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
         title={t("Delete chats")}
-        sub={t(
-          "Are you sure you want to delete the selected ${count} conversations? This cannot be undone.",
-          { count: String(selectedChats.size) },
-        )}
         actions={
           <>
             <Button variant="secondary" onClick={() => setDeleteOpen(false)}>

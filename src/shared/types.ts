@@ -2,6 +2,28 @@ export interface SettingsPayload {
   locale: string;
 }
 
+// ---------------------------------------------------------------------------
+// Paged lists (virtualized list panes)
+// ---------------------------------------------------------------------------
+
+/** One page returned by a keyset/cursor paginated list endpoint. */
+export interface PageResult<T> {
+  items: T[];
+  /** Opaque keyset cursor for the next page; null when there are no more pages. */
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+/** Query accepted by `*:listPage` IPC endpoints (all fields optional). */
+export interface PageQuery {
+  /** Opaque cursor from the previous page's nextCursor. */
+  cursor?: string | null;
+  /** Page size; default 50 (services clamp to a sane range). */
+  limit?: number;
+  /** Server-side filter/search term (semantics per module). */
+  query?: string;
+}
+
 /** Value persisted per row in the `settings` table (key/value store). */
 export type SettingKey = "locale" | `model.${string}`;
 
@@ -175,14 +197,37 @@ export interface McpServerInput {
 /** Providers offered in the settings dropdown in addition to "Custom". */
 export const CURATED_PROVIDERS = [
   "anthropic",
-  "openai",
-  "google",
-  "xai",
-  "groq",
-  "openrouter",
   "deepseek",
+  "github-copilot",
+  "google",
+  "groq",
+  "minimax-cn",
+  "minimax",
+  "moonshotai-cn",
+  "moonshotai",
+  "openai",
+  "openrouter",
+  "xai",
+  "xiaomi",
   "zai",
 ] as const;
+
+export const CURATED_PROVIDERS_LABELS = {
+  anthropic: "Anthropic",
+  deepseek: "DeepSeek",
+  "github-copilot": "GitHub Copilot",
+  google: "Google",
+  groq: "Groq",
+  "minimax-cn": "MiniMax (CN)",
+  minimax: "MiniMax",
+  "moonshotai-cn": "Moonshot AI (CN)",
+  moonshotai: "Moonshot AI",
+  openai: "OpenAI",
+  openrouter: "OpenRouter",
+  xai: "xAI",
+  xiaomi: "Xiaomi",
+  zai: "Z.ai",
+};
 
 /** API protocol flavors supported for custom providers (`models.json` `api`). */
 export const PROVIDER_API_TYPES = [
@@ -218,6 +263,13 @@ export interface ProviderUpsert {
   modelIds?: string[];
   /** Omit to keep an existing key unchanged on update. */
   apiKey?: string;
+}
+
+/** Input to fetch a custom provider's available model ids (add-provider flow). */
+export interface ProviderModelsQuery {
+  baseUrl: string;
+  apiType: ProviderApiType;
+  apiKey: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -10,6 +10,7 @@ import type {
 import { getDB } from "../index";
 import { bumpUnread } from "./chats";
 import { parseJsonObject } from "./json";
+import { escapeLike, toFtsPhrase } from "./text-search";
 
 interface MessageRow {
   id: number;
@@ -259,10 +260,6 @@ export function appendMessage(
 const MAX_SEARCH_QUERY_LENGTH = 200;
 const MAX_SEARCH_RESULTS = 50;
 
-function escapeLike(input: string): string {
-  return input.replace(/[\\%_]/g, (ch) => `\\${ch}`);
-}
-
 /** Wrap the first (case-insensitive) match in the same markers FTS uses. */
 function likeSnippet(content: string, needle: string): string {
   const lower = content.toLowerCase();
@@ -316,7 +313,7 @@ export function searchMessages(query: string): MessageSearchResult[] {
   }
 
   // Treat user input as a literal phrase: quote it and escape inner quotes.
-  const phrase = `"${needle.replace(/"/g, '""')}"`;
+  const phrase = toFtsPhrase(needle);
   const rows = db
     .prepare(
       `SELECT m.chat_id AS chatId, m.id AS messageId, m.created_at AS createdAt,

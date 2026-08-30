@@ -1,7 +1,7 @@
-/* ─── Custom select (`.imb-select-wrap` / `.imb-select-panel`) ─────────── */
 .imb-select-wrap {
   position: relative;
 }
+
 .imb-select {
   width: 100%;
   min-height: 44px;
@@ -9,7 +9,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 34px 10px 13px;
+  padding: 4px 34px 4px 13px;
   border: 1px solid var(--imb-border);
   border-radius: var(--imb-radius-md);
   background: var(--imb-surface);
@@ -22,33 +22,41 @@
     border-color var(--imb-motion-fast) var(--imb-ease-standard),
     box-shadow var(--imb-motion-fast) var(--imb-ease-standard);
 }
+
 .imb-select:hover:not(:disabled) {
   border-color: var(--imb-fg);
 }
+
 .imb-select:focus-visible {
   outline: none;
   border-color: var(--imb-accent);
   box-shadow: var(--imb-focus-ring);
 }
+
 .imb-select[aria-expanded="true"] {
   border-color: var(--imb-accent);
   box-shadow: var(--imb-focus-ring);
 }
+
 .imb-select:disabled {
   opacity: 0.6;
   cursor: default;
 }
+
 .imb-select-wrap.imb-has-error .imb-select {
   border-color: var(--imb-danger);
 }
+
 .imb-select-value {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .imb-select-value.imb-is-placeholder {
   color: var(--imb-muted);
 }
+
 .imb-select-caret {
   position: absolute;
   right: 13px;
@@ -58,9 +66,11 @@
   pointer-events: none;
   transition: transform var(--imb-motion-fast) var(--imb-ease-standard);
 }
+
 .imb-select-caret.imb-is-open {
   transform: translateY(-50%) rotate(180deg);
 }
+
 .imb-select-panel {
   position: absolute;
   z-index: 30;
@@ -77,6 +87,7 @@
   margin: 0;
   list-style: none;
 }
+
 .imb-select-option {
   display: flex;
   align-items: center;
@@ -88,24 +99,29 @@
   font-size: var(--imb-text-base);
   color: var(--imb-fg);
 }
+
 .imb-select-option:hover,
 .imb-select-option.imb-is-active {
   background: var(--imb-fg-soft);
 }
+
 .imb-select-option.imb-is-selected {
   color: var(--imb-accent-active);
   font-weight: 500;
 }
+
 .imb-select-option-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .imb-select-check {
   color: var(--imb-accent);
   font-weight: 700;
   flex: none;
 }
+
 .imb-select-empty {
   padding: 9px 10px;
   color: var(--imb-muted);

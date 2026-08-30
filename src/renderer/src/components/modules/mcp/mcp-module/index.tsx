@@ -1,75 +1,115 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { McpServer, McpServerInput } from "../../../../../../shared/types";
+import { useCallback, useEffect, useState } from "react";
 import { t } from "../../../../../../shared/libs/l10n";
+import type {
+  McpServer,
+  McpServerInput,
+  PageQuery,
+  PageResult,
+} from "../../../../../../shared/types";
 import { ModuleView } from "../../../app-shell";
 import { Avatar } from "../../../avatar";
-import { EmptyState } from "../../../empty-state";
+import { Button } from "../../../button";
+import { ContextMenu, type ContextMenuState } from "../../../context-menu";
+import { ItemList } from "../../../item-list";
 import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
+import { Modal } from "../../../modal";
 import { SearchInput } from "../../../search-input";
-import { Button } from "../../../button";
-import { McpDetail } from "../mcp-detail";
-import { McpAddModal } from "../mcp-add-modal";
+import { useInfiniteList } from "../../../useInfiniteList";
+import { useMultiSelect } from "../../../useMultiSelect";
 import "../../module-common.css";
+import { McpAddModal } from "../mcp-add-modal";
+import { McpDetail } from "../mcp-detail";
+
+const PAGE_SIZE = 50;
 
 /** MCP servers module: list + transport-aware config detail + add. */
 export function McpModule(): React.JSX.Element {
-  const [servers, setServers] = useState<McpServer[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
 
+  const fetchPage = useCallback(
+    (page: PageQuery): Promise<PageResult<McpServer>> =>
+      window.imb.mcp.listPage(page),
+    [],
+  );
+  const {
+    items: servers,
+    loading,
+    loadingMore,
+    hasMore,
+    error: listError,
+    loadMore,
+    reset,
+    mutate,
+    resetVersion,
+  } = useInfiniteList(fetchPage, { query, pageSize: PAGE_SIZE });
+
+  const multi = useMultiSelect<McpServer, number>({
+    getKey: (server) => server.id,
+    items: servers,
+    onActivate: (server) => setSelectedId(server.id),
+    resetVersion,
+  });
+
+  // Auto-select the first server after page 1 loads (and recover when the
+  // selected server disappears, e.g. bulk delete).
   useEffect(() => {
-    let alive = true;
-    void (async () => {
-      try {
-        const data = await window.imb.mcp.list();
-        if (!alive) return;
-        setServers(data);
-        if (data.length > 0) setSelectedId(data[0].id);
-      } catch (err) {
-        if (alive) setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return servers;
-    return servers.filter(
-      (s) =>
-        s.name.toLowerCase().includes(q) ||
-        s.description.toLowerCase().includes(q),
+    if (loading) return;
+    if (servers.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+    setSelectedId((current) =>
+      current !== null && servers.some((server) => server.id === current)
+        ? current
+        : servers[0].id,
     );
-  }, [servers, query]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [servers, loading]);
 
-  const selected = servers.find((s) => s.id === selectedId) ?? null;
+  const selected = servers.find((server) => server.id === selectedId) ?? null;
 
   const patch = useCallback(
     async (id: number, input: McpServerInput): Promise<void> => {
       const updated = await window.imb.mcp.update(id, input);
       if (updated) {
-        setServers((current) =>
-          current.map((s) => (s.id === id ? updated : s)),
+        mutate((current) =>
+          current.map((server) => (server.id === id ? updated : server)),
         );
       }
     },
-    [],
+    [mutate],
+  );
+
+  const matchesQuery = useCallback(
+    (server: McpServer): boolean => {
+      const needle = query.trim().toLowerCase();
+      if (!needle) return true;
+      return (
+        server.name.toLowerCase().includes(needle) ||
+        server.description.toLowerCase().includes(needle)
+      );
+    },
+    [query],
   );
 
   const create = useCallback(
     async (input: McpServerInput): Promise<boolean> => {
       try {
         const created = await window.imb.mcp.create(input);
-        setServers((current) => [...current, created]);
-        setSelectedId(created.id);
+        if (matchesQuery(created)) {
+          // Newest id sorts last (id ASC) — append locally so the created
+          // server is immediately visible and selected.
+          mutate((current) => [...current, created]);
+          setSelectedId(created.id);
+        } else {
+          reset();
+        }
         setError(null);
         return true;
       } catch (err) {
@@ -77,7 +117,7 @@ export function McpModule(): React.JSX.Element {
         return false;
       }
     },
-    [],
+    [matchesQuery, mutate, reset],
   );
 
   const remove = useCallback(
@@ -85,20 +125,38 @@ export function McpModule(): React.JSX.Element {
       try {
         const removed = await window.imb.mcp.remove(id);
         if (removed) {
-          setServers((current) => {
-            const next = current.filter((s) => s.id !== id);
-            if (selectedId === id) setSelectedId(next[0]?.id ?? null);
-            return next;
-          });
+          mutate((current) => current.filter((server) => server.id !== id));
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       }
     },
-    [selectedId],
+    [mutate],
   );
 
-  const list = (
+  const deleteSelected = useCallback(async (): Promise<void> => {
+    const ids = [...multi.selectedKeys];
+    if (ids.length === 0) return;
+    try {
+      setDeleteOpen(false);
+      for (const id of ids) {
+        await window.imb.mcp.remove(id);
+      }
+      reset();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [multi.selectedKeys, reset]);
+
+  const toggleSelectAll = useCallback((): void => {
+    if (multi.selectedKeys.size === servers.length && servers.length > 0) {
+      multi.clear();
+    } else {
+      multi.selectAll();
+    }
+  }, [multi, servers.length]);
+
+  const listPane = (
     <ListPane
       title={t("MCP")}
       search={
@@ -110,33 +168,59 @@ export function McpModule(): React.JSX.Element {
       }
       footer={
         <Button block onClick={() => setAddOpen(true)}>
-          {t("Add")}
+          {t("Add MCP Server")}
         </Button>
       }
     >
-      {loading ? (
-        <EmptyState>{t("Loading…")}</EmptyState>
-      ) : filtered.length === 0 ? (
-        <EmptyState>
-          {servers.length === 0
-            ? t("No matching MCP servers")
-            : t("No matching MCP servers")}
-        </EmptyState>
-      ) : (
-        filtered.map((server) => (
+      <ItemList
+        items={servers}
+        getItemKey={(server) => server.id}
+        loading={loading}
+        loadingMore={loadingMore}
+        hasMore={hasMore}
+        loadMore={() => void loadMore()}
+        loadError={listError}
+        selectable
+        selectedKeys={multi.selectedKeys}
+        onItemClick={(server, index, mods) =>
+          multi.onItemClick(server, index, mods)
+        }
+        renderItem={(server, { selected: isSelectedRow }) => (
           <ListRow
-            key={server.id}
             active={server.id === selectedId}
+            selected={isSelectedRow}
             avatar={
               <Avatar letter={server.name.slice(0, 2)} name={server.name} alt />
             }
             name={server.name}
             meta={server.config.transport}
             sub={server.description || "—"}
-            onClick={() => setSelectedId(server.id)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setCtxMenu({
+                x: e.clientX,
+                y: e.clientY,
+                items: [
+                  {
+                    key: "select-all",
+                    label: t("Select all"),
+                    onSelect: toggleSelectAll,
+                  },
+                  {
+                    key: "delete",
+                    label: t("Delete"),
+                    danger: true,
+                    onSelect: () => {
+                      if (multi.selectedKeys.size === 0) multi.selectAll();
+                      setDeleteOpen(true);
+                    },
+                  },
+                ],
+              });
+            }}
           />
-        ))
-      )}
+        )}
+      />
     </ListPane>
   );
 
@@ -147,17 +231,33 @@ export function McpModule(): React.JSX.Element {
       onPatch={(input) => patch(selected.id, input)}
       onRemove={() => void remove(selected.id)}
     />
-  ) : (
-    <div className="imb-detail-scroll">
-      <div className="imb-chat-empty-detail">
-        {t("No matching MCP servers")}
-      </div>
-    </div>
-  );
+  ) : null;
 
   return (
     <>
-      <ModuleView list={list} detail={detail} />
+      <ModuleView list={listPane} detail={detail} />
+      <ContextMenu state={ctxMenu} onClose={() => setCtxMenu(null)} />
+      <Modal
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        title={t("Delete MCP servers")}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setDeleteOpen(false)}>
+              {t("Cancel")}
+            </Button>
+            <Button variant="danger" onClick={() => void deleteSelected()}>
+              {t("Delete")}
+            </Button>
+          </>
+        }
+      >
+        <p className="imb-module-note">
+          {t(
+            "The configuration will be permanently deleted. Linked employees must choose again.",
+          )}
+        </p>
+      </Modal>
       <McpAddModal
         open={addOpen}
         onClose={() => setAddOpen(false)}

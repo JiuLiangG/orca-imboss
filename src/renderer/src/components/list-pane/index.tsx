@@ -6,7 +6,7 @@ export interface ListPaneProps {
   /** Optional search box (rendered under the title). */
   search?: ReactNode;
   children: ReactNode;
-  /** Footer action slot (e.g. "New chat" button). */
+  /** Footer action slot (e.g. "New Chat" button). */
   footer?: ReactNode;
 }
 

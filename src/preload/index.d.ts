@@ -11,7 +11,10 @@ import type {
   Message,
   MessageAttachment,
   MessageSearchResult,
+  PageQuery,
+  PageResult,
   ProviderInfo,
+  ProviderModelsQuery,
   ProviderUpsert,
   ThemeState,
 } from "../shared/types";
@@ -44,6 +47,7 @@ interface IMB {
 
   employees: {
     list(): Promise<Employee[]>;
+    listPage(page: PageQuery): Promise<PageResult<Employee>>;
     create(input: EmployeeInput): Promise<Employee>;
     update(id: number, input: EmployeeInput): Promise<Employee | null>;
     remove(id: number): Promise<boolean>;
@@ -57,6 +61,7 @@ interface IMB {
   chats: {
     list(): Promise<Chat[]>;
     summaries(): Promise<ChatSummary[]>;
+    summariesPage(page: PageQuery): Promise<PageResult<ChatSummary>>;
     markRead(id: number): Promise<void>;
     create(title: string, participants: number[]): Promise<Chat>;
     update(id: number, title: string): Promise<Chat | null>;
@@ -94,13 +99,16 @@ interface IMB {
 
   providers: {
     list(): Promise<ProviderInfo[]>;
+    listPage(page: PageQuery): Promise<PageResult<ProviderInfo>>;
     upsert(input: ProviderUpsert): Promise<void>;
     remove(id: string): Promise<void>;
-    revealKey(id: string): Promise<string | null>;
+    copyKey(id: string): Promise<boolean>;
+    listModels(input: ProviderModelsQuery): Promise<string[]>;
   };
 
   mcp: {
     list(): Promise<McpServer[]>;
+    listPage(page: PageQuery): Promise<PageResult<McpServer>>;
     create(input: McpServerInput): Promise<McpServer>;
     update(id: number, input: McpServerInput): Promise<McpServer | null>;
     remove(id: number): Promise<boolean>;
@@ -108,7 +116,8 @@ interface IMB {
 
   skills: {
     list(): Promise<InstalledSkill[]>;
-    install(): Promise<string | null>;
+    listPage(page: PageQuery): Promise<PageResult<InstalledSkill>>;
+    install(): Promise<string[] | null>;
     uninstall(name: string): Promise<void>;
     onChanged(cb: () => void): () => void;
   };

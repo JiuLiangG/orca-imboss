@@ -1,7 +1,13 @@
-import type { Employee, EmployeeInput } from "../../../shared/types";
+import type {
+  Employee,
+  EmployeeInput,
+  PageQuery,
+  PageResult,
+} from "../../../shared/types";
 import { readAvatarDataUrl } from "../../avatars";
 import { getDB } from "../index";
 import { parseNumberArray, parseStringArray, stringifyArray } from "./json";
+import { escapeLike } from "./text-search";
 
 interface EmployeeRow {
   id: number;
@@ -38,6 +44,59 @@ const SELECT_BY_ID = "SELECT * FROM employees WHERE id = ?";
 
 export function listEmployees(): Employee[] {
   return (getDB().prepare(SELECT_ALL).all() as EmployeeRow[]).map(toEmployee);
+}
+
+// --- paged employee list (keyset cursor over `id ASC`) ----------------------
+
+const MAX_PAGE_SIZE = 200;
+const DEFAULT_PAGE_SIZE = 50;
+
+/**
+ * One page of employees, ordered `id ASC` (unchanged from the full list) and
+ * excluding the built-in assistant (id 0), matching the UI's existing filter.
+ * Search = `LIKE` on `name OR role` (ESCAPE-safe). Keyset seek on `id > ?`
+ * keeps scrolling stable under concurrent inserts (no skip/duplicate).
+ */
+export function listEmployeesPage(page: PageQuery = {}): PageResult<Employee> {
+  const limit = Math.min(
+    Math.max(Math.trunc(page.limit ?? DEFAULT_PAGE_SIZE), 1),
+    MAX_PAGE_SIZE,
+  );
+  const needle = (page.query ?? "").trim();
+  const db = getDB();
+  const conditions: string[] = ["id <> ?"];
+  const params: Array<string | number> = [ASSISTANT_ID];
+
+  if (page.cursor) {
+    const cursorId = Number(page.cursor);
+    if (Number.isSafeInteger(cursorId) && cursorId > 0) {
+      conditions.push("id > ?");
+      params.push(cursorId);
+    }
+  }
+  if (needle.length > 0) {
+    const pattern = `%${escapeLike(needle)}%`;
+    conditions.push("(name LIKE ? ESCAPE '\\' OR role LIKE ? ESCAPE '\\')");
+    params.push(pattern, pattern);
+  }
+
+  const rows = db
+    .prepare(
+      `SELECT * FROM employees
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY id ASC
+       LIMIT ?`,
+    )
+    .all(...params, limit + 1) as EmployeeRow[];
+
+  const hasMore = rows.length > limit;
+  const items = rows.slice(0, limit).map(toEmployee);
+  const last = items[items.length - 1];
+  return {
+    items,
+    nextCursor: hasMore && last ? String(last.id) : null,
+    hasMore,
+  };
 }
 
 export function getEmployee(id: number): Employee | null {

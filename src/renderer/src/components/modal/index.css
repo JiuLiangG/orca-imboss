@@ -1,4 +1,3 @@
-/* ─── Modal (`.imb-modal-overlay` / `.imb-modal`) ──────────────────────── */
 .imb-modal-overlay {
   position: fixed;
   inset: 0;
@@ -8,6 +7,7 @@
   place-items: center;
   padding: 20px;
 }
+
 .imb-modal {
   width: 100%;
   max-width: 480px;
@@ -19,31 +19,38 @@
   display: flex;
   flex-direction: column;
 }
+
 .imb-modal-lg {
   max-width: 640px;
 }
+
 .imb-modal-head {
   padding: var(--imb-space-5) var(--imb-space-6) var(--imb-space-3);
 }
+
 .imb-modal-head h3 {
   font-size: var(--imb-text-xl);
   font-weight: 600;
 }
+
 .imb-modal-head .imb-sub {
   color: var(--imb-muted);
   font-size: var(--imb-text-sm);
   margin-top: 3px;
 }
+
 .imb-modal-body {
-  padding: var(--imb-space-3) var(--imb-space-6) var(--imb-space-2);
+  padding: 0 var(--imb-space-6) var(--imb-space-2);
   max-height: 60vh;
   overflow-y: auto;
   flex: 1;
 }
+
 .imb-modal-error {
   padding: 0 var(--imb-space-6);
   margin: 0 0 var(--imb-space-2);
 }
+
 .imb-modal-actions {
   display: flex;
   justify-content: flex-end;
