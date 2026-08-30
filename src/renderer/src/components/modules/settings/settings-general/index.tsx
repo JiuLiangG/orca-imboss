@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ProviderInfo } from "../../../../../../shared/types";
 import { SUPPORTED_LOCALES } from "../../../../../../shared/constants";
 import { t } from "../../../../../../shared/libs/l10n";
+import type { ProviderInfo } from "../../../../../../shared/types";
 import { useApp } from "../../../../app-store";
 import { DetailBody, DetailHead } from "../../../detail-pane";
 import { Field } from "../../../field";
+import { IconPlus, IconTrash } from "../../../icons";
 import { Input } from "../../../input";
 import { Select } from "../../../select";
-import { IconPlus, IconTrash } from "../../../icons";
 import "./index.css";
 
 interface EnvVar {
@@ -96,7 +96,7 @@ export function SettingsGeneral(): React.JSX.Element {
           )}
         >
           <Select
-            value={locale}
+            value={SUPPORTED_LOCALES.includes(locale) ? locale : "en"}
             options={SUPPORTED_LOCALES.map((l) => ({
               value: l,
               label: l === "zh-CN" ? "简体中文" : "English",
@@ -127,7 +127,7 @@ export function SettingsGeneral(): React.JSX.Element {
           </label>
           <span className="imb-settings-env-help">
             {t(
-              "Provides runtime environment variables for MCP servers and subagents. One key-value pair per line.",
+              "Provides runtime environment variables for MCP servers and agents. One key-value pair per line.",
             )}
           </span>
           <div className="imb-env-list">

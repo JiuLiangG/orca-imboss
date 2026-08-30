@@ -7,7 +7,6 @@
   padding: 11px 10px;
   border: 0;
   background: transparent;
-  border-radius: var(--imb-radius-md);
   transition: background var(--imb-motion-fast) var(--imb-ease-standard);
 }
 

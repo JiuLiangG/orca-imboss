@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useApp, type AppModule } from "./app-store";
 import { AppShell } from "./components/app-shell";
 import { ChatModule } from "./components/modules/chat/chat-module";
@@ -29,6 +30,15 @@ function ActiveModule(): React.JSX.Element {
 }
 
 function App(): React.JSX.Element {
+  // Subscribe to `locale` so that a language switch re-renders the whole tree
+  // and every `t()` call re-evaluates against the new locale. Without this,
+  // only components that read `locale` directly (e.g. SettingsGeneral) refresh;
+  // the rest of the UI (nav, headers, modules) would wait for a restart.
+  const { locale } = useApp();
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
+
   return (
     <>
       <AppShell />

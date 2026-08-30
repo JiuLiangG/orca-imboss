@@ -120,16 +120,18 @@ export function Nav({
         ))}
       </div>
       <div className="imb-nav-divider" />
-      <div className="imb-nav-items">
-        {miniapp.map((item) => (
-          <NavButton key={item.module} item={item} collapsed={collapsed} />
-        ))}
-      </div>
-      <div className="imb-nav-divider" />
-      <div className="imb-nav-items">
-        {chats.map((item) => (
-          <NavButton key={item.module} item={item} collapsed={collapsed} />
-        ))}
+      <div className="imb-scroll">
+        <div className="imb-nav-items">
+          {miniapp.map((item) => (
+            <NavButton key={item.module} item={item} collapsed={collapsed} />
+          ))}
+        </div>
+        <div className="imb-nav-divider" />
+        <div className="imb-nav-items">
+          {chats.map((item) => (
+            <NavButton key={item.module} item={item} collapsed={collapsed} />
+          ))}
+        </div>
       </div>
       <div className="imb-nav-spacer" />
       <div className="imb-nav-items imb-nav-bottom">

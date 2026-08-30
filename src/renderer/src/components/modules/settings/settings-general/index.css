@@ -1,9 +1,9 @@
-/* ─── Settings → General (env vars editor) ─────────────────────── */
 .imb-settings-env-section {
   margin-top: var(--imb-space-6);
   padding-top: var(--imb-space-5);
   border-top: 1px solid var(--imb-border);
 }
+
 .imb-settings-env-title {
   font-weight: 500;
   display: flex;
@@ -11,41 +11,49 @@
   gap: 6px;
   font-size: var(--imb-text-base);
 }
+
 .imb-settings-env-help {
   display: block;
   margin-top: 2px;
   font-size: var(--imb-text-xs);
   color: var(--imb-muted);
 }
+
 .imb-settings-env-empty {
   color: var(--imb-muted);
   font-size: var(--imb-text-sm);
 }
+
 .imb-env-list {
   display: flex;
   flex-direction: column;
   gap: var(--imb-space-2);
   margin-top: var(--imb-space-2);
 }
+
 .imb-env-row {
   display: flex;
   align-items: center;
   gap: var(--imb-space-2);
 }
+
 .imb-env-row .imb-input {
   flex: 1;
   min-width: 0;
   height: 36px;
   padding: 6px 10px;
 }
+
 .imb-env-row .imb-input.imb-env-key {
   flex: 0 0 140px;
 }
+
 .imb-env-sep {
   color: var(--imb-muted);
   font-size: var(--imb-text-sm);
   flex-shrink: 0;
 }
+
 .imb-btn-icon {
   flex-shrink: 0;
   width: 28px;
@@ -56,26 +64,30 @@
   border: none;
   background: none;
   border-radius: var(--imb-radius-sm);
-  color: var(--imb-border);
+  color: var(--imb-muted);
   cursor: pointer;
   transition:
     color var(--imb-motion-fast),
     background var(--imb-motion-fast);
 }
+
 .imb-btn-icon:hover {
   color: var(--imb-danger);
   background: color-mix(in oklch, var(--imb-danger) 8%, transparent);
 }
+
 .imb-btn-icon:focus-visible {
   outline: none;
   box-shadow: var(--imb-focus-ring);
 }
+
 .imb-env-add-row {
   display: flex;
   align-items: center;
   gap: var(--imb-space-2);
   margin-top: var(--imb-space-4);
 }
+
 .imb-env-add-btn {
   display: inline-flex;
   align-items: center;
@@ -91,10 +103,12 @@
     background var(--imb-motion-fast),
     border-color var(--imb-motion-fast);
 }
+
 .imb-env-add-btn:hover {
   background: color-mix(in oklch, var(--imb-accent) 8%, transparent);
   border-color: var(--imb-accent);
 }
+
 .imb-env-add-btn:focus-visible {
   outline: none;
   box-shadow: var(--imb-focus-ring);

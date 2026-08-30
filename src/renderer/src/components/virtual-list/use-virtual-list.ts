@@ -23,7 +23,7 @@ export function useVirtualList({
   count,
   estimateSize,
   overscan = 5,
-  gap = 2,
+  gap = 0,
 }: UseVirtualListOptions): {
   scrollRef: React.RefObject<HTMLDivElement | null>;
   virtualizer: ReturnType<

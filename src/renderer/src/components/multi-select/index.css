@@ -1,15 +1,15 @@
-/* ─── Multi-select (`.imb-ms`) ─────────────────────────────────────── */
 .imb-ms {
   position: relative;
 }
+
 .imb-ms-trigger {
   width: 100%;
-  min-height: 44px;
+  min-height: 38px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 7px 12px;
+  padding: 4px 12px;
   border: 1px solid var(--imb-border);
   border-radius: var(--imb-radius-md);
   background: var(--imb-surface);
@@ -22,38 +22,47 @@
     border-color var(--imb-motion-fast) var(--imb-ease-standard),
     box-shadow var(--imb-motion-fast) var(--imb-ease-standard);
 }
+
 .imb-ms-trigger:hover:not(:disabled) {
   border-color: var(--imb-fg);
 }
+
 .imb-ms-trigger:focus-visible {
   outline: none;
   box-shadow: var(--imb-focus-ring);
 }
+
 .imb-ms-trigger[aria-expanded="true"] {
   border-color: var(--imb-accent);
   box-shadow: var(--imb-focus-ring);
 }
+
 .imb-ms-trigger:disabled {
   opacity: 0.6;
   cursor: default;
 }
+
 .imb-ms-caret {
   color: var(--imb-muted);
   flex: none;
   transition: transform var(--imb-motion-fast) var(--imb-ease-standard);
 }
+
 .imb-ms-caret.imb-is-open {
   transform: rotate(180deg);
 }
+
 .imb-ms-value {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   min-width: 0;
 }
+
 .imb-ms-value .imb-placeholder {
   color: var(--imb-muted);
 }
+
 .imb-ms-panel {
   position: absolute;
   z-index: 30;
@@ -68,6 +77,7 @@
   overflow-y: auto;
   padding: 6px;
 }
+
 .imb-ms-option {
   display: flex;
   align-items: center;
@@ -78,12 +88,15 @@
   font-size: var(--imb-text-base);
   color: var(--imb-fg);
 }
+
 .imb-ms-option:hover {
   background: var(--imb-fg-soft);
 }
+
 .imb-ms-option.imb-is-checked {
   color: var(--imb-accent-active);
 }
+
 .imb-ms-option input {
   accent-color: var(--imb-accent);
   width: 16px;
@@ -91,6 +104,7 @@
   flex: none;
   cursor: pointer;
 }
+
 .imb-ms-empty {
   padding: 9px 10px;
   color: var(--imb-muted);

@@ -1,7 +1,7 @@
 import type { ThemeMode } from "../../shared/types";
 
 /**
- * Renderer theme helpers: the 12 accent presets and the CSS-variable
+ * Renderer theme helpers: the 18 accent presets and the CSS-variable
  * injection that drives the app's color accent (mirrors the prototype's
  * `applyThemeAccent`). Mode persistence lives in the main process
  * (`theme:set` → nativeTheme), the renderer only re-applies the attribute
@@ -26,6 +26,12 @@ export const THEME_COLORS: ThemeColor[] = [
   { id: "Cobalt", hex: "#2563EB" },
   { id: "Coral", hex: "#FF6B6B" },
   { id: "Indigo", hex: "#4F46E5" },
+  { id: "Gold", hex: "#D9A200" },
+  { id: "Copper", hex: "#C2410C" },
+  { id: "Crimson", hex: "#E11D48" },
+  { id: "Magenta", hex: "#D946EF" },
+  { id: "Lime", hex: "#84CC16" },
+  { id: "Mint", hex: "#14B8A6" },
 ];
 
 export function hexToHsl(hex: string): { h: number; s: number; l: number } {
