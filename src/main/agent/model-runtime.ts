@@ -1,6 +1,6 @@
+import type { ModelOption } from "../../shared/types";
 import { getAuthPath, getModelsPath } from "../data-dir";
 import { loadPiSdk, type PiSdk } from "./pi-sdk";
-import type { ModelOption } from "../../shared/types";
 
 /** Pi ModelRuntime instance (the class itself has a private constructor). */
 export type ModelRuntimeInstance = Awaited<

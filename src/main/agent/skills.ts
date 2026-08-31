@@ -1,8 +1,8 @@
 import { cpSync, existsSync, mkdirSync, statSync } from "fs";
 import { readdir, readFile, rm } from "fs/promises";
 import { join, resolve } from "path";
-import { getAgentSkillsDir } from "../data-dir";
 import type { InstalledSkill, PageQuery, PageResult } from "../../shared/types";
+import { getAgentSkillsDir } from "../data-dir";
 
 /**
  * Install / uninstall of skills under `~/.imboss/agent/skills/<name>/`.
@@ -33,7 +33,10 @@ export async function listSkills(): Promise<InstalledSkill[]> {
       if (!statSync(dir).isDirectory()) continue;
       const skillFile = join(dir, SKILL_FILE);
       if (!existsSync(skillFile)) continue;
-      installed.push({ name, description: (await readSkillMetadata(skillFile)).description });
+      installed.push({
+        name,
+        description: (await readSkillMetadata(skillFile)).description,
+      });
     } catch {
       continue;
     }

@@ -1,11 +1,4 @@
-import {
-  app,
-  BrowserWindow,
-  clipboard,
-  dialog,
-  ipcMain,
-  nativeTheme,
-} from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain } from "electron";
 import type {
   ChatParticipantUpdate,
   Employee,
@@ -17,6 +10,7 @@ import type {
   ProviderUpsert,
 } from "../../shared/types";
 import { getAgentEnvironment } from "../agent/environment";
+import { listAvailableModels, refreshModelStore } from "../agent/model-runtime";
 import {
   listModels,
   listProviders,
@@ -25,10 +19,6 @@ import {
   revealProviderKey,
   upsertProvider,
 } from "../agent/providers";
-import {
-  listAvailableModels,
-  refreshModelStore,
-} from "../agent/model-runtime";
 import { AgentSession } from "../agent/session";
 import {
   installSkillsFromFolders,
@@ -112,7 +102,6 @@ function registerSettingsHandlers(): void {
   ipcMain.handle("locale:set", (_event, locale: unknown) => {
     const newLocale = assertString(locale, "locale");
     setSetting("locale", newLocale);
-    broadcast("locale:changed", newLocale);
     return newLocale;
   });
 
@@ -237,8 +226,6 @@ function registerChatHandlers(): void {
         safeContent.length > 0 ? safeContent : "[附件]",
         safeAttachments ? { attachments: safeAttachments } : {},
       );
-      broadcast("messages:changed", safeChatId);
-      broadcast("chats:summaries");
 
       void (async () => {
         const agentSession = new AgentSession(getAgentEnvironment(), {
@@ -281,8 +268,6 @@ function appendCannedReply(chatId: number): void {
       employeesService.ASSISTANT_ID,
       "收到，已把任务拆解并派发给相关员工，完成后我会第一时间汇总给你。",
     );
-    broadcast("messages:changed", chatId);
-    broadcast("chats:summaries");
   } catch {
     // Chat may have been deleted before the reply lands; ignore.
   }
@@ -402,12 +387,10 @@ function registerAgentEnvHandlers(): void {
     const paths = await pickSkillFolders();
     if (paths === null) return null;
     const imported = await installSkillsFromFolders(paths);
-    if (imported.length > 0) broadcast("skills:changed");
     return imported;
   });
   ipcMain.handle("skills:uninstall", async (_event, name: unknown) => {
     await uninstallSkill(assertString(name, "skill name"));
-    broadcast("skills:changed");
   });
 }
 
@@ -455,7 +438,6 @@ function registerThemeHandlers(): void {
       setThemeColor(record["color"]);
     }
     const state = getThemeState();
-    broadcast("theme:changed", state);
     return state;
   });
 }
@@ -482,9 +464,6 @@ async function pickSkillFolders(): Promise<string[] | null> {
 /** Call once after DB init: apply persisted mode + forward OS flips. */
 export function setupNativeTheme(): void {
   initTheme();
-  nativeTheme.on("updated", () => {
-    broadcast("theme:changed", getThemeState());
-  });
 }
 
 // --- helpers ---------------------------------------------------------------------
@@ -525,13 +504,4 @@ function parsePageQuery(value: unknown): PageQuery {
     page.limit = limit;
   }
   return page;
-}
-
-/** Send an event to every live window (single-window app, kept for safety). */
-function broadcast(channel: string, ...args: unknown[]): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send(channel, ...args);
-    }
-  }
 }

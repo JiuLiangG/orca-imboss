@@ -12,9 +12,7 @@ import { extname, join } from "path";
 import { getAvatarsDir } from "./data-dir";
 
 /**
- * Avatar file store under `~/.imboss/avatars/<employeeId>.<ext>` (confirmed
- * decision: main process owns read/write; the DB stores only the path and the
- * renderer receives a data URL via IPC).
+ * Avatar file store under `~/.imboss/avatars/<employeeId>.<ext>`.
  *
  * Security posture:
  * - File names are derived from integer employee ids only — never from

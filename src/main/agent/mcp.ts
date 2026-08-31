@@ -1,3 +1,7 @@
+import type {
+  AgentToolResult,
+  ToolDefinition,
+} from "@earendil-works/pi-coding-agent";
 import {
   Client,
   SSEClientTransport,
@@ -9,10 +13,6 @@ import {
 } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { Type, type TSchema } from "typebox";
-import type {
-  AgentToolResult,
-  ToolDefinition,
-} from "@earendil-works/pi-coding-agent";
 import type { McpConfig, McpServer } from "../../shared/types";
 import { mergeEnv, readUserEnv } from "./user-env";
 
@@ -157,9 +157,7 @@ async function connectWithTimeout(
     timer = setTimeout(() => {
       void transport.close().catch(() => undefined);
       reject(
-        new Error(
-          `MCP server did not answer within ${CONNECT_TIMEOUT_MS}ms.`,
-        ),
+        new Error(`MCP server did not answer within ${CONNECT_TIMEOUT_MS}ms.`),
       );
     }, CONNECT_TIMEOUT_MS);
   });
@@ -188,7 +186,8 @@ export function jsonSchemaToTypeBox(schema: unknown, depth = 0): TSchema {
     return Type.Unknown();
   }
   const s = schema as Record<string, unknown>;
-  const type = typeof s["type"] === "string" ? (s["type"] as string) : undefined;
+  const type =
+    typeof s["type"] === "string" ? (s["type"] as string) : undefined;
 
   if ("const" in s) return literalSchema(s["const"]);
 
@@ -247,14 +246,22 @@ export function jsonSchemaToTypeBox(schema: unknown, depth = 0): TSchema {
           ? jsonSchemaToTypeBox(s["items"], depth + 1)
           : Type.Unknown();
       return Type.Array(items, {
-        ...(typeof s["minItems"] === "number" ? { minItems: s["minItems"] } : {}),
-        ...(typeof s["maxItems"] === "number" ? { maxItems: s["maxItems"] } : {}),
+        ...(typeof s["minItems"] === "number"
+          ? { minItems: s["minItems"] }
+          : {}),
+        ...(typeof s["maxItems"] === "number"
+          ? { maxItems: s["maxItems"] }
+          : {}),
       });
     }
     case "string":
       return Type.String({
-        ...(typeof s["minLength"] === "number" ? { minLength: s["minLength"] } : {}),
-        ...(typeof s["maxLength"] === "number" ? { maxLength: s["maxLength"] } : {}),
+        ...(typeof s["minLength"] === "number"
+          ? { minLength: s["minLength"] }
+          : {}),
+        ...(typeof s["maxLength"] === "number"
+          ? { maxLength: s["maxLength"] }
+          : {}),
       });
     case "number":
       return Type.Number();
@@ -318,11 +325,17 @@ function mcpContentToText(content: ContentBlock[] | undefined): string {
  */
 function mcpContentToPi(
   content: ContentBlock[] | undefined,
-): Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }> {
-  const out: Array<{
-    type: "text";
-    text: string;
-  } | { type: "image"; data: string; mimeType: string }> = [];
+): Array<
+  | { type: "text"; text: string }
+  | { type: "image"; data: string; mimeType: string }
+> {
+  const out: Array<
+    | {
+        type: "text";
+        text: string;
+      }
+    | { type: "image"; data: string; mimeType: string }
+  > = [];
   if (!Array.isArray(content)) return out;
   for (const block of content) {
     if (block.type === "text" && typeof block.text === "string") {
@@ -332,9 +345,16 @@ function mcpContentToPi(
         typeof block.mimeType === "string" ? block.mimeType : "image/png";
       out.push({ type: "image", data: block.data, mimeType });
     } else if (block.type === "resource") {
-      const resource = (block as {
-        resource?: { text?: unknown; blob?: unknown; mimeType?: unknown; uri?: unknown };
-      }).resource;
+      const resource = (
+        block as {
+          resource?: {
+            text?: unknown;
+            blob?: unknown;
+            mimeType?: unknown;
+            uri?: unknown;
+          };
+        }
+      ).resource;
       if (resource && typeof resource.text === "string") {
         out.push({ type: "text", text: resource.text });
       } else if (resource && typeof resource.blob === "string") {

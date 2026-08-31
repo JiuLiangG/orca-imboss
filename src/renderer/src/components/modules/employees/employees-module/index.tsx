@@ -214,7 +214,6 @@ export function EmployeesModule(): React.JSX.Element {
         hasMore={hasMore}
         loadMore={() => void loadMore()}
         loadError={listError}
-        emptyMessage={t("No matching employees")}
         selectable
         selectedKeys={multi.selectedKeys}
         onItemClick={(employee, index, mods) =>
@@ -276,11 +275,7 @@ export function EmployeesModule(): React.JSX.Element {
       onPatch={(input) => patch(selected.id, input)}
       onRemove={() => void remove(selected.id)}
     />
-  ) : (
-    <div className="imb-detail-scroll">
-      <div className="imb-chat-empty-detail">{t("No matching employees")}</div>
-    </div>
-  );
+  ) : null;
 
   return (
     <>

@@ -37,7 +37,10 @@ export interface UserEnvEntry {
  * This is a pure scanner (no shell evaluation), so expansion can never
  * execute anything — env values stay inert data.
  */
-export function expandValue(value: string, env: Record<string, string>): string {
+export function expandValue(
+  value: string,
+  env: Record<string, string>,
+): string {
   if (value.indexOf("$") < 0) return value;
 
   let out = "";
@@ -67,7 +70,10 @@ export function expandValue(value: string, env: Record<string, string>): string 
         continue;
       }
       const name = value.slice(i + 2, end);
-      if (isValidEnvName(name) && Object.prototype.hasOwnProperty.call(env, name)) {
+      if (
+        isValidEnvName(name) &&
+        Object.prototype.hasOwnProperty.call(env, name)
+      ) {
         out += env[name];
       } else {
         out += value.slice(i, end + 1);
@@ -103,7 +109,9 @@ function isNameChar(ch: string): boolean {
 }
 
 function isValidEnvName(name: string): boolean {
-  return name.length > 0 && name.length <= MAX_KEY_LENGTH && ENV_KEY_RE.test(name);
+  return (
+    name.length > 0 && name.length <= MAX_KEY_LENGTH && ENV_KEY_RE.test(name)
+  );
 }
 
 /**

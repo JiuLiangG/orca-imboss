@@ -1,6 +1,6 @@
+import type { AnyPiTool } from "./mcp";
 import { loadPiSdk } from "./pi-sdk";
 import { readUserEnv } from "./user-env";
-import type { AnyPiTool } from "./mcp";
 
 /**
  * Pi shell tools with the user-configured environment applied.
