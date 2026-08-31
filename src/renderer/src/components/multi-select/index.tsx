@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { useClickOutside, useEscapeKey } from "../../hooks";
+import { useClickOutside } from "../../hooks/use-click-outside";
+import { useEscapeKey } from "../../hooks/use-escape-key";
 import { IconChevronDown } from "../icons";
 import "./index.css";
 
@@ -123,8 +124,14 @@ export function MultiSelect({
         />
       </button>
       {open && (
-        <div className="imb-ms-panel" role="listbox" aria-multiselectable="true">
-          {options.length === 0 && <div className="imb-ms-empty">{emptyHint}</div>}
+        <div
+          className="imb-ms-panel"
+          role="listbox"
+          aria-multiselectable="true"
+        >
+          {options.length === 0 && (
+            <div className="imb-ms-empty">{emptyHint}</div>
+          )}
           {options.map((option, index) => {
             const checked = selectedSet.has(option.value);
             return (

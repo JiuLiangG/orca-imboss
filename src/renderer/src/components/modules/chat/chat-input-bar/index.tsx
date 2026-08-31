@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
-import type { MessageAttachment } from "../../../../../../shared/types";
 import { t } from "../../../../../../shared/libs/l10n";
-import { useClickOutside, useEscapeKey } from "../../../../hooks";
+import type { MessageAttachment } from "../../../../../../shared/types";
+import { useClickOutside } from "../../../../hooks/use-click-outside";
+import { useEscapeKey } from "../../../../hooks/use-escape-key";
 import { IconAttach, IconFile, IconImage, IconSend } from "../../../icons";
 import "./index.css";
 

@@ -7,6 +7,8 @@ import type {
   PageQuery,
   PageResult,
 } from "../../../../../../shared/types";
+import { useInfiniteList } from "../../../../hooks/use-infinite-list";
+import { useMultiSelect } from "../../../../hooks/use-multi-select";
 import { ModuleView } from "../../../app-shell";
 import { Avatar } from "../../../avatar";
 import { Button } from "../../../button";
@@ -16,8 +18,6 @@ import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
 import { Modal } from "../../../modal";
 import { SearchInput } from "../../../search-input";
-import { useInfiniteList } from "../../../useInfiniteList";
-import { useMultiSelect } from "../../../useMultiSelect";
 import { ChatInputBar } from "../chat-input-bar";
 import { AssistantMark, MessageBubble } from "../message-bubble";
 import { ProgressCard } from "../progress-card";

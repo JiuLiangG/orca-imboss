@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { t } from "../../../../shared/libs/l10n";
+import type { ClickModifiers } from "../../hooks/use-multi-select";
 import { EmptyState } from "../empty-state";
-import type { ClickModifiers } from "../useMultiSelect";
 import { VirtualList } from "../virtual-list";
 import "./index.css";
 

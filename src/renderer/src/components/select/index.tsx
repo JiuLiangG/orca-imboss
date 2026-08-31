@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useEscapeKey } from "../../hooks";
+import { useEscapeKey } from "../../hooks/use-escape-key";
 import { IconChevronDown } from "../icons";
 import "./index.css";
 

@@ -7,6 +7,8 @@ import {
   type ProviderInfo,
   type ProviderUpsert,
 } from "../../../../../../shared/types";
+import { useInfiniteList } from "../../../../hooks/use-infinite-list";
+import { useMultiSelect } from "../../../../hooks/use-multi-select";
 import { ModuleView } from "../../../app-shell";
 import { Avatar } from "../../../avatar";
 import { Button } from "../../../button";
@@ -15,8 +17,6 @@ import { ItemList } from "../../../item-list";
 import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
 import { Modal } from "../../../modal";
-import { useInfiniteList } from "../../../useInfiniteList";
-import { useMultiSelect } from "../../../useMultiSelect";
 import "../../module-common.css";
 import { ProviderAddModal } from "../provider-add-modal";
 import { ProviderDetail } from "../provider-detail";

@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useClickOutside, useEscapeKey } from "../../hooks";
+import { useClickOutside } from "../../hooks/use-click-outside";
+import { useEscapeKey } from "../../hooks/use-escape-key";
 import "./index.css";
 
 export interface ContextMenuDivider {

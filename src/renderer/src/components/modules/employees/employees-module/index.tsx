@@ -8,6 +8,8 @@ import type {
   PageQuery,
   PageResult,
 } from "../../../../../../shared/types";
+import { useInfiniteList } from "../../../../hooks/use-infinite-list";
+import { useMultiSelect } from "../../../../hooks/use-multi-select";
 import { ModuleView } from "../../../app-shell";
 import { Avatar } from "../../../avatar";
 import { Button } from "../../../button";
@@ -18,8 +20,6 @@ import { ListRow } from "../../../list-row";
 import { Modal } from "../../../modal";
 import "../../../modules/module-common.css";
 import { SearchInput } from "../../../search-input";
-import { useInfiniteList } from "../../../useInfiniteList";
-import { useMultiSelect } from "../../../useMultiSelect";
 import { EmployeeDetail } from "../employee-detail";
 import { EmployeeRecruitModal } from "../employee-recruit-modal";
 

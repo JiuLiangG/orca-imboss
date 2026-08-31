@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { trapFocus } from "../../hooks";
+import { trapFocus } from "../../utils/ui";
 import "./index.css";
 
 export interface ModalProps {
