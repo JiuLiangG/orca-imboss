@@ -10,7 +10,7 @@
 
 .imb-modal {
   width: 100%;
-  max-width: 480px;
+  max-width: 580px;
   background: var(--imb-surface);
   border-radius: var(--imb-radius-lg);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);

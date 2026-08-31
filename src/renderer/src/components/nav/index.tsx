@@ -1,6 +1,7 @@
 import { t } from "../../../../shared/libs/l10n";
 import { useApp, type AppModule } from "../../app-store";
 import { BrandLogo } from "../brand-logo";
+import { Tooltip } from "../tooltip";
 import {
   IconChat,
   IconChatProduct,
@@ -79,16 +80,18 @@ function NavButton({
   const Icon = item.icon;
   const active = module === item.module;
   return (
-    <button
-      type="button"
-      className={`imb-nav-item${active ? " imb-is-active" : ""}`}
-      aria-current={active ? "page" : undefined}
-      title={collapsed ? t(item.labelKey) : undefined}
-      onClick={() => setModule(item.module)}
-    >
-      <Icon className="imb-icon" />
-      <span>{t(item.labelKey)}</span>
-    </button>
+    <Tooltip content={t(item.labelKey)} placement="right" disabled={!collapsed}>
+      <button
+        type="button"
+        className={`imb-nav-item${active ? " imb-is-active" : ""}`}
+        aria-current={active ? "page" : undefined}
+        aria-label={collapsed ? t(item.labelKey) : undefined}
+        onClick={() => setModule(item.module)}
+      >
+        <Icon className="imb-icon" />
+        <span>{t(item.labelKey)}</span>
+      </button>
+    </Tooltip>
   );
 }
 
@@ -135,16 +138,21 @@ export function Nav({
       </div>
       <div className="imb-nav-spacer" />
       <div className="imb-nav-items imb-nav-bottom">
-        <button
-          type="button"
-          className="imb-nav-toggle"
-          aria-label={collapsed ? t("Expand") : t("Collapse")}
-          title={collapsed ? t("Expand") : t("Collapse")}
-          onClick={onToggle}
+        <Tooltip
+          content={collapsed ? t("Expand") : t("Collapse")}
+          placement="right"
+          disabled={!collapsed}
         >
-          <IconCollapse className="imb-icon" />
-          <span>{t("Collapse")}</span>
-        </button>
+          <button
+            type="button"
+            className="imb-nav-toggle"
+            aria-label={collapsed ? t("Expand") : t("Collapse")}
+            onClick={onToggle}
+          >
+            <IconCollapse className="imb-icon" />
+            <span>{t("Collapse")}</span>
+          </button>
+        </Tooltip>
         {bottom.map((item) => (
           <NavButton key={item.module} item={item} collapsed={collapsed} />
         ))}
