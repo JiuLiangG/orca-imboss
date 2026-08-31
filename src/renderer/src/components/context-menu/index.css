@@ -24,10 +24,10 @@
   padding: 6px 16px;
   border: none;
   background: none;
-  border-radius: var(--imb-radius-sm);
+  border-radius: var(--imb-radius-md);
   cursor: pointer;
   font: inherit;
-  font-size: var(--imb-text-base);
+  font-size: var(--imb-text-sm);
   color: var(--imb-fg);
   text-align: left;
   transition: background var(--imb-motion-fast);

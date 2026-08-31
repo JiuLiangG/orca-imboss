@@ -252,6 +252,17 @@ export interface ProviderInfo {
   keyHint: string | null;
 }
 
+/**
+ * One usable model from the app's shared ModelRuntime (see main/agent/
+ * model-runtime.ts). Combines built-in (dynamic catalog) and custom providers;
+ * only models whose provider has configured auth are included.
+ */
+export interface ModelOption {
+  provider: string;
+  id: string;
+  name: string;
+}
+
 /** Payload to add/update a provider configuration. */
 export interface ProviderUpsert {
   id: string;

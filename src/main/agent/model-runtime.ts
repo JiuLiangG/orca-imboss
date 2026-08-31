@@ -1,5 +1,6 @@
 import { getAuthPath, getModelsPath } from "../data-dir";
 import { loadPiSdk, type PiSdk } from "./pi-sdk";
+import type { ModelOption } from "../../shared/types";
 
 /** Pi ModelRuntime instance (the class itself has a private constructor). */
 export type ModelRuntimeInstance = Awaited<
@@ -54,4 +55,24 @@ export async function refreshModelStore(signal?: AbortSignal): Promise<void> {
   } catch (error) {
     console.error("[model-runtime] refresh failed", error);
   }
+}
+
+/**
+ * Every model the shared ModelRuntime can actually resolve (built-in dynamic
+ * catalogs + custom providers, limited to providers with configured auth),
+ * for the renderer's model selects. Pure in-memory snapshot — no network.
+ */
+export async function listAvailableModels(): Promise<ModelOption[]> {
+  const runtime = await getModelRuntime();
+  return runtime
+    .getAvailableSnapshot()
+    .map((model) => ({
+      provider: model.provider,
+      id: model.id,
+      name: model.name,
+    }))
+    .sort(
+      (a, b) =>
+        a.provider.localeCompare(b.provider) || a.id.localeCompare(b.id),
+    );
 }

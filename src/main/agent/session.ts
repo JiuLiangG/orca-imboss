@@ -56,9 +56,10 @@ export class AgentSession {
   /**
    * Run one agent turn for `message`.
    *
-   * Returns `{ replied: false }` when no usable model is configured
-   * (no `modelId` on the employee, no `defaultModel` setting, or the model
-   * has no credentials) so callers can fall back gracefully.
+   * Returns `{ replied: false }` only when no usable model is configured at
+   * all (the shared ModelRuntime's available snapshot is empty — no provider
+   * has credentials). Otherwise the model reference resolves with fallback:
+   * employee `modelId` → `defaultModel` setting → first available model.
    */
   async prompt(message: string): Promise<AgentPromptResult> {
     if (this._disposed) {
@@ -109,7 +110,27 @@ export class AgentSession {
     modelRuntime: ModelRuntimeInstance,
     employeeModelId: string | null | undefined,
   ): PiModel | undefined {
-    const ref = employeeModelId?.trim() || getSetting(DEFAULT_MODEL_KEY) || "";
+    // Cascade: employee's own model → app default model → first available.
+    // A stored reference can go stale (provider/key removed), so an
+    // unresolvable reference falls through to the next level instead of
+    // silently doing nothing.
+    const refs: Array<string | null | undefined> = [
+      employeeModelId?.trim(),
+      getSetting(DEFAULT_MODEL_KEY),
+    ];
+    for (const ref of refs) {
+      const model = this._resolveModelRef(modelRuntime, ref);
+      if (model) return model;
+    }
+    return modelRuntime.getAvailableSnapshot()[0];
+  }
+
+  /** Resolve a single `"provider/modelId"` reference against the runtime. */
+  private _resolveModelRef(
+    modelRuntime: ModelRuntimeInstance,
+    ref: string | null | undefined,
+  ): PiModel | undefined {
+    if (!ref) return undefined;
     const slash = ref.indexOf("/");
     if (slash <= 0 || slash === ref.length - 1) return undefined;
     const provider = ref.slice(0, slash);

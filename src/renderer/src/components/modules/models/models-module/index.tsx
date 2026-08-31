@@ -141,7 +141,7 @@ export function ModelsModule(): React.JSX.Element {
 
   const listPane = (
     <ListPane
-      title={t("Providers")}
+      title={t("Model Providers")}
       footer={
         <Button block onClick={() => setAddOpen(true)}>
           {t("Add Provider")}

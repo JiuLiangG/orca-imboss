@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { t } from "../../../../../../shared/libs/l10n";
 import type {
   Employee,
@@ -7,7 +7,6 @@ import type {
   McpServer,
   PageQuery,
   PageResult,
-  ProviderInfo,
 } from "../../../../../../shared/types";
 import { ModuleView } from "../../../app-shell";
 import { Avatar } from "../../../avatar";
@@ -38,17 +37,17 @@ export function EmployeesModule(): React.JSX.Element {
   // Options for the multiselects / model select.
   const [mcpOptions, setMcpOptions] = useState<McpServer[]>([]);
   const [skillOptions, setSkillOptions] = useState<InstalledSkill[]>([]);
-  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [modelOptions, setModelOptions] = useState<string[]>([]);
 
   const refreshOptions = useCallback(async (): Promise<void> => {
-    const results = await Promise.all([
+    const [mcp, skills, models] = await Promise.all([
       window.imb.mcp.list(),
       window.imb.skills.list(),
-      window.imb.providers.list(),
+      window.imb.models.list(),
     ]);
-    setMcpOptions(results[0]);
-    setSkillOptions(results[1]);
-    setProviders(results[2]);
+    setMcpOptions(mcp);
+    setSkillOptions(skills);
+    setModelOptions(models.map((m) => `${m.provider}/${m.id}`));
   }, []);
 
   const fetchPage = useCallback(
@@ -96,12 +95,6 @@ export function EmployeesModule(): React.JSX.Element {
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employees, loading]);
-
-  const modelOptions = useMemo(() => {
-    return providers
-      .filter((p) => p.modelIds.length > 0)
-      .flatMap((p) => p.modelIds.map((m) => `${p.id}/${m}`));
-  }, [providers]);
 
   const selected =
     employees.find((employee) => employee.id === selectedId) ?? null;

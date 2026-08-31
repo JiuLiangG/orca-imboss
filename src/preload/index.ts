@@ -12,6 +12,7 @@ import type {
   Message,
   MessageAttachment,
   MessageSearchResult,
+  ModelOption,
   PageQuery,
   PageResult,
   ProviderInfo,
@@ -186,6 +187,10 @@ const api = {
       ipcRenderer.invoke("providers:copyKey", id) as Promise<boolean>,
     listModels: (input: ProviderModelsQuery) =>
       ipcRenderer.invoke("providers:listModels", input) as Promise<string[]>,
+  },
+
+  models: {
+    list: () => ipcRenderer.invoke("models:list") as Promise<ModelOption[]>,
   },
 
   mcp: {

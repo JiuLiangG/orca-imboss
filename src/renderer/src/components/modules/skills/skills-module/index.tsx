@@ -18,6 +18,7 @@ import { SearchInput } from "../../../search-input";
 import { useInfiniteList } from "../../../useInfiniteList";
 import { useMultiSelect } from "../../../useMultiSelect";
 import "../../module-common.css";
+import "./index.css";
 
 const PAGE_SIZE = 50;
 
@@ -294,10 +295,8 @@ function DetailReadOnlyDescription({
   description: string | null;
 }): React.JSX.Element {
   return (
-    <div className="imb-skill-readonly">
-      <p className="imb-skill-readonly-text">
-        {description && description.length > 0 ? description : "—"}
-      </p>
-    </div>
+    <p className="imb-skill-readonly-text">
+      {description && description.length > 0 ? description : "—"}
+    </p>
   );
 }

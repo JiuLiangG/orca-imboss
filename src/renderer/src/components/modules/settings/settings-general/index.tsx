@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SUPPORTED_LOCALES } from "../../../../../../shared/constants";
 import { t } from "../../../../../../shared/libs/l10n";
-import type { ProviderInfo } from "../../../../../../shared/types";
 import { useApp } from "../../../../app-store";
 import { DetailBody, DetailHead } from "../../../detail-pane";
 import { Field } from "../../../field";
@@ -24,7 +23,7 @@ export function SettingsGeneral(): React.JSX.Element {
   const { locale, setLocale } = useApp();
   const [defaultModel, setDefaultModel] = useState("");
   const [envVars, setEnvVars] = useState<EnvVar[]>([]);
-  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [modelOptions, setModelOptions] = useState<string[]>([]);
   const envTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const persistEnv = useCallback((next: EnvVar[]): void => {
@@ -37,25 +36,23 @@ export function SettingsGeneral(): React.JSX.Element {
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const [defaultModelStored, envStored, providerList] = await Promise.all([
+      const [defaultModelStored, envStored, models] = await Promise.all([
         window.imb.settings.get(DEFAULT_MODEL_KEY),
         window.imb.settings.get(ENV_KEY),
-        window.imb.providers.list(),
+        window.imb.models.list(),
       ]);
       if (!alive) return;
       setDefaultModel(defaultModelStored ?? "");
       setEnvVars(parseEnv(envStored));
-      setProviders(providerList);
+      setModelOptions(
+        models.map((m) => `${m.provider}/${m.id}`),
+      );
     })();
     return () => {
       alive = false;
       if (envTimerRef.current) clearTimeout(envTimerRef.current);
     };
   }, []);
-
-  const modelOptions = providers
-    .filter((p) => p.modelIds.length > 0)
-    .flatMap((p) => p.modelIds.map((m) => `${p.id}/${m}`));
 
   const changeDefaultModel = (value: string): void => {
     setDefaultModel(value);

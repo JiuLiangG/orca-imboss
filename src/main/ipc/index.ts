@@ -25,7 +25,10 @@ import {
   revealProviderKey,
   upsertProvider,
 } from "../agent/providers";
-import { refreshModelStore } from "../agent/model-runtime";
+import {
+  listAvailableModels,
+  refreshModelStore,
+} from "../agent/model-runtime";
 import { AgentSession } from "../agent/session";
 import {
   installSkillsFromFolders,
@@ -381,6 +384,9 @@ function registerAgentEnvHandlers(): void {
   ipcMain.handle("providers:listModels", (_event, input: unknown) =>
     listModels(input as ProviderModelsQuery),
   );
+  // Full usable-model list from the shared ModelRuntime (built-in + custom,
+  // auth-configured only) — backs the default-model / employee model selects.
+  ipcMain.handle("models:list", () => listAvailableModels());
   ipcMain.handle("providers:copyKey", async (_event, id: unknown) => {
     const key = await revealProviderKey(assertString(id, "provider id"));
     if (!key) throw new Error("No API key set for this provider.");

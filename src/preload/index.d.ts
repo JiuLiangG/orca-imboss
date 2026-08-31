@@ -11,6 +11,7 @@ import type {
   Message,
   MessageAttachment,
   MessageSearchResult,
+  ModelOption,
   PageQuery,
   PageResult,
   ProviderInfo,
@@ -104,6 +105,11 @@ interface IMB {
     remove(id: string): Promise<void>;
     copyKey(id: string): Promise<boolean>;
     listModels(input: ProviderModelsQuery): Promise<string[]>;
+  };
+
+  /** Usable models from the shared ModelRuntime (model selects). */
+  models: {
+    list(): Promise<ModelOption[]>;
   };
 
   mcp: {
