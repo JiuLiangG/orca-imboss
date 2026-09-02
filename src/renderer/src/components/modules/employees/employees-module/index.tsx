@@ -13,19 +13,24 @@ import { useMultiSelect } from "../../../../hooks/use-multi-select";
 import { ModuleView } from "../../../app-shell";
 import { Avatar } from "../../../avatar";
 import { Button } from "../../../button";
-import { ContextMenu, type ContextMenuState } from "../../../context-menu";
+import {
+  ContextMenu,
+  type ContextMenuItem,
+  type ContextMenuState,
+} from "../../../context-menu";
 import { ItemList } from "../../../item-list";
 import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
 import { Modal } from "../../../modal";
 import "../../../modules/module-common.css";
 import { SearchInput } from "../../../search-input";
+import { employeeAvatarSrc } from "../employee-avatar";
 import { EmployeeDetail } from "../employee-detail";
 import { EmployeeRecruitModal } from "../employee-recruit-modal";
 
 const PAGE_SIZE = 50;
 
-/** Employees module: list (id 0 assistant hidden) + detail + recruit. */
+/** Employees module: list (assistant pinned atop, non-removable) + detail + recruit. */
 export function EmployeesModule(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
@@ -78,6 +83,9 @@ export function EmployeesModule(): React.JSX.Element {
     items: employees,
     onActivate: (employee) => setSelectedId(employee.id),
     resetVersion,
+    // The built-in assistant is always pinned but never selectable; bulk
+    // actions and "Select all" must not be able to reach it.
+    isSelectable: (employee) => employee.id !== 0,
   });
 
   // Auto-select the first employee after page 1 loads (and recover when the
@@ -169,7 +177,7 @@ export function EmployeesModule(): React.JSX.Element {
   );
 
   const deleteSelected = useCallback(async (): Promise<void> => {
-    const ids = [...multi.selectedKeys];
+    const ids = [...multi.selectedKeys].filter((id) => id !== 0);
     if (ids.length === 0) return;
     try {
       setDeleteOpen(false);
@@ -183,12 +191,17 @@ export function EmployeesModule(): React.JSX.Element {
   }, [multi.selectedKeys, reset]);
 
   const toggleSelectAll = useCallback((): void => {
-    if (multi.selectedKeys.size === employees.length && employees.length > 0) {
+    // Compare against selectable rows only (the assistant is never selectable,
+    // so counting every loaded row would break the toggle-to-clear branch).
+    const selectableCount = employees.filter(
+      (employee) => employee.id !== 0,
+    ).length;
+    if (multi.selectedKeys.size === selectableCount && selectableCount > 0) {
       multi.clear();
     } else {
       multi.selectAll();
     }
-  }, [multi, employees.length]);
+  }, [multi, employees]);
 
   const listPane = (
     <ListPane
@@ -225,7 +238,7 @@ export function EmployeesModule(): React.JSX.Element {
             selected={isSelectedRow}
             avatar={
               <Avatar
-                src={employee.avatarUrl}
+                src={employeeAvatarSrc(employee)}
                 letter={employee.name.slice(0, 1)}
                 name={employee.name}
                 alt
@@ -233,28 +246,32 @@ export function EmployeesModule(): React.JSX.Element {
             }
             name={employee.name || t("Unnamed")}
             sub={employee.role || "—"}
+            badge={
+              employee.id === 0 ? (
+                <span className="imb-badge">{t("Built-in")}</span>
+              ) : undefined
+            }
             onContextMenu={(e) => {
               e.preventDefault();
-              setCtxMenu({
-                x: e.clientX,
-                y: e.clientY,
-                items: [
-                  {
-                    key: "select-all",
-                    label: t("Select all"),
-                    onSelect: toggleSelectAll,
+              const items: ContextMenuItem[] = [
+                {
+                  key: "select-all",
+                  label: t("Select all"),
+                  onSelect: toggleSelectAll,
+                },
+              ];
+              if (employee.id !== 0) {
+                items.push({
+                  key: "delete",
+                  label: t("Delete"),
+                  danger: true,
+                  onSelect: () => {
+                    if (multi.selectedKeys.size === 0) multi.selectAll();
+                    setDeleteOpen(true);
                   },
-                  {
-                    key: "delete",
-                    label: t("Delete"),
-                    danger: true,
-                    onSelect: () => {
-                      if (multi.selectedKeys.size === 0) multi.selectAll();
-                      setDeleteOpen(true);
-                    },
-                  },
-                ],
-              });
+                });
+              }
+              setCtxMenu({ x: e.clientX, y: e.clientY, items });
             }}
           />
         )}

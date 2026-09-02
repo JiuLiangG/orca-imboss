@@ -163,6 +163,7 @@
   "Theme": "主题",
   "This feature is under development. Stay tuned.": "此功能正在开发中，敬请期待。",
   "This module is not available yet": "该模块暂未开放",
+  "This prompt is appended to the assistant's built-in system prompt.": "此提示词会追加到助理的内置系统提示词之后。",
   "This transport requires a server URL.": "该传输方式需要服务地址。",
   "Transport": "传输方式",
   "Type": "类型",

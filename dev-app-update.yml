@@ -1,4 +1,5 @@
 provider: github
 owner: sethyuan
 repo: orca-imboss
+releaseType: release
 updaterCacheDirName: orca-imboss-updater

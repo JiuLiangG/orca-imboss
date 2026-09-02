@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Employee, EmployeeInput } from "../../../../../../shared/types";
 import { t } from "../../../../../../shared/libs/l10n";
+import type { Employee, EmployeeInput } from "../../../../../../shared/types";
 import { Button } from "../../../button";
-import { Field } from "../../../field";
-import { Input } from "../../../input";
-import { Textarea } from "../../../textarea";
-import { Select, type SelectOption } from "../../../select";
-import { MultiSelect, type MultiSelectOption } from "../../../multi-select";
 import { DetailBody, DetailHead } from "../../../detail-pane";
-import { Modal } from "../../../modal";
+import { Field } from "../../../field";
 import { IconCamera } from "../../../icons";
+import { Input } from "../../../input";
+import { Modal } from "../../../modal";
+import { MultiSelect, type MultiSelectOption } from "../../../multi-select";
+import { Select, type SelectOption } from "../../../select";
+import { Textarea } from "../../../textarea";
+import { employeeAvatarSrc } from "../employee-avatar";
 import "./index.css";
 
 export interface EmployeeDetailProps {
@@ -32,14 +33,25 @@ export function EmployeeDetail({
   onPatch,
   onRemove,
 }: EmployeeDetailProps): React.JSX.Element {
-  const [form, setForm] = useState<EmployeeInput>({
-    name: employee.name,
-    role: employee.role,
-    systemPrompt: employee.systemPrompt,
-    mcp: employee.mcp,
-    skills: employee.skills,
-    modelId: employee.modelId ?? "",
-  });
+  const isAssistant = employee.id === 0;
+  // The built-in assistant's profile only exposes name, systemPrompt, modelId;
+  // role/mcp/skills never enter the form so they are never sent on patch.
+  const [form, setForm] = useState<EmployeeInput>(
+    isAssistant
+      ? {
+          name: employee.name,
+          systemPrompt: employee.systemPrompt,
+          modelId: employee.modelId ?? "",
+        }
+      : {
+          name: employee.name,
+          role: employee.role,
+          systemPrompt: employee.systemPrompt,
+          mcp: employee.mcp,
+          skills: employee.skills,
+          modelId: employee.modelId ?? "",
+        },
+  );
   const [avatarUrl, setAvatarUrl] = useState<string | null>(employee.avatarUrl);
   const [avatarAv, setAvatarAv] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -90,21 +102,27 @@ export function EmployeeDetail({
   const triggerPicker = (): void => fileRef.current?.click();
 
   const displayName = (form.name ?? "").trim() || employee.name || t("Unnamed");
+  // The assistant's role is immutable; show the persisted value rather than a
+  // (hidden) editable field.
+  const displayRole = isAssistant ? employee.role || "" : (form.role ?? "");
+  const displayAvatarUrl = employeeAvatarSrc({ id: employee.id, avatarUrl });
 
   return (
     <>
       <DetailHead
-        eyebrow="Employee · Team"
+        eyebrow="Employee"
         title={displayName}
-        sub={form.role || "—"}
+        sub={displayRole || "—"}
         actions={
-          <Button
-            variant="danger"
-            size="sm"
-            onClick={() => setRemoveOpen(true)}
-          >
-            {t("Remove")}
-          </Button>
+          isAssistant ? undefined : (
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => setRemoveOpen(true)}
+            >
+              {t("Remove")}
+            </Button>
+          )
         }
       />
       <DetailBody>
@@ -122,10 +140,10 @@ export function EmployeeDetail({
               }
             }}
           >
-            {avatarUrl ? (
+            {displayAvatarUrl ? (
               <img
                 className="imb-detail-avatar-img"
-                src={avatarUrl}
+                src={displayAvatarUrl}
                 alt={displayName}
               />
             ) : (
@@ -139,7 +157,7 @@ export function EmployeeDetail({
           </div>
           <div className="imb-detail-avatar-info">
             <h2>{displayName}</h2>
-            <div className="imb-sub">{form.role || "—"}</div>
+            <div className="imb-sub">{displayRole || "—"}</div>
           </div>
           <input
             ref={fileRef}
@@ -156,7 +174,13 @@ export function EmployeeDetail({
           </p>
         )}
 
-        <div className="imb-field-row">
+        <div
+          className={
+            isAssistant
+              ? "imb-field-row imb-field-row--single"
+              : "imb-field-row"
+          }
+        >
           <Field label={t("Name")} htmlFor={`emp-name-${employee.id}`}>
             <Input
               id={`emp-name-${employee.id}`}
@@ -165,17 +189,31 @@ export function EmployeeDetail({
               onChange={(e) => scheduleSave({ ...form, name: e.target.value })}
             />
           </Field>
-          <Field label={t("Role")} htmlFor={`emp-role-${employee.id}`}>
-            <Input
-              id={`emp-role-${employee.id}`}
-              value={form.role ?? ""}
-              placeholder={t("e.g. Researcher")}
-              onChange={(e) => scheduleSave({ ...form, role: e.target.value })}
-            />
-          </Field>
+          {!isAssistant && (
+            <Field label={t("Role")} htmlFor={`emp-role-${employee.id}`}>
+              <Input
+                id={`emp-role-${employee.id}`}
+                value={form.role ?? ""}
+                placeholder={t("e.g. Researcher")}
+                onChange={(e) =>
+                  scheduleSave({ ...form, role: e.target.value })
+                }
+              />
+            </Field>
+          )}
         </div>
 
-        <Field label={t("System prompt")} htmlFor={`emp-prompt-${employee.id}`}>
+        <Field
+          label={t("System prompt")}
+          htmlFor={`emp-prompt-${employee.id}`}
+          hint={
+            isAssistant
+              ? t(
+                  "This prompt is appended to the assistant's built-in system prompt.",
+                )
+              : undefined
+          }
+        >
           <Textarea
             id={`emp-prompt-${employee.id}`}
             value={form.systemPrompt ?? ""}
@@ -189,25 +227,29 @@ export function EmployeeDetail({
           />
         </Field>
 
-        <Field label={t("Linked MCP")}>
-          <MultiSelect
-            value={form.mcp ?? []}
-            options={mcpOptions}
-            placeholder={t("Select MCP")}
-            emptyHint={t("No MCP configured")}
-            onChange={(mcp) => scheduleSave({ ...form, mcp })}
-          />
-        </Field>
+        {!isAssistant && (
+          <>
+            <Field label={t("Linked MCP")}>
+              <MultiSelect
+                value={form.mcp ?? []}
+                options={mcpOptions}
+                placeholder={t("Select MCP")}
+                emptyHint={t("No MCP configured")}
+                onChange={(mcp) => scheduleSave({ ...form, mcp })}
+              />
+            </Field>
 
-        <Field label={t("Skill set")}>
-          <MultiSelect
-            value={form.skills ?? []}
-            options={skillOptions}
-            placeholder={t("Select skills")}
-            emptyHint={t("No skills installed")}
-            onChange={(skills) => scheduleSave({ ...form, skills })}
-          />
-        </Field>
+            <Field label={t("Skill set")}>
+              <MultiSelect
+                value={form.skills ?? []}
+                options={skillOptions}
+                placeholder={t("Select skills")}
+                emptyHint={t("No skills installed")}
+                onChange={(skills) => scheduleSave({ ...form, skills })}
+              />
+            </Field>
+          </>
+        )}
 
         <Field label={t("Model")} htmlFor={`emp-model-${employee.id}`}>
           <Select
@@ -222,36 +264,35 @@ export function EmployeeDetail({
         </Field>
       </DetailBody>
 
-      <Modal
-        open={removeOpen}
-        onClose={() => setRemoveOpen(false)}
-        title={t("Delete employee")}
-        sub={t('Are you sure you want to delete employee "${name}"?', {
-          name: displayName,
-        })}
-        actions={
-          <>
-            <Button variant="secondary" onClick={() => setRemoveOpen(false)}>
-              {t("Cancel")}
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => {
-                setRemoveOpen(false);
-                onRemove();
-              }}
-            >
-              {t("Delete")}
-            </Button>
-          </>
-        }
-      >
-        <p className="imb-employee-delete-note">
-          {t(
-            "The employee's conversation records will also be cleared. This cannot be undone.",
-          )}
-        </p>
-      </Modal>
+      {!isAssistant && (
+        <Modal
+          open={removeOpen}
+          onClose={() => setRemoveOpen(false)}
+          title={t("Delete employee")}
+          actions={
+            <>
+              <Button variant="secondary" onClick={() => setRemoveOpen(false)}>
+                {t("Cancel")}
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  setRemoveOpen(false);
+                  onRemove();
+                }}
+              >
+                {t("Delete")}
+              </Button>
+            </>
+          }
+        >
+          <p className="imb-employee-delete-note">
+            {t(
+              "The employee's conversation records will also be cleared. This cannot be undone.",
+            )}
+          </p>
+        </Modal>
+      )}
     </>
   );
 }

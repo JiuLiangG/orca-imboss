@@ -4,6 +4,11 @@
   grid-template-columns: 1fr 1fr;
   gap: var(--imb-space-4);
 }
+
+.imb-field-row--single {
+  grid-template-columns: 1fr;
+}
+
 .imb-module-error {
   position: fixed;
   left: 50%;
@@ -19,12 +24,14 @@
   margin: 0;
   font-size: var(--imb-text-sm);
 }
+
 /* Muted note paragraph used inside confirmation dialogs. */
 .imb-module-note {
   color: var(--imb-muted);
   font-size: var(--imb-text-sm);
   margin: var(--imb-space-2) 0;
 }
+
 @media (max-width: 920px) {
   .imb-field-row {
     grid-template-columns: 1fr;

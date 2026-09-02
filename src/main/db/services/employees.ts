@@ -51,11 +51,21 @@ export function listEmployees(): Employee[] {
 const MAX_PAGE_SIZE = 200;
 const DEFAULT_PAGE_SIZE = 50;
 
+/** Case-insensitive name/role match used to decide whether the assistant is pinned. */
+function matchesNeedle(employee: Employee, needle: string): boolean {
+  const lower = needle.toLowerCase();
+  return (
+    employee.name.toLowerCase().includes(lower) ||
+    employee.role.toLowerCase().includes(lower)
+  );
+}
+
 /**
- * One page of employees, ordered `id ASC` (unchanged from the full list) and
- * excluding the built-in assistant (id 0), matching the UI's existing filter.
- * Search = `LIKE` on `name OR role` (ESCAPE-safe). Keyset seek on `id > ?`
- * keeps scrolling stable under concurrent inserts (no skip/duplicate).
+ * One page of employees, ordered `id ASC`. Regular employees (id ≠ 0) are
+ * fetched via keyset search on `name OR role` (LIKE, ESCAPE-safe); the
+ * built-in assistant (id 0) is excluded from that query and instead pinned as
+ * the first row of page 1 (no cursor) whenever it matches the needle — so it
+ * shows at the very top of the list and is omitted on pages 2+.
  */
 export function listEmployeesPage(page: PageQuery = {}): PageResult<Employee> {
   const limit = Math.min(
@@ -92,8 +102,19 @@ export function listEmployeesPage(page: PageQuery = {}): PageResult<Employee> {
   const hasMore = rows.length > limit;
   const items = rows.slice(0, limit).map(toEmployee);
   const last = items[items.length - 1];
+
+  // Pin the built-in assistant at the top of page 1 (only when the search term
+  // matches it). hasMore/nextCursor still derive from the regular rows.
+  let pagedItems = items;
+  if (!page.cursor) {
+    const assistant = getAssistant();
+    if (assistant && matchesNeedle(assistant, needle)) {
+      pagedItems = [assistant, ...items];
+    }
+  }
+
   return {
-    items,
+    items: pagedItems,
     nextCursor: hasMore && last ? String(last.id) : null,
     hasMore,
   };
@@ -182,11 +203,35 @@ export function updateEmployee(
   id: number,
   input: EmployeeInput,
 ): Employee | null {
-  if (id === ASSISTANT_ID) {
-    throw new Error("The built-in assistant cannot be modified here yet.");
-  }
   const current = getEmployee(id);
   if (!current) return null;
+
+  if (id === ASSISTANT_ID) {
+    // The assistant's profile is restricted: only name, systemPrompt (appended
+    // to ASSISTANT_SYSTEM_PROMPT) and modelId are editable; role, mcp and
+    // skills are immutable and defensively rejected if provided.
+    const immutable: Array<keyof EmployeeInput> = ["role", "mcp", "skills"];
+    if (immutable.some((key) => input[key] !== undefined)) {
+      throw new Error(
+        "The built-in assistant's role, MCP, and skills cannot be modified.",
+      );
+    }
+    getDB()
+      .prepare(
+        "UPDATE employees SET name = ?, system_prompt = ?, model_id = ? WHERE id = ?",
+      )
+      .run(
+        input.name !== undefined ? validateName(input.name) : current.name,
+        input.systemPrompt !== undefined
+          ? validatePrompt(input.systemPrompt)
+          : current.systemPrompt,
+        input.modelId !== undefined
+          ? validateModelId(input.modelId)
+          : current.modelId,
+        id,
+      );
+    return getEmployee(id);
+  }
 
   // Merge patch over current values; helpers validate only changed fields.
   const mcp =
@@ -216,14 +261,14 @@ export function updateEmployee(
   return getEmployee(id);
 }
 
-/** Update the stored avatar file path (owner: avatar IPC handler). */
+/**
+ * Update the stored avatar file path (owner: avatar IPC handler). The
+ * assistant's avatar is mutable, unlike its row-level persistence guards.
+ */
 export function updateEmployeeAvatar(
   id: number,
   avatarPath: string | null,
 ): Employee | null {
-  if (id === ASSISTANT_ID) {
-    throw new Error("The built-in assistant cannot be modified here yet.");
-  }
   getDB()
     .prepare("UPDATE employees SET avatar = ? WHERE id = ?")
     .run(avatarPath, id);

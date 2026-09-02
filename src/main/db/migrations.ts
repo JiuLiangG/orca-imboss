@@ -25,11 +25,10 @@ const MIGRATIONS: Array<(db: Database) => void> = [
       );
     `);
 
-    // The assistant always exists, under the reserved id 0. Field values are
-    // placeholders until real content is provided (UPDATE blocked in services).
+    // The assistant always exists, under the reserved id 0.
     db.prepare(
       "INSERT OR IGNORE INTO employees (id, name, role, system_prompt, mcp, skills, model_id, avatar) " +
-        "VALUES (0, '', '', '', '[]', '[]', NULL, NULL)",
+        "VALUES (0, 'Assistant', 'Assistant', '', '[]', '[]', NULL, NULL)",
     ).run();
 
     db.exec(`

@@ -1,8 +1,9 @@
 import { createRef } from "react";
 import { proxy, useSnapshot } from "valtio";
-import type { ThemeState } from "../../shared/types";
+import { SettingKeys } from "../../shared/constants";
 import { setupL10N } from "../../shared/libs/l10n";
 import zhCN from "../../shared/translations/zhCN.json";
+import type { ThemeState } from "../../shared/types";
 import { applyThemeAccent, applyThemeModeAttr } from "./theme";
 
 export type AppModule =
@@ -19,9 +20,6 @@ export type AppModule =
 export const IS_MAC = window.imb.platform === "darwin";
 
 const TRANSLATIONS = { "zh-CN": zhCN };
-
-const NAV_COLLAPSE_KEY = "ui.navCollapsed";
-const MODULE_KEY = "ui.module";
 
 const VALID_MODULES: AppModule[] = [
   "chat",
@@ -48,7 +46,7 @@ export const appStore = proxy({
 
   setModule(next: AppModule): void {
     appStore.module = next;
-    void window.imb.settings.set(MODULE_KEY, next);
+    void window.imb.settings.set(SettingKeys.Module, next);
   },
 
   async setLocale(next: string): Promise<void> {
@@ -66,7 +64,10 @@ export const appStore = proxy({
 
   setNavCollapsed(collapsed: boolean): void {
     appStore.navCollapsed = collapsed;
-    void window.imb.settings.set(NAV_COLLAPSE_KEY, collapsed ? "1" : "0");
+    void window.imb.settings.set(
+      SettingKeys.NavCollapse,
+      collapsed ? "1" : "0",
+    );
   },
 });
 
@@ -96,8 +97,8 @@ export function initApp(): void {
 
   // nav collapse + module preference: persist in DB settings (KV)
   void Promise.all([
-    window.imb.settings.get(NAV_COLLAPSE_KEY),
-    window.imb.settings.get(MODULE_KEY),
+    window.imb.settings.get(SettingKeys.NavCollapse),
+    window.imb.settings.get(SettingKeys.Module),
   ]).then(([collapsed, storedModule]) => {
     if (collapsed === "1") appStore.navCollapsed = true;
     if (storedModule && (VALID_MODULES as string[]).includes(storedModule)) {

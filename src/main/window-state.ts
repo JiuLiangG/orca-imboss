@@ -1,4 +1,5 @@
 import { screen, type BrowserWindow } from "electron";
+import { SettingKeys } from "../shared/constants";
 import { getSetting, setSetting } from "./db/services/settings";
 
 // Window state persistence: stores the main window's normal (unmaximized) bounds
@@ -9,8 +10,6 @@ export const DEFAULT_WINDOW_WIDTH = 950;
 export const DEFAULT_WINDOW_HEIGHT = 670;
 export const MIN_WINDOW_WIDTH = 800;
 export const MIN_WINDOW_HEIGHT = 600;
-
-const WINDOW_STATE_KEY = "ui.window";
 
 interface WindowBounds {
   x: number;
@@ -46,7 +45,7 @@ function isContained(
  * and lets Electron center the window on the primary display.
  */
 export function loadWindowBounds(): WindowBounds | null {
-  const stored = getSetting(WINDOW_STATE_KEY);
+  const stored = getSetting(SettingKeys.WindowState);
   if (!stored) return null;
 
   let parsed: unknown;
@@ -72,7 +71,10 @@ export function loadWindowBounds(): WindowBounds | null {
   }
 
   const candidate: WindowBounds = { x, y, width, height };
-  if (candidate.width < MIN_WINDOW_WIDTH || candidate.height < MIN_WINDOW_HEIGHT) {
+  if (
+    candidate.width < MIN_WINDOW_WIDTH ||
+    candidate.height < MIN_WINDOW_HEIGHT
+  ) {
     return null;
   }
 
@@ -90,5 +92,5 @@ export function saveWindowBounds(win: BrowserWindow): void {
   if (win.isDestroyed()) return;
   const { x, y, width, height } = win.getNormalBounds();
   if (width <= 0 || height <= 0) return;
-  setSetting(WINDOW_STATE_KEY, JSON.stringify({ x, y, width, height }));
+  setSetting(SettingKeys.WindowState, JSON.stringify({ x, y, width, height }));
 }

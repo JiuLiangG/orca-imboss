@@ -16,6 +16,12 @@ export interface UseMultiSelectOptions<T, K> {
    * so query changes / refresh / `messages:changed` clear stale keys).
    */
   resetVersion?: number;
+  /**
+   * Optional predicate to exclude items from selection (e.g. the built-in
+   * assistant row). Non-selectable items are still clickable (plain activate),
+   * but never added to the selection set by toggle / shift-range / selectAll.
+   */
+  isSelectable?: (item: T, index: number) => boolean;
 }
 
 export interface MultiSelect<T, K> {
@@ -44,6 +50,7 @@ export function useMultiSelect<T, K>({
   items,
   onActivate,
   resetVersion = 0,
+  isSelectable,
 }: UseMultiSelectOptions<T, K>): MultiSelect<T, K> {
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<K>>(new Set());
   const itemsRef = useRef(items);
@@ -52,6 +59,8 @@ export function useMultiSelect<T, K>({
   getKeyRef.current = getKey;
   const onActivateRef = useRef(onActivate);
   onActivateRef.current = onActivate;
+  const isSelectableRef = useRef(isSelectable);
+  isSelectableRef.current = isSelectable;
   const anchorRef = useRef<{ key: K; index: number } | null>(null);
 
   useEffect(() => {
@@ -65,16 +74,27 @@ export function useMultiSelect<T, K>({
   }, []);
 
   const selectAll = useCallback((): void => {
-    setSelectedKeys(
-      new Set(
-        itemsRef.current.map((item, index) => getKeyRef.current(item, index)),
-      ),
-    );
+    const next = new Set<K>();
+    itemsRef.current.forEach((item, index) => {
+      if (isSelectableRef.current && !isSelectableRef.current(item, index)) {
+        return;
+      }
+      next.add(getKeyRef.current(item, index));
+    });
+    setSelectedKeys(next);
   }, []);
 
   const onItemClick = useCallback(
     (item: T, index: number, mods: ClickModifiers): void => {
       const key = getKeyRef.current(item, index);
+      if (isSelectableRef.current && !isSelectableRef.current(item, index)) {
+        // Not selectable (e.g. the built-in assistant): always do a plain
+        // activate — never toggle / add to the selection set.
+        setSelectedKeys(new Set());
+        anchorRef.current = { key, index };
+        onActivateRef.current(item);
+        return;
+      }
       if (mods.shift) {
         setSelectedKeys((current) => {
           const next = new Set(current);
@@ -96,7 +116,14 @@ export function useMultiSelect<T, K>({
           const from = Math.min(anchorIndex, index);
           const to = Math.max(anchorIndex, index);
           for (let i = from; i <= to; i += 1) {
-            next.add(getKeyRef.current(itemsRef.current[i], i));
+            const rangeItem = itemsRef.current[i];
+            if (
+              isSelectableRef.current &&
+              !isSelectableRef.current(rangeItem, i)
+            ) {
+              continue;
+            }
+            next.add(getKeyRef.current(rangeItem, i));
           }
           return next;
         });

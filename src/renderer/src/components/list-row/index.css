@@ -91,3 +91,15 @@
   display: grid;
   place-items: center;
 }
+
+/* Muted pill tag used for e.g. the built-in assistant's "Built-in" badge. */
+.imb-badge {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: var(--imb-radius-pill);
+  background: color-mix(in oklch, var(--imb-accent) 14%, var(--imb-surface));
+  color: var(--imb-accent);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}

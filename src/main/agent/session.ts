@@ -1,5 +1,6 @@
 import { homedir } from "os";
-import { getEmployee } from "../db/services/employees";
+import { ASSISTANT_SYSTEM_PROMPT } from "../../shared/constants";
+import { ASSISTANT_ID, getEmployee } from "../db/services/employees";
 import { listMcpServers } from "../db/services/mcp";
 import { getSetting } from "../db/services/settings";
 import type { AgentEnvironment } from "./environment";
@@ -91,6 +92,7 @@ export class AgentSession {
       modelRuntime,
       employeeSystemPrompt: employee?.systemPrompt ?? "",
       mcpServerNames: employee?.mcp ?? [],
+      isAssistant: employee?.id === ASSISTANT_ID,
     });
   }
 
@@ -151,6 +153,7 @@ export class AgentSession {
       modelRuntime: ModelRuntimeInstance;
       employeeSystemPrompt: string;
       mcpServerNames: string[];
+      isAssistant: boolean;
     },
   ): Promise<AgentPromptResult> {
     const { cwd, message, model, modelRuntime } = args;
@@ -176,8 +179,15 @@ export class AgentSession {
       ];
 
       const settingsManager = pi.SettingsManager.inMemory();
-      const systemPromptOverride =
-        args.employeeSystemPrompt.trim().length > 0
+      // For the assistant, the hardcoded ASSISTANT_SYSTEM_PROMPT replaces the
+      // SDK base; the editable employee systemPrompt is appended below it.
+      // Regular employees keep the `base + editable` layering.
+      const systemPromptOverride = args.isAssistant
+        ? (): string =>
+            [ASSISTANT_SYSTEM_PROMPT, args.employeeSystemPrompt]
+              .filter((part) => part.trim().length > 0)
+              .join("\n\n")
+        : args.employeeSystemPrompt.trim().length > 0
           ? (base: string | undefined): string =>
               base && base.trim().length > 0
                 ? `${base}\n\n${args.employeeSystemPrompt}`
