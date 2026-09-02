@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { appStore, useApp } from "../../../../app-store";
 import { getLocale, t } from "../../../../../../shared/libs/l10n";
 import type {
   ChatSummary,
@@ -28,6 +29,7 @@ const PAGE_SIZE = 50;
 
 /** Chat module: list + thread + composer (placeholder pipeline). */
 export function ChatModule(): React.JSX.Element {
+  const { data, focusChatId } = useApp();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [query, setQuery] = useState("");
@@ -38,6 +40,7 @@ export function ChatModule(): React.JSX.Element {
   const selectedIdRef = useRef<number | null>(null);
   selectedIdRef.current = selectedId;
   const locale = getLocale();
+  const unreadMap = data.chats.unread;
 
   // Server-side search (title OR message content — FTS/LIKE handled in main).
   const fetchPage = useCallback(
@@ -109,6 +112,14 @@ export function ChatModule(): React.JSX.Element {
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chats, listLoading]);
+
+  // Jump to a focused chat (an OS notification click) once it is loaded.
+  useEffect(() => {
+    if (focusChatId === null) return;
+    if (!chats.some((chat) => chat.id === focusChatId)) return;
+    selectChat(focusChatId);
+    appStore.focusChatId = null;
+  }, [focusChatId, chats, selectChat]);
 
   useEffect(() => {
     const offMessages = window.imb.messages.onChanged((chatId) => {
@@ -219,13 +230,14 @@ export function ChatModule(): React.JSX.Element {
             name={chat.title}
             meta={formatChatTime(chat.lastAt, locale)}
             sub={previewText(chat.preview ?? "")}
-            badge={
-              chat.unread > 0 ? (
+            badge={(() => {
+              const unread = unreadMap[chat.id] ?? chat.unread;
+              return unread > 0 ? (
                 <span className="imb-unread">
-                  {chat.unread > 99 ? "99+" : chat.unread}
+                  {unread > 99 ? "99+" : unread}
                 </span>
-              ) : undefined
-            }
+              ) : undefined;
+            })()}
             onContextMenu={(e) => {
               e.preventDefault();
               setCtxMenu({

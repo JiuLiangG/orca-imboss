@@ -51,7 +51,7 @@ interface IMB {
     listPage(page: PageQuery): Promise<PageResult<Employee>>;
     create(input: EmployeeInput): Promise<Employee>;
     update(id: number, input: EmployeeInput): Promise<Employee | null>;
-    remove(id: number): Promise<boolean>;
+    remove(id: number): Promise<"deleted" | "disabled" | null>;
     updateAvatar(
       id: number,
       ext: string,
@@ -63,7 +63,13 @@ interface IMB {
     list(): Promise<Chat[]>;
     summaries(): Promise<ChatSummary[]>;
     summariesPage(page: PageQuery): Promise<PageResult<ChatSummary>>;
+    unreads(): Promise<Record<number, number>>;
+    addUnread(id: number, delta: number): Promise<number>;
     markRead(id: number): Promise<void>;
+    onUnreadChanged(
+      cb: (payload: { chatId: number; unread: number }) => void,
+    ): () => void;
+    onFocus(cb: (chatId: number) => void): () => void;
     create(title: string, participants: number[]): Promise<Chat>;
     update(id: number, title: string): Promise<Chat | null>;
     updateParticipants(

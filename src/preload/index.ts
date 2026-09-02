@@ -82,7 +82,9 @@ const api = {
         input,
       ) as Promise<Employee | null>,
     remove: (id: number) =>
-      ipcRenderer.invoke("employees:delete", id) as Promise<boolean>,
+      ipcRenderer.invoke("employees:delete", id) as Promise<
+        "deleted" | "disabled" | null
+      >,
     updateAvatar: (id: number, ext: string, data: Uint8Array) =>
       ipcRenderer.invoke(
         "employees:updateAvatar",
@@ -100,8 +102,16 @@ const api = {
       ipcRenderer.invoke("chats:summariesPage", page) as Promise<
         PageResult<ChatSummary>
       >,
+    unreads: () =>
+      ipcRenderer.invoke("chats:unreads") as Promise<Record<number, number>>,
+    addUnread: (id: number, delta: number) =>
+      ipcRenderer.invoke("chats:addUnread", id, delta) as Promise<number>,
     markRead: (id: number) =>
       ipcRenderer.invoke("chats:markRead", id) as Promise<void>,
+    onUnreadChanged: (
+      cb: (payload: { chatId: number; unread: number }) => void,
+    ) => on<{ chatId: number; unread: number }>("chats:unreadChanged", cb),
+    onFocus: (cb: (chatId: number) => void) => on<number>("chat:focus", cb),
     create: (title: string, participants: number[]) =>
       ipcRenderer.invoke("chats:create", title, participants) as Promise<Chat>,
     update: (id: number, title: string) =>

@@ -45,7 +45,12 @@ export interface Employee {
   avatar: string | null;
   /** Avatar as a data URL for renderer display (may be null). */
   avatarUrl: string | null;
+  /** `true` when the employee is disabled (soft-deleted, still a chat participant). */
+  disabled: boolean;
 }
+
+/** Result of an employee delete: hard-deleted, disabled (still a chat participant), or missing. */
+export type EmployeeDeleteResult = "deleted" | "disabled" | null;
 
 /** Input for creating/updating an employee (fields optional → untouched). */
 export interface EmployeeInput {
@@ -81,7 +86,11 @@ export interface ChatParticipantUpdate {
   remove?: number[];
 }
 
-export type MessageKind = "text" | "task_progress";
+/**
+ * Free-form message kind. The UI only special-cases `task_progress`; other
+ * kinds (e.g. `chat`, `join_notice`) are routed through the generic bubble.
+ */
+export type MessageKind = string;
 
 export type StepStatus = "done" | "busy";
 
@@ -97,8 +106,6 @@ export interface MessageAttachment {
   name: string;
   size: number;
   type: string;
-  /** Optional data-URL preview (images only), size-capped. */
-  preview: string | null;
 }
 
 /** Row of the `messages` table, ordered per chat by `created_at`. */
@@ -148,6 +155,31 @@ export interface EmployeeSession {
   employeeId: number;
   chatId: number;
   session: string;
+  /** Per-(employee, chat) read cursor: the highest message id the agent has read. */
+  lastReadMessageId: number;
+}
+
+/**
+ * Row of the `cron_jobs` table. `id` is the composite
+ * `"{chatId}/{employeeId}/{jobId}"`. Jobs only run while the app is alive
+ * (Electron main process — no background OS scheduler).
+ */
+export interface CronJob {
+  id: string;
+  chatId: number;
+  employeeId: number;
+  /** 6-field cron expression (seconds included); 5-field is normalized to `0 <expr>`. */
+  schedule: string;
+  /** Task content appended to the (employee, chat) agent session on each trigger. */
+  content: string;
+  enabled: boolean;
+  /** UNIX timestamp in seconds.
+   */
+  createdAt: number;
+  /** UNIX timestamp in seconds of the last run (null when never run). */
+  lastRunAt: number | null;
+  /** UNIX timestamp in seconds of the next run (best-effort; null when none). */
+  nextRunAt: number | null;
 }
 
 // ---------------------------------------------------------------------------

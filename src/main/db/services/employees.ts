@@ -1,5 +1,6 @@
 import type {
   Employee,
+  EmployeeDeleteResult,
   EmployeeInput,
   PageQuery,
   PageResult,
@@ -18,6 +19,7 @@ interface EmployeeRow {
   skills: string;
   model_id: string | null;
   avatar: string | null;
+  disabled: number;
 }
 
 function toEmployee(row: EmployeeRow): Employee {
@@ -33,17 +35,21 @@ function toEmployee(row: EmployeeRow): Employee {
     // Main-owned file read; data URL (or null) is the only form ever sent
     // to the renderer — raw paths are not useful there.
     avatarUrl: readAvatarDataUrl(row.id),
+    disabled: row.disabled === 1,
   };
 }
 
 /** The built-in assistant's reserved id — it must always exist. */
 export const ASSISTANT_ID = 0;
 
-const SELECT_ALL = "SELECT * FROM employees ORDER BY id ASC";
+const SELECT_ACTIVE =
+  "SELECT * FROM employees WHERE disabled = 0 ORDER BY id ASC";
 const SELECT_BY_ID = "SELECT * FROM employees WHERE id = ?";
 
 export function listEmployees(): Employee[] {
-  return (getDB().prepare(SELECT_ALL).all() as EmployeeRow[]).map(toEmployee);
+  return (getDB().prepare(SELECT_ACTIVE).all() as EmployeeRow[]).map(
+    toEmployee,
+  );
 }
 
 // --- paged employee list (keyset cursor over `id ASC`) ----------------------
@@ -74,7 +80,7 @@ export function listEmployeesPage(page: PageQuery = {}): PageResult<Employee> {
   );
   const needle = (page.query ?? "").trim();
   const db = getDB();
-  const conditions: string[] = ["id <> ?"];
+  const conditions: string[] = ["id <> ?", "disabled = 0"];
   const params: Array<string | number> = [ASSISTANT_ID];
 
   if (page.cursor) {
@@ -275,33 +281,97 @@ export function updateEmployeeAvatar(
   return getEmployee(id);
 }
 
+/** True when the employee id appears in at least one chat's participants array. */
+function isEmployeeInAnyChat(id: number): boolean {
+  const rows = getDB()
+    .prepare("SELECT participants FROM chats")
+    .all() as Array<{ participants: string }>;
+  return rows.some((row) => parseNumberArray(row.participants).includes(id));
+}
+
+/** Strip an employee id from every chat's participants array. */
+function stripFromAllChats(db: ReturnType<typeof getDB>, id: number): void {
+  // Desktop scale: scan all chats and filter exactly rather than guessing
+  // with LIKE patterns that can mis-candidate overlapping digits.
+  const rows = db.prepare("SELECT id, participants FROM chats").all() as Array<{
+    id: number;
+    participants: string;
+  }>;
+  for (const chat of rows) {
+    const participants = parseNumberArray(chat.participants);
+    if (participants.includes(id)) {
+      db.prepare("UPDATE chats SET participants = ? WHERE id = ?").run(
+        stringifyArray(participants.filter((pid) => pid !== id)),
+        chat.id,
+      );
+    }
+  }
+}
+
 /**
- * Delete a non-reserved employee. The sessions FK cascades in SQLite; this
- * additionally strips the employee's id from every chat's participants array
- * so stored JSON never references missing rows. Disk session-file cleanup is
- * coordinated above this service (see IPC wiring).
+ * Delete a non-reserved employee.
+ *
+ * - **In chat** → the employee is a participant of at least one chat, so it is
+ *   *disabled* (soft-delete) instead of removed: it stays in every
+ *   `chats.participants` array, the sessions FK remains intact, and the
+ *   employee disappears from active lists. Returns `"disabled"`.
+ * - **Not in chat** → hard delete; the id is stripped from any chat's
+ *   participants (defensive, should be none) and the sessions FK cascades.
+ *   Returns `"deleted"`.
+ * - **Missing** → `null`.
+ *
+ * Disk session-file cleanup is coordinated above this service (see IPC wiring).
  */
-export function deleteEmployee(id: number): boolean {
+export function deleteEmployee(id: number): EmployeeDeleteResult {
   if (id === ASSISTANT_ID) {
     throw new Error("The built-in assistant cannot be deleted.");
   }
   const db = getDB();
-  const tx = db.transaction(() => {
-    // Desktop scale: scan all chats and filter exactly rather than guessing
-    // with LIKE patterns that can mis-candidate overlapping digits.
-    const rows = db
-      .prepare("SELECT id, participants FROM chats")
-      .all() as Array<{ id: number; participants: string }>;
-    for (const chat of rows) {
-      const participants = parseNumberArray(chat.participants);
-      if (participants.includes(id)) {
-        db.prepare("UPDATE chats SET participants = ? WHERE id = ?").run(
-          stringifyArray(participants.filter((pid) => pid !== id)),
-          chat.id,
-        );
-      }
-    }
+  if (!getEmployee(id)) return null;
+
+  if (isEmployeeInAnyChat(id)) {
+    db.prepare("UPDATE employees SET disabled = 1 WHERE id = ?").run(id);
+    return "disabled";
+  }
+
+  const removed = db.transaction(() => {
+    stripFromAllChats(db, id);
     return db.prepare("DELETE FROM employees WHERE id = ?").run(id).changes > 0;
-  });
-  return tx();
+  })();
+  return removed ? "deleted" : null;
+}
+
+/** One employee purged at startup (session file paths captured pre-delete). */
+export interface PurgedEmployee {
+  employeeId: number;
+  sessionPaths: string[];
+}
+
+/**
+ * Hard-delete every employee that is `disabled = 1` AND no longer a participant
+ * of any chat. Returns the purged employees plus their recorded session file
+ * paths so the caller can unlink session files and avatar files (the `sessions`
+ * rows themselves are removed by the FK cascade). Best-effort at startup.
+ */
+export function purgeDisabledEmployees(): PurgedEmployee[] {
+  const db = getDB();
+  const disabled = db
+    .prepare("SELECT id FROM employees WHERE disabled = 1")
+    .all() as Array<{ id: number }>;
+  const purged: PurgedEmployee[] = [];
+
+  for (const { id } of disabled) {
+    if (isEmployeeInAnyChat(id)) continue; // still a chat participant → keep
+    const sessionPaths = (
+      db
+        .prepare("SELECT session FROM sessions WHERE employee_id = ?")
+        .all(id) as Array<{ session: string }>
+    ).map((row) => row.session);
+    db.transaction(() => {
+      stripFromAllChats(db, id);
+      db.prepare("DELETE FROM employees WHERE id = ?").run(id);
+    })();
+    purged.push({ employeeId: id, sessionPaths });
+  }
+  return purged;
 }

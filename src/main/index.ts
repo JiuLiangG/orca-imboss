@@ -1,10 +1,15 @@
 import { app, BrowserWindow, shell } from "electron";
 import { join } from "path";
 import icon from "../../resources/icon.png?asset";
+import { deleteAvatarFiles } from "./avatars";
 import { initDatabase } from "./db";
+import { purgeDisabledEmployees } from "./db/services/employees";
+import { unlinkSessionFile } from "./db/services/sessions";
 import { refreshModelStore } from "./agent/model-runtime";
+import * as cron from "./cron";
 import { registerIpcHandlers, setupNativeTheme } from "./ipc";
 import { getResolvedLocale } from "./locale";
+import { setMainWindow } from "./notifications";
 import { initUpdater } from "./updater";
 import {
   DEFAULT_WINDOW_HEIGHT,
@@ -32,6 +37,11 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+// Best-effort stop of in-process cron handles before the app quits.
+app.on("before-quit", () => {
+  cron.stopAll();
 });
 
 app.on("activate", () => {
@@ -80,6 +90,10 @@ function createWindow(): void {
   // they can be restored on the next launch.
   mainWindow.on("close", () => saveWindowBounds(mainWindow));
 
+  // Register the window for OS notification click-to-focus + jump-to-chat.
+  setMainWindow(mainWindow);
+  mainWindow.on("closed", () => setMainWindow(null));
+
   // Open external links in the OS browser; never allow in-app popups.
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url);
@@ -101,7 +115,14 @@ app.whenReady().then(() => {
   registerIpcHandlers();
   setupNativeTheme();
 
+  // Re-register persisted cron jobs (fire-and-forget; only while app is alive).
+  cron.initCron();
+
   createWindow();
+
+  // Best-effort cleanup of disabled employees no longer in any chat. Fire-and-
+  // forget: a failure is logged and never blocks startup.
+  void purgeDisabledEmployeesOnStartup();
 
   // Warm the app's model store over the network so configured provider/model
   // catalogs are fresh for the whole session. Fire-and-forget (non-blocking):
@@ -110,3 +131,25 @@ app.whenReady().then(() => {
 
   if (app.isPackaged) initUpdater();
 });
+
+/**
+ * Hard-delete employees that were disabled and are no longer a chat participant,
+ * then unlink their session and avatar files. Try/catch every step so the
+ * app still launches when the data folder is in a weird state.
+ */
+async function purgeDisabledEmployeesOnStartup(): Promise<void> {
+  try {
+    const purged = purgeDisabledEmployees();
+    for (const entry of purged) {
+      await Promise.all(
+        entry.sessionPaths.map((path) => unlinkSessionFile(path)),
+      );
+      deleteAvatarFiles(entry.employeeId);
+    }
+  } catch (err) {
+    console.error(
+      "[startup] purge disabled employees failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}

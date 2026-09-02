@@ -77,6 +77,25 @@ export function bumpUnread(id: number): void {
   getDB().prepare("UPDATE chats SET unread = unread + 1 WHERE id = ?").run(id);
 }
 
+/**
+ * Add a (non-negative) delta to a chat's unread counter and return the new
+ * value. The delta is clamped to `>= 0` (a negative delta never underflows
+ * below zero; `markRead` is the explicit clear path).
+ */
+export function addUnread(id: number, delta: number): number {
+  const numeric = Number(delta);
+  const safeDelta = Number.isFinite(numeric)
+    ? Math.max(0, Math.trunc(numeric))
+    : 0;
+  getDB()
+    .prepare("UPDATE chats SET unread = max(0, unread + ?) WHERE id = ?")
+    .run(safeDelta, id);
+  const row = getDB()
+    .prepare("SELECT unread FROM chats WHERE id = ?")
+    .get(id) as { unread: number } | undefined;
+  return row?.unread ?? 0;
+}
+
 // --- paged chat list (keyset cursor over `(created_at, id) DESC`) -----------
 
 const MAX_PAGE_SIZE = 200;

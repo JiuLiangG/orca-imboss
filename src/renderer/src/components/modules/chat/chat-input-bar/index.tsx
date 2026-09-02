@@ -11,10 +11,8 @@ export interface ChatInputBarProps {
   onSend: (text: string, attachments: MessageAttachment[]) => void;
 }
 
-const MAX_PREVIEW_CHARS = 2_000_000; // keep DB sane (matches main's cap)
-
 /**
- * Chat composer (`.chat-input-card`): attachment thumbnails row, autosize
+ * Chat composer (`.chat-input-card`): attachment chips row, autosize
  * textarea (72→160), attach popup (图片 / 文件) + circular send button.
  * Enter sends, Shift+Enter inserts a newline.
  */
@@ -23,7 +21,7 @@ export function ChatInputBar({
   onSend,
 }: ChatInputBarProps): React.JSX.Element {
   const [text, setText] = useState("");
-  const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
+  const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
   const [popupOpen, setPopupOpen] = useState(false);
   const popupRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -36,35 +34,16 @@ export function ChatInputBar({
     const value = text.trim();
     if (disabled) return;
     if (!value && attachments.length === 0) return;
-    const meta = attachments.map(({ name, size, type, preview }) => ({
-      name,
-      size,
-      type,
-      preview,
-    }));
-    onSend(value, meta);
+    onSend(value, attachments);
     setText("");
     setAttachments([]);
   };
 
   const addFiles = (files: FileList | null): void => {
     if (!files) return;
-    const next: AttachmentDraft[] = [];
+    const next: MessageAttachment[] = [];
     for (const file of Array.from(files).slice(0, 16 - attachments.length)) {
-      const draft: AttachmentDraft = {
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        preview: null,
-      };
-      if (file.type.startsWith("image/")) {
-        void readPreview(file).then((preview) => {
-          setAttachments((current) =>
-            current.map((a) => (a === draft ? { ...a, preview } : a)),
-          );
-        });
-      }
-      next.push(draft);
+      next.push({ name: file.name, size: file.size, type: file.type });
     }
     setAttachments((current) => [...current, ...next]);
     setPopupOpen(false);
@@ -87,13 +66,9 @@ export function ChatInputBar({
                 className="imb-attached-file-thumb"
                 key={`${file.name}-${index}`}
               >
-                {file.preview ? (
-                  <img src={file.preview} alt={file.name} />
-                ) : (
-                  <div className="imb-file-icon-placeholder">
-                    <IconFile />
-                  </div>
-                )}
+                <div className="imb-file-icon-placeholder">
+                  <IconFile />
+                </div>
                 <button
                   type="button"
                   className="imb-attached-file-remove"
@@ -193,22 +168,4 @@ export function ChatInputBar({
       />
     </div>
   );
-}
-
-interface AttachmentDraft extends MessageAttachment {
-  preview: string | null;
-}
-
-async function readPreview(file: File): Promise<string> {
-  try {
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(new Error("read failed"));
-      reader.readAsDataURL(file);
-    });
-    return dataUrl.length > MAX_PREVIEW_CHARS ? "" : dataUrl;
-  } catch {
-    return "";
-  }
 }

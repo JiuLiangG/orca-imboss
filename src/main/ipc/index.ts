@@ -9,7 +9,6 @@ import type {
   ProviderModelsQuery,
   ProviderUpsert,
 } from "../../shared/types";
-import { getAgentEnvironment } from "../agent/environment";
 import { listAvailableModels, refreshModelStore } from "../agent/model-runtime";
 import {
   listModels,
@@ -19,13 +18,14 @@ import {
   revealProviderKey,
   upsertProvider,
 } from "../agent/providers";
-import { AgentSession } from "../agent/session";
+import { deliver } from "../agent/session-queue";
 import {
   installSkillsFromFolders,
   listSkills,
   listSkillsPage,
   uninstallSkill,
 } from "../agent/skills";
+import { broadcast, notifyUnread } from "../notifications";
 import { deleteAvatarFiles, saveAvatar } from "../avatars";
 import * as chatsService from "../db/services/chats";
 import * as employeesService from "../db/services/employees";
@@ -134,12 +134,14 @@ function registerEmployeeHandlers(): void {
     const safeId = assertInteger(id, "employee id");
     // Capture disk session file paths BEFORE the FK cascade wipes the rows.
     const records = listByEmployee(safeId);
-    const removed = employeesService.deleteEmployee(safeId);
-    if (removed) {
+    const result = employeesService.deleteEmployee(safeId);
+    // Only a hard delete removes disk artifacts; a soft delete (employee still
+    // a chat participant) keeps the session/avatar state intact.
+    if (result === "deleted") {
       await Promise.all(records.map((r) => unlinkSessionFile(r.session)));
       deleteAvatarFiles(safeId);
     }
-    return removed;
+    return result;
   });
 
   ipcMain.handle(
@@ -166,9 +168,28 @@ function registerChatHandlers(): void {
     chatsService.listChatSummariesPage(parsePageQuery(page)),
   );
 
+  // All chats' unread counts → renderer app-store init (unread mirror).
+  ipcMain.handle("chats:unreads", (): Record<number, number> => {
+    const record: Record<number, number> = {};
+    for (const chat of chatsService.listChats()) record[chat.id] = chat.unread;
+    return record;
+  });
+
+  // Renderer-initiated unread delta (delegates to notifyUnread).
+  ipcMain.handle(
+    "chats:addUnread",
+    (_event, id: unknown, delta: unknown): number => {
+      const safeId = assertInteger(id, "chat id");
+      const safeDelta = assertInteger(delta, "unread delta");
+      return notifyUnread(safeId, safeDelta, "");
+    },
+  );
+
   ipcMain.handle("chats:markRead", (_event, id: unknown) => {
     const safeId = assertInteger(id, "chat id");
     chatsService.markRead(safeId);
+    // Keep the renderer unread mirror in sync (cleared on open).
+    broadcast("chats:unreadChanged", { chatId: safeId, unread: 0 });
   });
 
   ipcMain.handle(
@@ -208,10 +229,10 @@ function registerChatHandlers(): void {
   });
 
   /**
-   * Chat pipeline: append the user message → run the Pi-backed
-   * `AgentSession.prompt` (env-aware shell tools + the employee's MCP
-   * servers) → persist the final assistant reply text. When no model is
-   * configured yet, the canned placeholder reply is used instead.
+   * Chat pipeline: append the user message → run the assistant's agent turn
+   * (serialized per session queue) → persist the final reply (or the canned
+   * placeholder when no reply is produced). When no model is configured yet,
+   * the canned placeholder reply is used instead.
    */
   ipcMain.handle(
     "chat:send",
@@ -227,33 +248,11 @@ function registerChatHandlers(): void {
         safeAttachments ? { attachments: safeAttachments } : {},
       );
 
-      void (async () => {
-        const agentSession = new AgentSession(getAgentEnvironment(), {
-          employeeId: employeesService.ASSISTANT_ID,
-          chatId: safeChatId,
-        });
-        try {
-          const result = await agentSession.prompt(safeContent);
-          if (
-            result.replied &&
-            result.replyText &&
-            result.replyText.length > 0
-          ) {
-            messagesService.appendMessage(
-              safeChatId,
-              employeesService.ASSISTANT_ID,
-              result.replyText,
-            );
-          } else {
-            appendCannedReply(safeChatId);
-          }
-        } catch {
-          // A failing agent run must never lose the user's message; fall back.
-          appendCannedReply(safeChatId);
-        } finally {
-          await agentSession.dispose();
-        }
-      })();
+      // Serialized run; the reply is auto-persisted as the assistant message.
+      void deliver(employeesService.ASSISTANT_ID, safeChatId, safeContent, {
+        persistReplyAs: employeesService.ASSISTANT_ID,
+        fallbackReply: CANNED_REPLY,
+      });
 
       return userMessage;
     },
@@ -261,17 +260,8 @@ function registerChatHandlers(): void {
 }
 
 /** Canned placeholder reply (no model configured / agent run failed). */
-function appendCannedReply(chatId: number): void {
-  try {
-    messagesService.appendMessage(
-      chatId,
-      employeesService.ASSISTANT_ID,
-      "收到，已把任务拆解并派发给相关员工，完成后我会第一时间汇总给你。",
-    );
-  } catch {
-    // Chat may have been deleted before the reply lands; ignore.
-  }
-}
+const CANNED_REPLY =
+  "收到，已把任务拆解并派发给相关员工，完成后我会第一时间汇总给你。";
 
 /** Validate the optional attachments payload before touching the DB. */
 function validateAttachmentsPayload(

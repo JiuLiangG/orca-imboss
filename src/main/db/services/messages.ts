@@ -24,14 +24,14 @@ interface MessageRow {
 }
 
 const MAX_CONTENT_LENGTH = 100_000;
+const MAX_KIND_LENGTH = 64;
 const MAX_STEPS = 64;
 const MAX_ATTACHMENTS = 16;
 const MAX_STEP_NAME_LENGTH = 256;
 const MAX_STEP_ROLE_LENGTH = 256;
 const MAX_ATTACH_NAME_LENGTH = 256;
 const MAX_ATTACH_TYPE_LENGTH = 128;
-const MAX_ATTACH_SIZE = 50 * 1024 * 1024; // metadata only; previews capped below
-const MAX_PREVIEW_LENGTH = 2_000_000; // ~2 MB string, keeps DB sane
+const MAX_ATTACH_SIZE = 50 * 1024 * 1024; // metadata only
 const STEP_STATUSES: StepStatus[] = ["done", "busy"];
 
 function toMessage(row: MessageRow): Message {
@@ -39,7 +39,7 @@ function toMessage(row: MessageRow): Message {
     id: row.id,
     chatId: row.chat_id,
     senderEmployeeId: row.sender_employee_id,
-    kind: row.kind === "task_progress" ? "task_progress" : "text",
+    kind: row.kind || "text",
     content: row.content,
     steps: parseSteps(row.steps),
     attachments: parseAttachments(row.attachments),
@@ -93,10 +93,6 @@ function parseAttachments(raw: string | null): MessageAttachment[] | null {
       name: record["name"],
       size: typeof record["size"] === "number" ? record["size"] : 0,
       type: typeof record["type"] === "string" ? record["type"] : "",
-      preview:
-        typeof record["preview"] === "string" && record["preview"].length > 0
-          ? record["preview"]
-          : null,
     });
   }
   return result;
@@ -160,14 +156,7 @@ function validateAttachments(
     if (type.length > MAX_ATTACH_TYPE_LENGTH) {
       throw new Error("Attachment type is too long.");
     }
-    const preview =
-      typeof item.preview === "string" && item.preview.length > 0
-        ? item.preview
-        : null;
-    if (preview !== null && preview.length > MAX_PREVIEW_LENGTH) {
-      throw new Error("Attachment preview is too large.");
-    }
-    result.push({ name, size: item.size, type, preview });
+    result.push({ name, size: item.size, type });
   }
   return result;
 }
@@ -180,6 +169,26 @@ export function listMessages(chatId: number): Message[] {
         "SELECT * FROM messages WHERE chat_id = ? ORDER BY created_at ASC, id ASC",
       )
       .all(chatId) as MessageRow[]
+  ).map(toMessage);
+}
+
+/**
+ * List new messages after a read cursor (`id > afterId`), in conversation
+ * order, with an optional page cap the caller re-invokes with to page through.
+ */
+export function listMessagesAfter(
+  chatId: number,
+  afterId: number,
+  limit = 100,
+): Message[] {
+  const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 200);
+  return (
+    getDB()
+      .prepare(
+        "SELECT * FROM messages WHERE chat_id = ? AND id > ? " +
+          "ORDER BY created_at ASC, id ASC LIMIT ?",
+      )
+      .all(chatId, afterId, safeLimit) as MessageRow[]
   ).map(toMessage);
 }
 
@@ -215,8 +224,14 @@ export function appendMessage(
     throw new Error("Sender employee does not exist.");
   }
 
-  const kind: MessageKind =
-    options.kind === "task_progress" ? "task_progress" : "text";
+  const kind: MessageKind = options.kind ?? "text";
+  if (
+    typeof kind !== "string" ||
+    kind.length === 0 ||
+    kind.length > MAX_KIND_LENGTH
+  ) {
+    throw new Error("Message kind is invalid.");
+  }
   const steps = validateSteps(options.steps);
   if (kind === "task_progress" && steps !== undefined && steps.length === 0) {
     throw new Error("Progress messages need at least one step.");

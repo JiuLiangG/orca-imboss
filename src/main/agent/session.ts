@@ -1,8 +1,11 @@
 import { homedir } from "os";
 import { ASSISTANT_SYSTEM_PROMPT } from "../../shared/constants";
+import { getAgentSessionsDir } from "../data-dir";
 import { ASSISTANT_ID, getEmployee } from "../db/services/employees";
 import { listMcpServers } from "../db/services/mcp";
+import { getSession } from "../db/services/sessions";
 import { getSetting } from "../db/services/settings";
+import { createTeamToolDefinitions } from "./builtin-tools";
 import type { AgentEnvironment } from "./environment";
 import { createMcpToolDefinitions, type AnyPiTool } from "./mcp";
 import { getModelRuntime, type ModelRuntimeInstance } from "./model-runtime";
@@ -168,7 +171,20 @@ export class AgentSession {
 
     try {
       const shellTools = await createShellToolDefinitions({ cwd });
-      const customTools: AnyPiTool[] = [...shellTools, ...mcp.tools];
+      // Role-based team tools: the assistant orchestrates; participants just
+      // work inside chats. Skipped when the session has no employee/chat context.
+      const teamTools = this._context
+        ? createTeamToolDefinitions({
+            env: this._env,
+            employeeId: this._context.employeeId,
+            chatId: this._context.chatId,
+          })
+        : [];
+      const customTools: AnyPiTool[] = [
+        ...shellTools,
+        ...mcp.tools,
+        ...teamTools,
+      ];
       const activeToolNames = [
         "read",
         "bash",
@@ -177,6 +193,27 @@ export class AgentSession {
         ...(process.platform === "win32" ? ["powershell"] : []),
         ...customTools.map((tool) => tool.name),
       ];
+
+      // Resume the persistent per-(employee, chat) session when a row exists;
+      // otherwise start ephemeral. A stored-but-unreadable session file falls
+      // back to in-memory rather than failing the turn.
+      let sessionManager;
+      const sessionRecord = this._context
+        ? getSession(this._context.employeeId, this._context.chatId)
+        : null;
+      if (sessionRecord) {
+        try {
+          sessionManager = pi.SessionManager.open(
+            sessionRecord.session,
+            getAgentSessionsDir(),
+            cwd,
+          );
+        } catch {
+          sessionManager = pi.SessionManager.inMemory(cwd);
+        }
+      } else {
+        sessionManager = pi.SessionManager.inMemory(cwd);
+      }
 
       const settingsManager = pi.SettingsManager.inMemory();
       // For the assistant, the hardcoded ASSISTANT_SYSTEM_PROMPT replaces the
@@ -209,7 +246,7 @@ export class AgentSession {
         tools: activeToolNames,
         customTools,
         resourceLoader,
-        sessionManager: pi.SessionManager.inMemory(cwd),
+        sessionManager,
         settingsManager,
       });
 

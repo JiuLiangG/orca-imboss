@@ -49,6 +49,10 @@ export const appStore = proxy({
   theme: { mode: "system", color: "#07C160" } as ThemeState,
   navCollapsed: false,
 
+  // Pending chat to select when the chat module is mounted (set by an OS
+  // notification click). Cleared once consumed.
+  focusChatId: null as number | null,
+
   // Centralized collections loaded once at startup and kept in sync by the
   // modules after each mutation. Chats is intentionally NOT here (it stays a
   // paged per-module list to keep large datasets lazy).
@@ -70,6 +74,12 @@ export const appStore = proxy({
       loading: false,
       loaded: false,
       error: null as string | null,
+    },
+    // Chats stays a paged per-module list (kept lazy); only the unread mirror
+    // and the focus signal live here so notify/OS-notification jumps can reach
+    // the chat module without loading the full list.
+    chats: {
+      unread: {} as Record<number, number>,
     },
   },
 
@@ -185,6 +195,27 @@ export const appStore = proxy({
     }
   },
 
+  // --- Chats (unread mirror) ----------------------------------------------------
+  async loadUnreads(): Promise<void> {
+    try {
+      appStore.data.chats.unread = await window.imb.chats.unreads();
+    } catch (err) {
+      console.error(
+        "[data:chats:unread]",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  },
+  setChatUnread(chatId: number, unread: number): void {
+    appStore.data.chats.unread = {
+      ...appStore.data.chats.unread,
+      [chatId]: Math.max(0, unread),
+    };
+  },
+  focusChat(chatId: number): void {
+    appStore.focusChatId = chatId;
+  },
+
   setModule(next: AppModule): void {
     appStore.module = next;
     void window.imb.settings.set(SettingKeys.Module, next);
@@ -252,6 +283,17 @@ export function initApp(): void {
   void appStore.loadMcp();
   void appStore.loadSkills();
   void appStore.loadEmployees();
+
+  // Chat unread mirror: load once, then keep in sync from the main process.
+  void appStore.loadUnreads();
+  window.imb.chats.onUnreadChanged(({ chatId, unread }) => {
+    appStore.setChatUnread(chatId, unread);
+  });
+  // OS notification click → switch to the chat module and select the chat.
+  window.imb.chats.onFocus((chatId) => {
+    appStore.setModule("chat");
+    appStore.focusChat(chatId);
+  });
 }
 
 /** Reactive app-state hook (valtio snapshot). */

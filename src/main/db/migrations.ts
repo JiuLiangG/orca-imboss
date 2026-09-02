@@ -21,7 +21,8 @@ const MIGRATIONS: Array<(db: Database) => void> = [
         mcp           TEXT NOT NULL DEFAULT '[]',
         skills        TEXT NOT NULL DEFAULT '[]',
         model_id      TEXT,
-        avatar        TEXT
+        avatar        TEXT,
+        disabled      INTEGER NOT NULL DEFAULT 0
       );
     `);
 
@@ -84,9 +85,10 @@ const MIGRATIONS: Array<(db: Database) => void> = [
       END;
 
       CREATE TABLE IF NOT EXISTS sessions (
-        employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
-        chat_id     INTEGER NOT NULL REFERENCES chats(id)     ON DELETE CASCADE,
-        session     TEXT NOT NULL,
+        employee_id         INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        chat_id             INTEGER NOT NULL REFERENCES chats(id)     ON DELETE CASCADE,
+        session             TEXT NOT NULL,
+        last_read_message_id INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (employee_id, chat_id)
       );
 
@@ -96,6 +98,18 @@ const MIGRATIONS: Array<(db: Database) => void> = [
         description TEXT NOT NULL DEFAULT '',
         transport   TEXT NOT NULL DEFAULT 'stdio',
         config      TEXT NOT NULL DEFAULT '{}'
+      );
+
+      CREATE TABLE IF NOT EXISTS cron_jobs (
+        id           TEXT PRIMARY KEY,
+        chat_id      INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+        employee_id  INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        schedule     TEXT NOT NULL,
+        content      TEXT NOT NULL,
+        enabled      INTEGER NOT NULL DEFAULT 1,
+        created_at   INTEGER NOT NULL DEFAULT (CAST(strftime('%s', 'now') AS INTEGER)),
+        last_run_at  INTEGER,
+        next_run_at  INTEGER
       );
     `);
   },

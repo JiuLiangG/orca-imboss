@@ -8,6 +8,7 @@ interface SessionRow {
   employee_id: number;
   chat_id: number;
   session: string;
+  last_read_message_id: number;
 }
 
 function toRecord(row: SessionRow): EmployeeSession {
@@ -15,6 +16,7 @@ function toRecord(row: SessionRow): EmployeeSession {
     employeeId: row.employee_id,
     chatId: row.chat_id,
     session: row.session,
+    lastReadMessageId: row.last_read_message_id ?? 0,
   };
 }
 
@@ -66,6 +68,29 @@ export function setSession(
     "INSERT INTO sessions (employee_id, chat_id, session) VALUES (?, ?, ?) " +
       "ON CONFLICT(employee_id, chat_id) DO UPDATE SET session = excluded.session",
   ).run(employeeId, chatId, sessionPath);
+}
+
+/** Read the per-(employee, chat) read cursor (0 when no session row exists). */
+export function getReadCursor(employeeId: number, chatId: number): number {
+  const row = getDB()
+    .prepare(
+      "SELECT last_read_message_id FROM sessions WHERE employee_id = ? AND chat_id = ?",
+    )
+    .get(employeeId, chatId) as { last_read_message_id: number } | undefined;
+  return row?.last_read_message_id ?? 0;
+}
+
+/** Advance the per-(employee, chat) read cursor. */
+export function setReadCursor(
+  employeeId: number,
+  chatId: number,
+  messageId: number,
+): void {
+  getDB()
+    .prepare(
+      "UPDATE sessions SET last_read_message_id = ? WHERE employee_id = ? AND chat_id = ?",
+    )
+    .run(messageId, employeeId, chatId);
 }
 
 /**
