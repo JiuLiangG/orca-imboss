@@ -1,12 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { t } from "../../../../../../shared/libs/l10n";
-import type {
-  McpServer,
-  McpServerInput,
-  PageQuery,
-  PageResult,
-} from "../../../../../../shared/types";
-import { useInfiniteList } from "../../../../hooks/use-infinite-list";
+import type { McpServer, McpServerInput } from "../../../../../../shared/types";
+import { appStore, useApp } from "../../../../app-store";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
 import { ModuleView } from "../../../app-shell";
 import { Avatar } from "../../../avatar";
@@ -21,8 +16,6 @@ import "../../module-common.css";
 import { McpAddModal } from "../mcp-add-modal";
 import { McpDetail } from "../mcp-detail";
 
-const PAGE_SIZE = 50;
-
 /** MCP servers module: list + transport-aware config detail + add. */
 export function McpModule(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -32,29 +25,37 @@ export function McpModule(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
 
-  const fetchPage = useCallback(
-    (page: PageQuery): Promise<PageResult<McpServer>> =>
-      window.imb.mcp.listPage(page),
-    [],
-  );
-  const {
-    items: servers,
-    loading,
-    loadingMore,
-    hasMore,
-    error: listError,
-    loadMore,
-    reset,
-    mutate,
-    resetVersion,
-  } = useInfiniteList(fetchPage, { query, pageSize: PAGE_SIZE });
+  const { data } = useApp();
+  const loading = data.mcp.loading;
+  const listError = data.mcp.error;
+
+  // Centralized in appStore (loaded once at startup); filter client-side.
+  const servers = useMemo((): readonly McpServer[] => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return data.mcp.items;
+    return data.mcp.items.filter(
+      (server) =>
+        server.name.toLowerCase().includes(needle) ||
+        server.description.toLowerCase().includes(needle),
+    );
+  }, [data.mcp.items, query]);
 
   const multi = useMultiSelect<McpServer, number>({
     getKey: (server) => server.id,
     items: servers,
     onActivate: (server) => setSelectedId(server.id),
-    resetVersion,
   });
+  const clearSelection = multi.clear;
+
+  // Query changes reset the selection (the old paginated resetVersion bump).
+  useEffect(() => {
+    clearSelection();
+  }, [clearSelection, query]);
+
+  // Re-fetch on revisit when the startup load failed (best-effort).
+  useEffect(() => {
+    appStore.ensureMcp();
+  }, []);
 
   // Auto-select the first server after page 1 loads (and recover when the
   // selected server disappears, e.g. bulk delete).
@@ -77,39 +78,19 @@ export function McpModule(): React.JSX.Element {
   const patch = useCallback(
     async (id: number, input: McpServerInput): Promise<void> => {
       const updated = await window.imb.mcp.update(id, input);
-      if (updated) {
-        mutate((current) =>
-          current.map((server) => (server.id === id ? updated : server)),
-        );
-      }
+      if (updated) appStore.replaceMcp(updated);
     },
-    [mutate],
-  );
-
-  const matchesQuery = useCallback(
-    (server: McpServer): boolean => {
-      const needle = query.trim().toLowerCase();
-      if (!needle) return true;
-      return (
-        server.name.toLowerCase().includes(needle) ||
-        server.description.toLowerCase().includes(needle)
-      );
-    },
-    [query],
+    [],
   );
 
   const create = useCallback(
     async (input: McpServerInput): Promise<boolean> => {
       try {
         const created = await window.imb.mcp.create(input);
-        if (matchesQuery(created)) {
-          // Newest id sorts last (id ASC) — append locally so the created
-          // server is immediately visible and selected.
-          mutate((current) => [...current, created]);
-          setSelectedId(created.id);
-        } else {
-          reset();
-        }
+        // Newest id sorts last (id ASC) — append so it is immediately visible
+        // and the auto-select effect picks it up when it matches the filter.
+        appStore.addMcp(created);
+        setSelectedId(created.id);
         setError(null);
         return true;
       } catch (err) {
@@ -117,22 +98,17 @@ export function McpModule(): React.JSX.Element {
         return false;
       }
     },
-    [matchesQuery, mutate, reset],
+    [],
   );
 
-  const remove = useCallback(
-    async (id: number): Promise<void> => {
-      try {
-        const removed = await window.imb.mcp.remove(id);
-        if (removed) {
-          mutate((current) => current.filter((server) => server.id !== id));
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    },
-    [mutate],
-  );
+  const remove = useCallback(async (id: number): Promise<void> => {
+    try {
+      const removed = await window.imb.mcp.remove(id);
+      if (removed) appStore.removeMcp(id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
 
   const deleteSelected = useCallback(async (): Promise<void> => {
     const ids = [...multi.selectedKeys];
@@ -141,12 +117,12 @@ export function McpModule(): React.JSX.Element {
       setDeleteOpen(false);
       for (const id of ids) {
         await window.imb.mcp.remove(id);
+        appStore.removeMcp(id);
       }
-      reset();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [multi.selectedKeys, reset]);
+  }, [multi.selectedKeys]);
 
   const toggleSelectAll = useCallback((): void => {
     if (multi.selectedKeys.size === servers.length && servers.length > 0) {
@@ -176,9 +152,6 @@ export function McpModule(): React.JSX.Element {
         items={servers}
         getItemKey={(server) => server.id}
         loading={loading}
-        loadingMore={loadingMore}
-        hasMore={hasMore}
-        loadMore={() => void loadMore()}
         loadError={listError}
         selectable
         selectedKeys={multi.selectedKeys}

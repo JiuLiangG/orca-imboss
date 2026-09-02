@@ -1,14 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { t } from "../../../../../../shared/libs/l10n";
-import type {
-  Employee,
-  EmployeeInput,
-  InstalledSkill,
-  McpServer,
-  PageQuery,
-  PageResult,
-} from "../../../../../../shared/types";
-import { useInfiniteList } from "../../../../hooks/use-infinite-list";
+import type { Employee, EmployeeInput } from "../../../../../../shared/types";
+import { appStore, useApp } from "../../../../app-store";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
 import { ModuleView } from "../../../app-shell";
 import { Avatar } from "../../../avatar";
@@ -28,8 +21,6 @@ import { employeeAvatarSrc } from "../employee-avatar";
 import { EmployeeDetail } from "../employee-detail";
 import { EmployeeRecruitModal } from "../employee-recruit-modal";
 
-const PAGE_SIZE = 50;
-
 /** Employees module: list (assistant pinned atop, non-removable) + detail + recruit. */
 export function EmployeesModule(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -39,54 +30,60 @@ export function EmployeesModule(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
 
-  // Options for the multiselects / model select.
-  const [mcpOptions, setMcpOptions] = useState<McpServer[]>([]);
-  const [skillOptions, setSkillOptions] = useState<InstalledSkill[]>([]);
-  const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const { data } = useApp();
+  const loading = data.employees.loading;
+  const listError = data.employees.error;
 
-  const refreshOptions = useCallback(async (): Promise<void> => {
-    const [mcp, skills, models] = await Promise.all([
-      window.imb.mcp.list(),
-      window.imb.skills.list(),
-      window.imb.models.list(),
-    ]);
-    setMcpOptions(mcp);
-    setSkillOptions(skills);
-    setModelOptions(models.map((m) => `${m.provider}/${m.id}`));
+  // Centralized in appStore (loaded once at startup); filter client-side.
+  const employees = useMemo((): Employee[] => {
+    // Valtio snapshot elements are deeply readonly; clone the nested ref
+    // arrays into mutable copies so they satisfy the Employee type.
+    const source = data.employees.items.map((employee) => ({
+      ...employee,
+      mcp: [...employee.mcp],
+      skills: [...employee.skills],
+    }));
+    const needle = query.trim().toLowerCase();
+    if (!needle) return source;
+    return source.filter(
+      (employee) =>
+        employee.name.toLowerCase().includes(needle) ||
+        employee.role.toLowerCase().includes(needle),
+    );
+  }, [data.employees.items, query]);
+
+  // Model options still come via IPC (models out of scope); loaded once.
+  const [modelOptions, setModelOptions] = useState<string[]>([]);
+  useEffect(() => {
+    void window.imb.models
+      .list()
+      .then((models) =>
+        setModelOptions(models.map((m) => `${m.provider}/${m.id}`)),
+      )
+      .catch(() => {
+        // Best-effort: model selects stay empty on failure.
+      });
   }, []);
 
-  const fetchPage = useCallback(
-    (page: PageQuery): Promise<PageResult<Employee>> =>
-      window.imb.employees.listPage(page),
-    [],
-  );
-  const {
-    items: employees,
-    loading,
-    loadingMore,
-    hasMore,
-    error: listError,
-    loadMore,
-    reset,
-    mutate,
-    resetVersion,
-  } = useInfiniteList(fetchPage, { query, pageSize: PAGE_SIZE });
-
+  // Re-fetch on revisit when the startup load failed (best-effort).
   useEffect(() => {
-    void refreshOptions();
-    const off = window.imb.skills.onChanged(() => void refreshOptions());
-    return off;
-  }, [refreshOptions]);
+    appStore.ensureEmployees();
+  }, []);
 
   const multi = useMultiSelect<Employee, number>({
     getKey: (employee) => employee.id,
     items: employees,
     onActivate: (employee) => setSelectedId(employee.id),
-    resetVersion,
     // The built-in assistant is always pinned but never selectable; bulk
     // actions and "Select all" must not be able to reach it.
     isSelectable: (employee) => employee.id !== 0,
   });
+  const clearSelection = multi.clear;
+
+  // Query changes reset the selection.
+  useEffect(() => {
+    clearSelection();
+  }, [clearSelection, query]);
 
   // Auto-select the first employee after page 1 loads (and recover when the
   // selected employee disappears, e.g. bulk delete).
@@ -111,13 +108,7 @@ export function EmployeesModule(): React.JSX.Element {
     async (id: number, input: EmployeeInput): Promise<boolean> => {
       try {
         const updated = await window.imb.employees.update(id, input);
-        if (updated) {
-          mutate((current) =>
-            current.map((employee) =>
-              employee.id === id ? updated : employee,
-            ),
-          );
-        }
+        if (updated) appStore.replaceEmployee(updated);
         setError(null);
         return true;
       } catch (err) {
@@ -125,33 +116,16 @@ export function EmployeesModule(): React.JSX.Element {
         return false;
       }
     },
-    [mutate],
-  );
-
-  const matchesQuery = useCallback(
-    (employee: Employee): boolean => {
-      const needle = query.trim().toLowerCase();
-      if (!needle) return true;
-      return (
-        employee.name.toLowerCase().includes(needle) ||
-        employee.role.toLowerCase().includes(needle)
-      );
-    },
-    [query],
+    [],
   );
 
   const create = useCallback(
     async (input: EmployeeInput): Promise<Employee | null> => {
       try {
         const created = await window.imb.employees.create(input);
-        if (matchesQuery(created)) {
-          // Newest id sorts last (id ASC) — append locally so the created
-          // employee is immediately visible and selected.
-          mutate((current) => [...current, created]);
-          setSelectedId(created.id);
-        } else {
-          reset();
-        }
+        // Newest id sorts last (id ASC) — append so it is immediately visible.
+        appStore.addEmployee(created);
+        setSelectedId(created.id);
         setError(null);
         return created;
       } catch (err) {
@@ -159,22 +133,17 @@ export function EmployeesModule(): React.JSX.Element {
         return null;
       }
     },
-    [matchesQuery, mutate, reset],
+    [],
   );
 
-  const remove = useCallback(
-    async (id: number): Promise<void> => {
-      try {
-        const removed = await window.imb.employees.remove(id);
-        if (removed) {
-          mutate((current) => current.filter((employee) => employee.id !== id));
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    },
-    [mutate],
-  );
+  const remove = useCallback(async (id: number): Promise<void> => {
+    try {
+      const removed = await window.imb.employees.remove(id);
+      if (removed) appStore.removeEmployee(id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
 
   const deleteSelected = useCallback(async (): Promise<void> => {
     const ids = [...multi.selectedKeys].filter((id) => id !== 0);
@@ -183,12 +152,12 @@ export function EmployeesModule(): React.JSX.Element {
       setDeleteOpen(false);
       for (const id of ids) {
         await window.imb.employees.remove(id);
+        appStore.removeEmployee(id);
       }
-      reset();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [multi.selectedKeys, reset]);
+  }, [multi.selectedKeys]);
 
   const toggleSelectAll = useCallback((): void => {
     // Compare against selectable rows only (the assistant is never selectable,
@@ -223,9 +192,6 @@ export function EmployeesModule(): React.JSX.Element {
         items={employees}
         getItemKey={(employee) => employee.id}
         loading={loading}
-        loadingMore={loadingMore}
-        hasMore={hasMore}
-        loadMore={() => void loadMore()}
         loadError={listError}
         selectable
         selectedKeys={multi.selectedKeys}
@@ -283,14 +249,18 @@ export function EmployeesModule(): React.JSX.Element {
     <EmployeeDetail
       key={selected.id}
       employee={selected}
-      mcpOptions={mcpOptions.map((m) => ({ value: m.name, label: m.name }))}
-      skillOptions={skillOptions.map((s) => ({
+      mcpOptions={data.mcp.items.map((m) => ({
+        value: m.name,
+        label: m.name,
+      }))}
+      skillOptions={data.skills.items.map((s) => ({
         value: s.name,
         label: s.name,
       }))}
       modelOptions={modelOptions.map((m) => ({ value: m, label: m }))}
       onPatch={(input) => patch(selected.id, input)}
       onRemove={() => void remove(selected.id)}
+      onAvatarUpdated={(employee) => appStore.replaceEmployee(employee)}
     />
   ) : null;
 
@@ -322,8 +292,11 @@ export function EmployeesModule(): React.JSX.Element {
       <EmployeeRecruitModal
         open={recruitOpen}
         onClose={() => setRecruitOpen(false)}
-        mcpOptions={mcpOptions.map((m) => ({ value: m.name, label: m.name }))}
-        skillOptions={skillOptions.map((s) => ({
+        mcpOptions={data.mcp.items.map((m) => ({
+          value: m.name,
+          label: m.name,
+        }))}
+        skillOptions={data.skills.items.map((s) => ({
           value: s.name,
           label: s.name,
         }))}

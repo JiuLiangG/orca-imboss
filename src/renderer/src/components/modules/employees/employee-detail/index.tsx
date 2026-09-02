@@ -20,6 +20,8 @@ export interface EmployeeDetailProps {
   modelOptions: SelectOption[];
   onPatch: (input: EmployeeInput) => Promise<boolean>;
   onRemove: () => void;
+  /** Called when the avatar file is replaced (keeps appStore in sync). */
+  onAvatarUpdated?: (employee: Employee) => void;
 }
 
 const SAVE_DEBOUNCE_MS = 400;
@@ -32,6 +34,7 @@ export function EmployeeDetail({
   modelOptions,
   onPatch,
   onRemove,
+  onAvatarUpdated,
 }: EmployeeDetailProps): React.JSX.Element {
   const isAssistant = employee.id === 0;
   // The built-in assistant's profile only exposes name, systemPrompt, modelId;
@@ -90,6 +93,7 @@ export function EmployeeDetail({
       );
       if (updated) {
         setAvatarUrl(updated.avatarUrl);
+        onAvatarUpdated?.(updated);
       }
     } catch (err) {
       setAvatarError(err instanceof Error ? err.message : String(err));

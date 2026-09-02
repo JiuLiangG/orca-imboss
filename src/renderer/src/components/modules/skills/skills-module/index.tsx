@@ -1,11 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { t } from "../../../../../../shared/libs/l10n";
-import type {
-  InstalledSkill,
-  PageQuery,
-  PageResult,
-} from "../../../../../../shared/types";
-import { useInfiniteList } from "../../../../hooks/use-infinite-list";
+import type { InstalledSkill } from "../../../../../../shared/types";
+import { appStore, useApp } from "../../../../app-store";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
 import { ModuleView } from "../../../app-shell";
 import { Avatar } from "../../../avatar";
@@ -20,8 +16,6 @@ import { SearchInput } from "../../../search-input";
 import "../../module-common.css";
 import "./index.css";
 
-const PAGE_SIZE = 50;
-
 /** Skills module: read-only list/detail + folder import + uninstall. */
 export function SkillsModule(): React.JSX.Element {
   const [selectedName, setSelectedName] = useState<string | null>(null);
@@ -34,34 +28,37 @@ export function SkillsModule(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
 
-  const fetchPage = useCallback(
-    (page: PageQuery): Promise<PageResult<InstalledSkill>> =>
-      window.imb.skills.listPage(page),
-    [],
-  );
-  const {
-    items: skills,
-    loading,
-    loadingMore,
-    hasMore,
-    error: listError,
-    loadMore,
-    reset,
-    mutate,
-    resetVersion,
-  } = useInfiniteList(fetchPage, { query, pageSize: PAGE_SIZE });
+  const { data } = useApp();
+  const loading = data.skills.loading;
+  const listError = data.skills.error;
 
-  // Re-list when skills change outside this module (install dialog, tools).
-  useEffect(() => {
-    return window.imb.skills.onChanged(() => reset());
-  }, [reset]);
+  // Centralized in appStore (loaded once at startup); filter client-side.
+  const skills = useMemo((): readonly InstalledSkill[] => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return data.skills.items;
+    return data.skills.items.filter(
+      (skill) =>
+        skill.name.toLowerCase().includes(needle) ||
+        (skill.description ?? "").toLowerCase().includes(needle),
+    );
+  }, [data.skills.items, query]);
 
   const multi = useMultiSelect<InstalledSkill, string>({
     getKey: (skill) => skill.name,
     items: skills,
     onActivate: (skill) => setSelectedName(skill.name),
-    resetVersion,
   });
+  const clearSelection = multi.clear;
+
+  // Query changes reset the selection.
+  useEffect(() => {
+    clearSelection();
+  }, [clearSelection, query]);
+
+  // Re-fetch on revisit when the startup load failed (best-effort).
+  useEffect(() => {
+    appStore.ensureSkills();
+  }, []);
 
   // Auto-select the first skill after page 1 loads (and recover when the
   // selected skill disappears, e.g. uninstall).
@@ -86,9 +83,7 @@ export function SkillsModule(): React.JSX.Element {
       // `null` = user cancelled; `[]` = nothing importable. Best-effort import:
       // keep any valid skills with no UI feedback beyond re-listing them.
       if (names !== null && names.length > 0) {
-        // Newest names sort last (name ASC, in-memory source) — refresh so
-        // the imported skills appear in their correct position.
-        reset();
+        await appStore.reloadSkills();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -102,7 +97,7 @@ export function SkillsModule(): React.JSX.Element {
     try {
       await window.imb.skills.uninstall(skill.name);
       setUninstallTarget(null);
-      mutate((current) => current.filter((s) => s.name !== skill.name));
+      await appStore.reloadSkills();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -119,7 +114,7 @@ export function SkillsModule(): React.JSX.Element {
         await window.imb.skills.uninstall(name);
       }
       setBulkOpen(false);
-      reset();
+      await appStore.reloadSkills();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -157,9 +152,6 @@ export function SkillsModule(): React.JSX.Element {
         items={skills}
         getItemKey={(skill) => skill.name}
         loading={loading}
-        loadingMore={loadingMore}
-        hasMore={hasMore}
-        loadMore={() => void loadMore()}
         loadError={listError}
         selectable
         selectedKeys={multi.selectedKeys}
