@@ -4,7 +4,6 @@ import { homedir } from "os";
 import { basename, dirname, extname, join } from "path";
 import { Type } from "typebox";
 import type {
-  EmployeeInput,
   EmployeeSession,
   Message,
   MessageAttachment,
@@ -34,7 +33,7 @@ const getEmployee = employeesService.getEmployee;
  * chat) Pi session with a read cursor.
  *
  * The tool set is role-based: the assistant (employee id 0) gets every
- * orchestration tool (`set_employee`, `create_chat`, `send_message`,
+ * orchestration tool (`set_employees`, `create_chat`, `send_message`,
  * `read_chat`, `list_employees`, `notify`, `set_cronjob`, `remove_cronjob`); a
  * participant employee gets only `send_message` and `read_chat`. All agent runs
  * are serialized per (employee, chat) via the session queue. `createTeamToolDefinitions`
@@ -273,55 +272,49 @@ function assertActiveEmployee(employeeId: number): void {
 // tools
 // ---------------------------------------------------------------------------
 
-/** `set_employee` — create (omit `id`) or update (pass `id`) an employee. */
-const setEmployeeTool: AnyPiTool = {
-  name: "set_employee",
-  label: "Set employee",
+/** `set_employees` — batch create (omit `id`) or update (pass `id`) employees. */
+const setEmployeesTool: AnyPiTool = {
+  name: "set_employees",
+  label: "Set employees",
   description:
-    "Create or update an employee (name, role, system prompt, linked MCP servers, skills, model). " +
-    "Omit `id` to create a new employee; pass `id` to update an existing one.",
-  promptSnippet: "set_employee (create/edit employee)",
+    "Batch create or update employees (name, role, system prompt, linked MCP servers, skills, model). " +
+    "Each item omits `id` to create a new employee or passes `id` to update an existing one. " +
+    "Returns the array of employee ids created or updated.",
+  promptSnippet: "set_employees (batch create/edit employees)",
   parameters: Type.Object({
-    id: Type.Optional(Type.Integer({ minimum: 1 })),
-    name: Type.Optional(Type.String({ maxLength: 200 })),
-    role: Type.Optional(Type.String({ maxLength: 200 })),
-    systemPrompt: Type.Optional(Type.String({ maxLength: 100000 })),
-    mcp: Type.Optional(
-      Type.Array(Type.String({ maxLength: 256 }), { maxItems: 256 }),
+    employees: Type.Array(
+      Type.Object({
+        id: Type.Optional(Type.Integer({ minimum: 1 })),
+        name: Type.Optional(Type.String({ maxLength: 200 })),
+        role: Type.Optional(Type.String({ maxLength: 200 })),
+        systemPrompt: Type.Optional(Type.String({ maxLength: 100000 })),
+        mcp: Type.Optional(
+          Type.Array(Type.String({ maxLength: 256 }), { maxItems: 256 }),
+        ),
+        skills: Type.Optional(
+          Type.Array(Type.String({ maxLength: 256 }), { maxItems: 256 }),
+        ),
+        modelId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+      }),
+      { minItems: 1, maxItems: 50 },
     ),
-    skills: Type.Optional(
-      Type.Array(Type.String({ maxLength: 256 }), { maxItems: 256 }),
-    ),
-    modelId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   }),
   execute: async (_toolCallId, params) => {
     const input = params as {
-      id?: number;
-      name?: string;
-      role?: string;
-      systemPrompt?: string;
-      mcp?: string[];
-      skills?: string[];
-      modelId?: string | null;
+      employees: {
+        id?: number;
+        name?: string;
+        role?: string;
+        systemPrompt?: string;
+        mcp?: string[];
+        skills?: string[];
+        modelId?: string | null;
+      }[];
     };
-    // The built-in assistant (id 0) is not editable through the tool.
-    if (input.id !== undefined && input.id === 0) {
-      throw new Error("The built-in assistant cannot be edited via tools.");
-    }
-    const payload: EmployeeInput = {
-      name: input.name,
-      role: input.role,
-      systemPrompt: input.systemPrompt,
-      mcp: input.mcp,
-      skills: input.skills,
-      modelId: input.modelId,
-    };
-    const employee =
-      input.id !== undefined
-        ? employeesService.updateEmployee(input.id, payload)
-        : employeesService.createEmployee(payload);
-    if (!employee) throw new Error("Employee not found.");
-    return toolResult(employee);
+    const ids = employeesService.upsertEmployees(
+      input.employees.map((item) => ({ ...item })),
+    );
+    return toolResult({ ids });
   },
 };
 
@@ -646,7 +639,7 @@ void addParticipantTool;
 /**
  * Build the role-based tool set for the calling agent.
  *
- * - Assistant (id 0): orchestration tools — `set_employee`, `create_chat`,
+ * - Assistant (id 0): orchestration tools — `set_employees`, `create_chat`,
  *   `send_message`, `read_chat`, `list_employees`, `notify`, `set_cronjob`,
  *   `remove_cronjob`.
  * - Participant employee: `send_message`, `read_chat` only.
@@ -658,7 +651,7 @@ export function createTeamToolDefinitions(
   const isAssistant = employeeId === ASSISTANT_ID;
   const tools: AnyPiTool[] = [];
   if (isAssistant) {
-    tools.push(setEmployeeTool);
+    tools.push(setEmployeesTool);
     tools.push(createChatTool(env));
     tools.push(listEmployeesTool);
     tools.push(notifyTool);

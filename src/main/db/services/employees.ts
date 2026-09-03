@@ -42,6 +42,14 @@ function toEmployee(row: EmployeeRow): Employee {
 /** The built-in assistant's reserved id — it must always exist. */
 export const ASSISTANT_ID = 0;
 
+/** Hard cap on a single `set_employees` batch (mirrors the tool's `maxItems`). */
+const MAX_BATCH_SIZE = 50;
+
+/** One employee in a `set_employees` batch: omit `id` to create, pass `id` to update. */
+export interface EmployeeUpsertInput extends EmployeeInput {
+  id?: number;
+}
+
 const SELECT_ACTIVE =
   "SELECT * FROM employees WHERE disabled = 0 ORDER BY id ASC";
 const SELECT_BY_ID = "SELECT * FROM employees WHERE id = ?";
@@ -265,6 +273,39 @@ export function updateEmployee(
       id,
     );
   return getEmployee(id);
+}
+
+/**
+ * Create and/or update multiple employees in one atomic transaction.
+ *
+ * Each item: omit `id` to create, pass `id` to update. Returns the ordered
+ * list of resulting employee ids (created or updated). A thrown error (bad
+ * field, unknown id, or the built-in assistant id 0) rolls back the whole
+ * batch — no partial writes. Reuses the single-item validators/helpers.
+ */
+export function upsertEmployees(items: EmployeeUpsertInput[]): number[] {
+  if (items.length === 0) throw new Error("At least one employee is required.");
+  if (items.length > MAX_BATCH_SIZE) {
+    throw new Error(`Too many employees in one batch (max ${MAX_BATCH_SIZE}).`);
+  }
+  const db = getDB();
+  const ids: number[] = [];
+  db.transaction(() => {
+    for (const item of items) {
+      // The built-in assistant (id 0) is not editable through the batch tool.
+      if (item.id !== undefined && item.id === ASSISTANT_ID) {
+        throw new Error("The built-in assistant cannot be edited via tools.");
+      }
+      if (item.id !== undefined) {
+        const updated = updateEmployee(item.id, item);
+        if (!updated) throw new Error(`Employee ${item.id} not found.`);
+        ids.push(updated.id);
+      } else {
+        ids.push(createEmployee(item).id);
+      }
+    }
+  })();
+  return ids;
 }
 
 /**
