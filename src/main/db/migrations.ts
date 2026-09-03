@@ -34,15 +34,20 @@ const MIGRATIONS: Array<(db: Database) => void> = [
 
     db.exec(`
       CREATE TABLE IF NOT EXISTS chats (
-        id           INTEGER PRIMARY KEY,
-        title        TEXT NOT NULL DEFAULT '',
-        participants TEXT NOT NULL DEFAULT '[]',
-        unread       INTEGER NOT NULL DEFAULT 0,
-        created_at   INTEGER NOT NULL DEFAULT (CAST(strftime('%s', 'now') AS INTEGER))
+        id            INTEGER PRIMARY KEY,
+        title         TEXT NOT NULL DEFAULT '',
+        participants  TEXT NOT NULL DEFAULT '[]',
+        unread        INTEGER NOT NULL DEFAULT 0,
+        created_at    INTEGER NOT NULL DEFAULT (CAST(strftime('%s', 'now') AS INTEGER)),
+        from_chat_id  INTEGER
       );
 
       CREATE INDEX IF NOT EXISTS idx_chats_created_id
         ON chats(created_at, id);
+
+      -- Link a group chat to the user chat that spawned it (from chat link).
+      CREATE INDEX IF NOT EXISTS idx_chats_from
+        ON chats(from_chat_id);
 
       CREATE TABLE IF NOT EXISTS messages (
         id                 INTEGER PRIMARY KEY,

@@ -1,11 +1,15 @@
-import { homedir } from "os";
-import { ASSISTANT_SYSTEM_PROMPT } from "../../shared/constants";
-import { getAgentSessionsDir } from "../data-dir";
+import {
+  ASSISTANT_SYSTEM_PROMPT,
+  BASE_TOOL_SNIPPETS,
+} from "../../shared/constants";
+import { getAgentRoot, getAgentSessionsDir, getWorkDir } from "../data-dir";
 import { ASSISTANT_ID, getEmployee } from "../db/services/employees";
 import { listMcpServers } from "../db/services/mcp";
 import { getSession } from "../db/services/sessions";
 import { getSetting } from "../db/services/settings";
 import { createTeamToolDefinitions } from "./builtin-tools";
+import type { EmployeeToolEntry } from "./employee-prompt";
+import { buildEmployeeSystemPrompt } from "./employee-prompt";
 import type { AgentEnvironment } from "./environment";
 import { createMcpToolDefinitions, type AnyPiTool } from "./mcp";
 import { getModelRuntime, type ModelRuntimeInstance } from "./model-runtime";
@@ -85,9 +89,9 @@ export class AgentSession {
       return { replied: false };
     }
 
-    const cwd = homedir();
-    // Working directory for the session & its shell tools: the user's home
-    // dir (a personal agent works on the user's files). Overridable later.
+    // Working directory for the session & its shell tools: the app's own
+    // isolated workdir (~/.imboss/workdir), not the user's home dir.
+    const cwd = getWorkDir();
     return this._runTurn(pi, {
       cwd,
       message,
@@ -95,6 +99,7 @@ export class AgentSession {
       modelRuntime,
       employeeSystemPrompt: employee?.systemPrompt ?? "",
       mcpServerNames: employee?.mcp ?? [],
+      employeeId: employee?.id ?? this._context?.employeeId ?? -1,
       isAssistant: employee?.id === ASSISTANT_ID,
     });
   }
@@ -156,6 +161,7 @@ export class AgentSession {
       modelRuntime: ModelRuntimeInstance;
       employeeSystemPrompt: string;
       mcpServerNames: string[];
+      employeeId: number;
       isAssistant: boolean;
     },
   ): Promise<AgentPromptResult> {
@@ -185,8 +191,8 @@ export class AgentSession {
         : [];
       const customTools: AnyPiTool[] = [
         ...shellTools,
-        ...mcp.tools,
         ...teamTools,
+        ...mcp.tools,
       ];
       const activeToolNames = [
         "read",
@@ -219,25 +225,55 @@ export class AgentSession {
       }
 
       const settingsManager = pi.SettingsManager.inMemory();
-      // For the assistant, the hardcoded ASSISTANT_SYSTEM_PROMPT replaces the
-      // SDK base; the editable employee systemPrompt is appended below it.
-      // Regular employees keep the `base + editable` layering.
-      const systemPromptOverride = args.isAssistant
-        ? (): string =>
-            [ASSISTANT_SYSTEM_PROMPT, args.employeeSystemPrompt]
-              .filter((part) => part.trim().length > 0)
-              .join("\n\n")
-        : args.employeeSystemPrompt.trim().length > 0
-          ? (base: string | undefined): string =>
-              base && base.trim().length > 0
-                ? `${base}\n\n${args.employeeSystemPrompt}`
-                : args.employeeSystemPrompt
-          : undefined;
+
+      // Enumeration of the active tools for this employee-session's `[tools]`
+      // block: the SDK core tools use their base snippets; MCP + team `imb_*`
+      // tools use their `promptSnippet` (falling back to the description).
+      const toolEntries = buildEmployeeToolEntries(
+        activeToolNames,
+        customTools,
+      );
+
+      // Current local date (`yyyy-MM-dd`) for the `Today is ...` line.
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+      // Every employee session goes fully custom (decision 8): the SDK base
+      // prompt is dropped and the app builds persona + `[builtinSkills]` +
+      // `[tools]` + Today/Employee ID. The SDK still appends
+      // `<project_context>`, `[skills]` and a trailing `Current working
+      // directory` line after the override.
+      const systemPromptOverride = (): string =>
+        buildEmployeeSystemPrompt({
+          personaParts: args.isAssistant
+            ? [ASSISTANT_SYSTEM_PROMPT, args.employeeSystemPrompt]
+            : [args.employeeSystemPrompt],
+          employeeId: args.employeeId,
+          toolEntries,
+          today,
+        });
+
+      // Anchor `<project_context>` to the app's `~/.imboss/agent` dir only,
+      // dropping any ancestor AGENTS.md files outside it (decision 5).
+      const agentsFilesOverride = (base: {
+        agentsFiles: Array<{ path: string; content: string }>;
+      }) => {
+        const root = getAgentRoot().replace(/\\/g, "/");
+        const prefix = root.endsWith("/") ? root : `${root}/`;
+        return {
+          agentsFiles: base.agentsFiles.filter((f) => {
+            const path = f.path.replace(/\\/g, "/");
+            return path === root || path.startsWith(prefix);
+          }),
+        };
+      };
+
       const resourceLoader = new pi.DefaultResourceLoader({
         cwd,
         agentDir: this._env.rootDir,
         settingsManager,
         systemPromptOverride,
+        agentsFilesOverride,
       });
       await resourceLoader.reload();
 
@@ -270,6 +306,39 @@ export class AgentSession {
       }
     }
   }
+}
+
+/**
+ * Resolve the ordered entries for the `[tools]` block from a session's active
+ * tool names. Core tools (read/bash/edit/write) map to `BASE_TOOL_SNIPPETS`;
+ * custom tools (MCP + team `imb_*`) use their `promptSnippet` (falling back to
+ * the description). Names that appear twice in `activeToolNames` (bash and
+ * PowerShell are both base tools and shell definitions) are deduplicated.
+ */
+function buildEmployeeToolEntries(
+  activeToolNames: string[],
+  customTools: AnyPiTool[],
+): EmployeeToolEntry[] {
+  const byName = new Map<string, AnyPiTool>(
+    customTools.map((tool) => [tool.name, tool]),
+  );
+  const entries: EmployeeToolEntry[] = [];
+  const seen = new Set<string>();
+  for (const name of activeToolNames) {
+    if (seen.has(name)) continue;
+    seen.add(name);
+    const base = BASE_TOOL_SNIPPETS[name];
+    if (base) {
+      entries.push({ name, snippet: base });
+      continue;
+    }
+    const custom = byName.get(name);
+    const snippet = custom?.promptSnippet ?? custom?.description;
+    if (custom && snippet) {
+      entries.push({ name, snippet });
+    }
+  }
+  return entries;
 }
 
 /**

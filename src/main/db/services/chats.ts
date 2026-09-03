@@ -15,6 +15,7 @@ interface ChatRow {
   participants: string;
   unread: number;
   created_at: number;
+  from_chat_id: number | null;
 }
 
 function toChat(row: ChatRow): Chat {
@@ -24,6 +25,7 @@ function toChat(row: ChatRow): Chat {
     participants: parseNumberArray(row.participants),
     unread: row.unread ?? 0,
     createdAt: row.created_at,
+    fromChatId: row.from_chat_id ?? null,
   };
 }
 
@@ -55,7 +57,7 @@ export function getChat(id: number): Chat | null {
 export function listChatSummaries(): ChatSummary[] {
   const rows = getDB()
     .prepare(
-      `SELECT c.id, c.title, c.participants, c.unread, c.created_at,
+      `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
               (SELECT m.content FROM messages m WHERE m.chat_id = c.id
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
               (SELECT m.created_at FROM messages m WHERE m.chat_id = c.id
@@ -173,7 +175,7 @@ export function listChatSummariesPage(
 
   const rows = db
     .prepare(
-      `SELECT c.id, c.title, c.participants, c.unread, c.created_at,
+      `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
               (SELECT m.content FROM messages m WHERE m.chat_id = c.id
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
               (SELECT m.created_at FROM messages m WHERE m.chat_id = c.id
@@ -200,7 +202,11 @@ export function listChatSummariesPage(
  * Create a group chat. Participants referencing unknown employees are
  * dropped defensively (participants is a JSON column, not FK-enforced).
  */
-export function createChat(title: string, participants: number[]): Chat {
+export function createChat(
+  title: string,
+  participants: number[],
+  fromChatId?: number | null,
+): Chat {
   const db = getDB();
   const safeTitle = title.trim();
   if (safeTitle.length > 200) throw new Error("Chat title is too long.");
@@ -212,13 +218,24 @@ export function createChat(title: string, participants: number[]): Chat {
   );
   const unique = [...new Set(participants)].filter((id) => knownIds.has(id));
 
+  // Only a valid chat id is stored as `from`; otherwise the chat is a root.
+  const safeFrom =
+    fromChatId != null && Number.isSafeInteger(fromChatId) && fromChatId > 0
+      ? fromChatId
+      : null;
+
   // Guard against `lastInsertRowid` ever handing out our reserved-ish
   // sequence unexpectedly: chats start at 1 (assistant id 0 lives elsewhere).
   const result = db
     .prepare(
-      "INSERT INTO chats (title, participants, created_at) VALUES (?, ?, ?)",
+      "INSERT INTO chats (title, participants, from_chat_id, created_at) VALUES (?, ?, ?, ?)",
     )
-    .run(safeTitle, stringifyArray(unique), Math.floor(Date.now() / 1000));
+    .run(
+      safeTitle,
+      stringifyArray(unique),
+      safeFrom,
+      Math.floor(Date.now() / 1000),
+    );
   return getChat(Number(result.lastInsertRowid)) as Chat;
 }
 

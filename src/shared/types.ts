@@ -71,6 +71,8 @@ export interface Chat {
   unread: number;
   /** UNIX timestamp in seconds (all date-kind fields are INTEGER seconds). */
   createdAt: number;
+  /** Id of the user chat that spawned this group chat, or null for a root chat. */
+  fromChatId: number | null;
 }
 
 /** List item of the chat module: chat + derived last-message preview. */

@@ -352,10 +352,25 @@ function createChatTool(env: AgentEnvironment): AnyPiTool {
       };
       for (const pid of input.participants) assertActiveEmployee(pid);
 
+      // An optional `card.chatID` links the new group chat back to the user
+      // chat that spawned it (`from`). Validate it before committing anything
+      // so an invalid id never leaves a half-created chat behind.
+      let cardChatId: number | undefined;
+      if (input.card !== undefined) {
+        cardChatId = Number(input.card.chatID);
+        if (!Number.isSafeInteger(cardChatId) || cardChatId <= 0) {
+          throw new Error("card.chatID must be a valid chat id.");
+        }
+      }
+
       const db = getDB();
       // Atomic: chat row + one session row per participant commit together.
       const { chat, sessionRecords } = db.transaction(() => {
-        const chat = chatsService.createChat(input.title, input.participants);
+        const chat = chatsService.createChat(
+          input.title,
+          input.participants,
+          cardChatId,
+        );
         const records: EmployeeSession[] = [];
         for (const pid of chat.participants) {
           const path = sessionPathFor(chat.id, pid);
@@ -377,11 +392,7 @@ function createChatTool(env: AgentEnvironment): AnyPiTool {
         ),
       );
 
-      if (input.card !== undefined) {
-        const cardChatId = Number(input.card.chatID);
-        if (!Number.isSafeInteger(cardChatId) || cardChatId <= 0) {
-          throw new Error("card.chatID must be a valid chat id.");
-        }
+      if (cardChatId !== undefined) {
         await performSendMessage(env, {
           senderEmployeeId: ASSISTANT_ID,
           chatId: cardChatId,
@@ -470,7 +481,12 @@ function readChatTool(employeeId: number): AnyPiTool {
       if (nextCursor !== cursor) {
         sessionsService.setReadCursor(employeeId, input.chatId, nextCursor);
       }
-      return toolResult({ chatId: input.chatId, cursor: nextCursor, messages });
+      return toolResult({
+        chatId: input.chatId,
+        from: chat.fromChatId,
+        cursor: nextCursor,
+        messages,
+      });
     },
   };
 }
