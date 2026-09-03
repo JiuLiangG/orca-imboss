@@ -144,6 +144,13 @@ const api = {
         senderEmployeeId,
         content,
       ) as Promise<Message>,
+    answer: (chatId: number, askMessageId: number, answers: object) =>
+      ipcRenderer.invoke(
+        "messages:answer",
+        chatId,
+        askMessageId,
+        answers,
+      ) as Promise<Message>,
     onChanged: (cb: (chatId: number) => void) => on("messages:changed", cb),
   },
 

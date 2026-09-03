@@ -20,8 +20,11 @@ import { ListRow } from "../../../list-row";
 import { Modal } from "../../../modal";
 import { SearchInput } from "../../../search-input";
 import { ChatInputBar } from "../chat-input-bar";
-import { AssistantMark, MessageBubble } from "../message-bubble";
+import { AssistantMark, MessageBubble, UserMark } from "../message-bubble";
+import { AskCard } from "../ask-card";
+import { AnswerCard } from "../answer-card";
 import { ProgressCard } from "../progress-card";
+import { playNotificationSound } from "../../../../utils/sound";
 import { formatChatTime, previewText } from "../relative-time";
 import "./index.css";
 
@@ -123,16 +126,14 @@ export function ChatModule(): React.JSX.Element {
 
   useEffect(() => {
     const offMessages = window.imb.messages.onChanged((chatId) => {
-      // New/reordered messages change the whole list → back to page 1.
-      reset();
-      if (chatId === selectedIdRef.current) {
-        // The user is viewing this chat: replies clear unread immediately.
-        void window.imb.chats.markRead(chatId);
-        void loadMessages(chatId);
-      }
+      // Only the currently-open chat refreshes its thread (and beeps).
+      if (chatId !== selectedIdRef.current) return;
+      void window.imb.chats.markRead(chatId);
+      void loadMessages(chatId);
+      playNotificationSound();
     });
     return offMessages;
-  }, [reset, loadMessages]);
+  }, [loadMessages]);
 
   // Scroll to bottom when messages change.
   useEffect(() => {
@@ -277,7 +278,18 @@ export function ChatModule(): React.JSX.Element {
       </div>
       <div className="imb-thread" ref={threadRef}>
         {messages.map((message) =>
-          message.kind === "task_progress" ? (
+          message.kind === "ask" ? (
+            <AskCard
+              key={`${message.chatId}-${message.id}`}
+              message={message}
+              onAnswered={() => void loadMessages(message.chatId)}
+            />
+          ) : message.kind === "answer" ? (
+            <AnswerCard
+              key={`${message.chatId}-${message.id}`}
+              message={message}
+            />
+          ) : message.kind === "task_progress" ? (
             <div
               className="imb-msg imb-other"
               key={`${message.chatId}-${message.id}`}
@@ -342,28 +354,5 @@ export function ChatModule(): React.JSX.Element {
         <p className="imb-error-text imb-chat-error">{error}</p>
       )}
     </>
-  );
-}
-
-/** User avatar mark (prototype `userAvatar` svg). */
-function UserMark(): React.JSX.Element {
-  return (
-    <svg
-      width="34"
-      height="34"
-      viewBox="0 0 36 36"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
-      <circle cx="18" cy="18" r="18" fill="#1A1A1A" />
-      <path
-        d="M12 24 L14 16 L18 20 L22 16 L24 24 L24 26 L12 26 Z"
-        fill="white"
-        stroke="white"
-        strokeWidth="1"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }

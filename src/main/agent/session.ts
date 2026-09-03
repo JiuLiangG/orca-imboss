@@ -178,7 +178,7 @@ export class AgentSession {
             env: this._env,
             employeeId: this._context.employeeId,
             chatId: this._context.chatId,
-            // Includes built-in opt-in markers (e.g. `builtin:set_cronjob`)
+            // Includes built-in opt-in markers (e.g. `builtin:imb_set_cronjob`)
             // alongside any MCP server names.
             mcp: args.mcpServerNames,
           })

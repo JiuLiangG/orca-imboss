@@ -17,8 +17,8 @@ export const ASSISTANT_SYSTEM_PROMPT =
  * name) are stored in `employee.mcp` and honored at runtime by
  * `createTeamToolDefinitions`.
  */
-export const BUILTIN_SET_CRON_MARKER = "builtin:set_cronjob";
-export const BUILTIN_REMOVE_CRON_MARKER = "builtin:remove_cronjob";
+export const BUILTIN_SET_CRON_MARKER = "builtin:imb_set_cronjob";
+export const BUILTIN_REMOVE_CRON_MARKER = "builtin:imb_remove_cronjob";
 
 // Setting keys
 export const SettingKeys = {

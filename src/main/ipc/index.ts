@@ -19,6 +19,7 @@ import {
   upsertProvider,
 } from "../agent/providers";
 import { deliver } from "../agent/session-queue";
+import { READ_CHAT_PROMPT } from "../agent/builtin-tools";
 import {
   installSkillsFromFolders,
   listSkills,
@@ -300,6 +301,28 @@ function registerMessageHandlers(): void {
       );
     },
   );
+
+  // Human (or any renderer) answers an ask message: append a kind=`answer`
+  // system message and wake the ask's sender agent so it can react.
+  ipcMain.handle(
+    "messages:answer",
+    (_event, chatId: unknown, askMessageId: unknown, answers: unknown) => {
+      const safeChatId = assertInteger(chatId, "chat id");
+      const safeAskId = assertInteger(askMessageId, "ask message id");
+      const safeAnswers = JSON.stringify(assertObject(answers, "answers"));
+      const message = messagesService.appendMessage(
+        safeChatId,
+        null,
+        safeAnswers,
+        { kind: "answer" },
+      );
+      const ask = messagesService.getMessageById(safeAskId);
+      if (ask && ask.senderEmployeeId != null) {
+        void deliver(ask.senderEmployeeId, safeChatId, READ_CHAT_PROMPT);
+      }
+      return message;
+    },
+  );
 }
 
 // --- agent sessions -------------------------------------------------------------
@@ -470,6 +493,13 @@ function assertInteger(value: unknown, field: string): number {
     throw new Error(`${field} must be an integer.`);
   }
   return value;
+}
+
+function assertObject(value: unknown, field: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${field} must be an object.`);
+  }
+  return value as Record<string, unknown>;
 }
 
 /** Validate a `PageQuery` payload defensively (cursor/query strings, sane limit). */

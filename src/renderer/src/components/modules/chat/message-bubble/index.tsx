@@ -39,7 +39,9 @@ export function MessageBubble({
             ))}
           </div>
         )}
-        {content.length > 0 && <span className="imb-bubble-text">{content}</span>}
+        {content.length > 0 && (
+          <span className="imb-bubble-text">{content}</span>
+        )}
       </div>
     </div>
   );
@@ -82,4 +84,27 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Human/user avatar mark (prototype `userAvatar` svg). */
+export function UserMark(): React.JSX.Element {
+  return (
+    <svg
+      width="34"
+      height="34"
+      viewBox="0 0 36 36"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <circle cx="18" cy="18" r="18" fill="#1A1A1A" />
+      <path
+        d="M12 24 L14 16 L18 20 L22 16 L24 24 L24 26 L12 26 Z"
+        fill="white"
+        stroke="white"
+        strokeWidth="1"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }

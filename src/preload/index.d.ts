@@ -87,6 +87,11 @@ interface IMB {
       senderEmployeeId: number | null,
       content: string,
     ): Promise<Message>;
+    answer(
+      chatId: number,
+      askMessageId: number,
+      answers: object,
+    ): Promise<Message>;
     onChanged(cb: (chatId: number) => void): () => void;
   };
 

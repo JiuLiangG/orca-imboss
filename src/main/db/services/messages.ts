@@ -192,6 +192,13 @@ export function listMessagesAfter(
   ).map(toMessage);
 }
 
+/** Fetch a single message by its global row id, or null when absent. */
+export function getMessageById(id: number): Message | null {
+  const row = getDB().prepare("SELECT * FROM messages WHERE id = ?").get(id) as
+    MessageRow | undefined;
+  return row ? toMessage(row) : null;
+}
+
 /**
  * Append one message at the end of the chat. The row id is global and
  * monotonically increasing, so per-chat conversation order is simply

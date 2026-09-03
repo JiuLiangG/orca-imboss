@@ -1,4 +1,5 @@
 import * as messagesService from "../db/services/messages";
+import { broadcast } from "../notifications";
 import { getAgentEnvironment, type AgentEnvironment } from "./environment";
 
 /**
@@ -125,6 +126,8 @@ function persistReply(
 ): void {
   try {
     messagesService.appendMessage(chatId, senderEmployeeId, reply);
+    // Tell the renderer that this chat's thread changed (cron/user reply).
+    broadcast("messages:changed", chatId);
   } catch (err) {
     console.error(
       `[session-queue] failed to persist reply in chat ${chatId}:`,

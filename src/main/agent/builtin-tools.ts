@@ -20,7 +20,7 @@ import { parseCronJobId } from "../db/services/cron";
 import * as employeesService from "../db/services/employees";
 import * as messagesService from "../db/services/messages";
 import * as sessionsService from "../db/services/sessions";
-import { notifyUnread } from "../notifications";
+import { broadcast, notifyUnread } from "../notifications";
 import type { AgentEnvironment } from "./environment";
 import type { AnyPiTool } from "./mcp";
 import { loadPiSdk } from "./pi-sdk";
@@ -37,13 +37,15 @@ const getEmployee = employeesService.getEmployee;
  * chat) Pi session with a read cursor.
  *
  * The tool set is role-based: the assistant (employee id 0) gets every
- * orchestration tool (`set_employees`, `create_chat`, `send_message`,
- * `read_chat`, `list_employees`, `notify`, `set_cronjob`, `remove_cronjob`); a
- * participant employee gets `send_message` and `read_chat`, plus `set_cronjob`
- * and/or `remove_cronjob` when the employee opted in via their "Linked MCP"
- * list. All agent runs are serialized per (employee, chat) via the session
- * queue. `createTeamToolDefinitions` captures the calling agent's identity so
- * `read_chat` knows who is reading and internal sends know who is sending.
+ * orchestration tool (`imb_set_employees`, `imb_create_chat`,
+ * `imb_send_message`, `imb_read_chat`, `imb_list_employees`, `imb_notify`,
+ * `imb_set_cronjob`, `imb_remove_cronjob`); a participant employee gets
+ * `imb_send_message`, `imb_read_chat`, `imb_ask` and `imb_answer`, plus
+ * `imb_set_cronjob` and/or `imb_remove_cronjob` when the employee opted in via
+ * their "Linked MCP" list. All agent runs are serialized per (employee, chat)
+ * via the session queue. `createTeamToolDefinitions` captures the calling
+ * agent's identity so `imb_read_chat` knows who is reading and internal sends
+ * know who is sending.
  */
 
 export interface TeamToolOptions {
@@ -130,8 +132,8 @@ function fireAndForgetPrompt(
 }
 
 /** Default signal sent to a participant whose chat was just written to. */
-const READ_CHAT_PROMPT =
-  "You have new messages in this chat. Call read_chat to read the latest messages and respond as appropriate.";
+export const READ_CHAT_PROMPT =
+  "You have new messages in this chat. Call imb_read_chat to read the latest messages and respond as appropriate.";
 
 // ---------------------------------------------------------------------------
 // shared internals
@@ -244,6 +246,9 @@ async function performSendMessage(
     },
   );
 
+  // Tell the renderer that this chat's thread changed (agent/cron/tool writes).
+  broadcast("messages:changed", input.chatId);
+
   for (const pid of input.notify ?? []) {
     if (!chat.participants.includes(pid)) continue;
     const target = employeesService.getEmployee(pid);
@@ -279,15 +284,15 @@ function assertActiveEmployee(employeeId: number): void {
 // tools
 // ---------------------------------------------------------------------------
 
-/** `set_employees` — batch create (omit `id`) or update (pass `id`) employees. */
+/** `imb_set_employees` — batch create (omit `id`) or update (pass `id`) employees. */
 const setEmployeesTool: AnyPiTool = {
-  name: "set_employees",
+  name: "imb_set_employees",
   label: "Set employees",
   description:
     "Batch create or update employees (name, role, system prompt, linked MCP servers, skills, model). " +
     "Each item omits `id` to create a new employee or passes `id` to update an existing one. " +
     "Returns the array of employee ids created or updated.",
-  promptSnippet: "set_employees (batch create/edit employees)",
+  promptSnippet: "imb_set_employees (batch create/edit employees)",
   parameters: Type.Object({
     employees: Type.Array(
       Type.Object({
@@ -325,15 +330,15 @@ const setEmployeesTool: AnyPiTool = {
   },
 };
 
-/** `create_chat` — new chat + one persistent session per participant. */
+/** `imb_create_chat` — new chat + one persistent session per participant. */
 function createChatTool(env: AgentEnvironment): AnyPiTool {
   return {
-    name: "create_chat",
+    name: "imb_create_chat",
     label: "Create chat",
     description:
       "Create a new chat with the given employee participants, initializing one persistent agent session per participant. " +
       "Optionally notify an existing chat via `card`.",
-    promptSnippet: "create_chat (new team chat)",
+    promptSnippet: "imb_create_chat (new team chat)",
     parameters: Type.Object({
       title: Type.String({ minLength: 1, maxLength: 200 }),
       participants: Type.Array(Type.Integer({ minimum: 1 }), { minItems: 1 }),
@@ -399,15 +404,15 @@ function createChatTool(env: AgentEnvironment): AnyPiTool {
   };
 }
 
-/** `send_message` — post as an active participant, optionally notifying others. */
+/** `imb_send_message` — post as an active participant, optionally notifying others. */
 function sendMessageTool(env: AgentEnvironment): AnyPiTool {
   return {
-    name: "send_message",
+    name: "imb_send_message",
     label: "Send message",
     description:
       "Send a message into a chat as one of the active participants, with optional file-path attachments " +
       "and notifications to other participants.",
-    promptSnippet: "send_message (post to a chat)",
+    promptSnippet: "imb_send_message (post to a chat)",
     parameters: Type.Object({
       senderEmployeeId: Type.Integer({ minimum: 0 }),
       chatId: Type.Integer({ minimum: 1 }),
@@ -440,14 +445,14 @@ function sendMessageTool(env: AgentEnvironment): AnyPiTool {
   };
 }
 
-/** `read_chat` — advance the calling agent's cursor and return new messages. */
+/** `imb_read_chat` — advance the calling agent's cursor and return new messages. */
 function readChatTool(employeeId: number): AnyPiTool {
   return {
-    name: "read_chat",
+    name: "imb_read_chat",
     label: "Read chat",
     description:
       "Read the latest messages in a chat (after your read cursor) and advance that cursor.",
-    promptSnippet: "read_chat (consume new messages)",
+    promptSnippet: "imb_read_chat (consume new messages)",
     parameters: Type.Object({
       chatId: Type.Integer({ minimum: 1 }),
     }),
@@ -470,13 +475,13 @@ function readChatTool(employeeId: number): AnyPiTool {
   };
 }
 
-/** `list_employees` — active employees, excluding the built-in assistant. */
+/** `imb_list_employees` — active employees, excluding the built-in assistant. */
 const listEmployeesTool: AnyPiTool = {
-  name: "list_employees",
+  name: "imb_list_employees",
   label: "List employees",
   description:
     "List all active employees (excluding the built-in assistant), ordered by id.",
-  promptSnippet: "list_employees (active team members)",
+  promptSnippet: "imb_list_employees (active team members)",
   parameters: Type.Object({}),
   execute: async () => {
     const employees = employeesService
@@ -486,14 +491,14 @@ const listEmployeesTool: AnyPiTool = {
   },
 };
 
-/** `notify` — bump a chat's unread and optionally raise an OS notification. */
+/** `imb_notify` — bump a chat's unread and optionally raise an OS notification. */
 const notifyTool: AnyPiTool = {
-  name: "notify",
+  name: "imb_notify",
   label: "Notify",
   description:
     "Add a non-negative delta to a chat's unread counter and, when the app window " +
     "is not focused, show an OS notification that focuses the app and jumps to that chat.",
-  promptSnippet: "notify (bump unread / OS notification)",
+  promptSnippet: "imb_notify (bump unread / OS notification)",
   parameters: Type.Object({
     chatId: Type.Integer({ minimum: 1 }),
     unread: Type.Integer({ minimum: 0 }),
@@ -509,20 +514,20 @@ const notifyTool: AnyPiTool = {
 };
 
 /**
- * `set_cronjob` — create/update a scheduled task.
+ * `imb_set_cronjob` — create/update a scheduled task.
  *
  * A participant (non-assistant) may only schedule for themselves, within a
  * chat they participate in; the assistant (id 0) remains unrestricted.
  */
 function setCronjobTool(employeeId: number): AnyPiTool {
   return {
-    name: "set_cronjob",
+    name: "imb_set_cronjob",
     label: "Set cron job",
     description:
       "Create or update a scheduled task. The id is a composite `chatId/employeeId/jobId`. " +
       "On each trigger the (employee, chat) agent session is loaded, the content is delivered, " +
       "and the reply is persisted as the employee's message.",
-    promptSnippet: "set_cronjob (schedule a task)",
+    promptSnippet: "imb_set_cronjob (schedule a task)",
     parameters: Type.Object({
       id: Type.String({ minLength: 1, maxLength: 256 }),
       schedule: Type.String({ minLength: 1, maxLength: 128 }),
@@ -560,16 +565,16 @@ function setCronjobTool(employeeId: number): AnyPiTool {
 }
 
 /**
- * `remove_cronjob` — delete a scheduled task by id.
+ * `imb_remove_cronjob` — delete a scheduled task by id.
  *
  * A participant may only remove their own cron jobs; the assistant can remove any.
  */
 function removeCronjobTool(employeeId: number): AnyPiTool {
   return {
-    name: "remove_cronjob",
+    name: "imb_remove_cronjob",
     label: "Remove cron job",
     description: "Delete a scheduled task by its id.",
-    promptSnippet: "remove_cronjob (delete a scheduled task)",
+    promptSnippet: "imb_remove_cronjob (delete a scheduled task)",
     parameters: Type.Object({
       id: Type.String({ minLength: 1, maxLength: 256 }),
     }),
@@ -586,14 +591,14 @@ function removeCronjobTool(employeeId: number): AnyPiTool {
   };
 }
 
-/** `add_participant` — add members to a chat, notify, and prompt their agents. */
+/** `imb_add_participant` — add members to a chat, notify, and prompt their agents. */
 function addParticipantTool(env: AgentEnvironment): AnyPiTool {
   return {
-    name: "add_participant",
+    name: "imb_add_participant",
     label: "Add participant",
     description:
       "Add participants to an existing chat, send a join notice, and prompt each new participant's agent session.",
-    promptSnippet: "add_participant (add members to a chat)",
+    promptSnippet: "imb_add_participant (add members to a chat)",
     parameters: Type.Object({
       chatId: Type.Integer({ minimum: 1 }),
       participants: Type.Array(
@@ -663,6 +668,127 @@ function addParticipantTool(env: AgentEnvironment): AnyPiTool {
   };
 }
 
+/** `imb_ask` — post a structured question set into a chat, notifying respondents. */
+function imbAskTool(env: AgentEnvironment): AnyPiTool {
+  return {
+    name: "imb_ask",
+    label: "Ask a question",
+    description:
+      "Post a question set into a chat as one of the active participants and notify the specified " +
+      "employees to answer. Each question offers candidate options (single or multiple) and/or a " +
+      "free-form answer; the message body is the JSON serialization of the question set.",
+    promptSnippet: "imb_ask (post a question set)",
+    parameters: Type.Object({
+      senderEmployeeId: Type.Integer({ minimum: 0 }),
+      chatId: Type.Integer({ minimum: 1 }),
+      questions: Type.Object({
+        questions: Type.Array(
+          Type.Object({
+            id: Type.String({ minLength: 1, maxLength: 128 }),
+            text: Type.String({ minLength: 1, maxLength: 2000 }),
+            type: Type.Optional(
+              Type.Union([
+                Type.Literal("single"),
+                Type.Literal("multiple"),
+                Type.Literal("free"),
+              ]),
+            ),
+            options: Type.Optional(Type.Array(Type.String(), { maxItems: 32 })),
+          }),
+          { minItems: 1, maxItems: 32 },
+        ),
+      }),
+      notify: Type.Array(Type.Integer({ minimum: 1 }), {
+        minItems: 1,
+        maxItems: 64,
+      }),
+      attachments: Type.Optional(Type.Array(Type.String(), { maxItems: 16 })),
+    }),
+    execute: async (_toolCallId, params) => {
+      const input = params as {
+        senderEmployeeId: number;
+        chatId: number;
+        questions: {
+          questions: {
+            id: string;
+            text: string;
+            type?: string;
+            options?: string[];
+          }[];
+        };
+        notify: number[];
+        attachments?: string[];
+      };
+      const message = await performSendMessage(env, {
+        senderEmployeeId: input.senderEmployeeId,
+        chatId: input.chatId,
+        kind: "ask",
+        content: JSON.stringify(input.questions),
+        attachments: input.attachments,
+        notify: input.notify,
+      });
+      return toolResult(message);
+    },
+  };
+}
+
+/** `imb_answer` — post an answer to a question set into a chat, notifying others. */
+function imbAnswerTool(env: AgentEnvironment): AnyPiTool {
+  return {
+    name: "imb_answer",
+    label: "Answer a question",
+    description:
+      "Post an answer to a previous question set into a chat as one of the active participants and " +
+      "notify the specified employees. The message body is the JSON serialization of the answers.",
+    promptSnippet: "imb_answer (post an answer)",
+    parameters: Type.Object({
+      senderEmployeeId: Type.Integer({ minimum: 0 }),
+      chatId: Type.Integer({ minimum: 1 }),
+      answers: Type.Object({
+        answers: Type.Array(
+          Type.Object({
+            questionId: Type.String({ minLength: 1, maxLength: 128 }),
+            selected: Type.Optional(
+              Type.Array(Type.String(), { maxItems: 64 }),
+            ),
+            text: Type.Optional(Type.String({ maxLength: 4000 })),
+          }),
+          { minItems: 1, maxItems: 32 },
+        ),
+      }),
+      notify: Type.Array(Type.Integer({ minimum: 1 }), {
+        minItems: 1,
+        maxItems: 64,
+      }),
+      attachments: Type.Optional(Type.Array(Type.String(), { maxItems: 16 })),
+    }),
+    execute: async (_toolCallId, params) => {
+      const input = params as {
+        senderEmployeeId: number;
+        chatId: number;
+        answers: {
+          answers: {
+            questionId: string;
+            selected?: string[];
+            text?: string;
+          }[];
+        };
+        notify: number[];
+        attachments?: string[];
+      };
+      const message = await performSendMessage(env, {
+        senderEmployeeId: input.senderEmployeeId,
+        chatId: input.chatId,
+        kind: "answer",
+        content: JSON.stringify(input.answers),
+        attachments: input.attachments,
+        notify: input.notify,
+      });
+      return toolResult(message);
+    },
+  };
+}
+
 // `add_participant` is intentionally NOT registered for any role (see plan
 // §10.1); the definition is kept in the file for reference and re-enabled by
 // uncommenting the push in `createTeamToolDefinitions`. Referenced here so the
@@ -676,11 +802,13 @@ void addParticipantTool;
 /**
  * Build the role-based tool set for the calling agent.
  *
- * - Assistant (id 0): orchestration tools — `set_employees`, `create_chat`,
- *   `send_message`, `read_chat`, `list_employees`, `notify`, `set_cronjob`,
- *   `remove_cronjob`.
- * - Participant employee: `send_message`, `read_chat`; plus `set_cronjob` /
- *   `remove_cronjob` when the corresponding opt-in marker is present in `mcp`.
+ * - Assistant (id 0): orchestration tools — `imb_set_employees`,
+ *   `imb_create_chat`, `imb_read_chat`, `imb_list_employees`, `imb_notify`,
+ *   `imb_set_cronjob`, `imb_remove_cronjob`; plus `imb_send_message`,
+ *   `imb_ask` and `imb_answer`.
+ * - Participant employee: `imb_send_message`, `imb_read_chat`, `imb_ask`,
+ *   `imb_answer`; plus `imb_set_cronjob` / `imb_remove_cronjob` when the
+ *   corresponding opt-in marker is present in `mcp`.
  */
 export function createTeamToolDefinitions(
   options: TeamToolOptions,
@@ -708,6 +836,8 @@ export function createTeamToolDefinitions(
   }
   tools.push(sendMessageTool(env));
   tools.push(readChatTool(employeeId));
+  tools.push(imbAskTool(env));
+  tools.push(imbAnswerTool(env));
   // add_participant is intentionally disabled for all roles (see plan §10.1);
   // kept in the file for reference and updated if re-enabled.
   // tools.push(addParticipantTool(env));

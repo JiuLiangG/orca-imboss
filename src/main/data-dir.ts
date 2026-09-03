@@ -46,6 +46,11 @@ export function getModelsPath(): string {
   return join(getAgentRoot(), "models.json");
 }
 
+/** Path of the cmd for agent sessions. */
+export function getWorkDir(): string {
+  return join(getDataRoot(), "workdir");
+}
+
 /**
  * Create the full data-folder layout if missing and harden permissions.
  *
@@ -63,6 +68,7 @@ export function ensureDataDir(): void {
     getAgentRoot(),
     getAgentSkillsDir(),
     getAgentSessionsDir(),
+    getWorkDir(),
   ];
   for (const dir of dirs) {
     if (!existsSync(dir)) {
