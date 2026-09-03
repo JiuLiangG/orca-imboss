@@ -8,6 +8,10 @@ import type {
   Message,
   MessageAttachment,
 } from "../../shared/types";
+import {
+  BUILTIN_REMOVE_CRON_MARKER,
+  BUILTIN_SET_CRON_MARKER,
+} from "../../shared/constants";
 import { getAgentSessionsDir } from "../data-dir";
 import { getDB } from "../db";
 import * as cron from "../cron";
@@ -35,16 +39,19 @@ const getEmployee = employeesService.getEmployee;
  * The tool set is role-based: the assistant (employee id 0) gets every
  * orchestration tool (`set_employees`, `create_chat`, `send_message`,
  * `read_chat`, `list_employees`, `notify`, `set_cronjob`, `remove_cronjob`); a
- * participant employee gets only `send_message` and `read_chat`. All agent runs
- * are serialized per (employee, chat) via the session queue. `createTeamToolDefinitions`
- * captures the calling agent's identity so `read_chat` knows who is reading and
- * internal sends know who is sending.
+ * participant employee gets `send_message` and `read_chat`, plus `set_cronjob`
+ * and/or `remove_cronjob` when the employee opted in via their "Linked MCP"
+ * list. All agent runs are serialized per (employee, chat) via the session
+ * queue. `createTeamToolDefinitions` captures the calling agent's identity so
+ * `read_chat` knows who is reading and internal sends know who is sending.
  */
 
 export interface TeamToolOptions {
   env: AgentEnvironment;
   employeeId: number;
   chatId: number;
+  /** Employee's configured MCP/tool selection; may include built-in opt-in markers. */
+  mcp?: string[];
 }
 
 /** Path of a persistent per-(employee, chat) Pi session file. */
@@ -501,53 +508,83 @@ const notifyTool: AnyPiTool = {
   },
 };
 
-/** `set_cronjob` — create/update a scheduled task. */
-const setCronjobTool: AnyPiTool = {
-  name: "set_cronjob",
-  label: "Set cron job",
-  description:
-    "Create or update a scheduled task. The id is a composite `chatId/employeeId/jobId`. " +
-    "On each trigger the (employee, chat) agent session is loaded, the content is delivered, " +
-    "and the reply is persisted as the employee's message.",
-  promptSnippet: "set_cronjob (schedule a task)",
-  parameters: Type.Object({
-    id: Type.String({ minLength: 1, maxLength: 256 }),
-    schedule: Type.String({ minLength: 1, maxLength: 128 }),
-    content: Type.String({ minLength: 1, maxLength: 100000 }),
-  }),
-  execute: async (_toolCallId, params) => {
-    const input = params as {
-      id: string;
-      schedule: string;
-      content: string;
-    };
-    const parsed = parseCronJobId(input.id);
-    return toolResult(
-      cron.setJob({
-        id: input.id,
-        chatId: parsed.chatId,
-        employeeId: parsed.employeeId,
-        schedule: input.schedule,
-        content: input.content,
-      }),
-    );
-  },
-};
+/**
+ * `set_cronjob` — create/update a scheduled task.
+ *
+ * A participant (non-assistant) may only schedule for themselves, within a
+ * chat they participate in; the assistant (id 0) remains unrestricted.
+ */
+function setCronjobTool(employeeId: number): AnyPiTool {
+  return {
+    name: "set_cronjob",
+    label: "Set cron job",
+    description:
+      "Create or update a scheduled task. The id is a composite `chatId/employeeId/jobId`. " +
+      "On each trigger the (employee, chat) agent session is loaded, the content is delivered, " +
+      "and the reply is persisted as the employee's message.",
+    promptSnippet: "set_cronjob (schedule a task)",
+    parameters: Type.Object({
+      id: Type.String({ minLength: 1, maxLength: 256 }),
+      schedule: Type.String({ minLength: 1, maxLength: 128 }),
+      content: Type.String({ minLength: 1, maxLength: 100000 }),
+    }),
+    execute: async (_toolCallId, params) => {
+      const input = params as {
+        id: string;
+        schedule: string;
+        content: string;
+      };
+      const parsed = parseCronJobId(input.id);
+      if (employeeId !== ASSISTANT_ID) {
+        if (parsed.employeeId !== employeeId) {
+          throw new Error("An employee can only schedule their own cron job.");
+        }
+        const chat = chatsService.getChat(parsed.chatId);
+        if (!chat || !chat.participants.includes(employeeId)) {
+          throw new Error(
+            "An employee can only schedule cron jobs for chats they participate in.",
+          );
+        }
+      }
+      return toolResult(
+        cron.setJob({
+          id: input.id,
+          chatId: parsed.chatId,
+          employeeId: parsed.employeeId,
+          schedule: input.schedule,
+          content: input.content,
+        }),
+      );
+    },
+  };
+}
 
-/** `remove_cronjob` — delete a scheduled task by id. */
-const removeCronjobTool: AnyPiTool = {
-  name: "remove_cronjob",
-  label: "Remove cron job",
-  description: "Delete a scheduled task by its id.",
-  promptSnippet: "remove_cronjob (delete a scheduled task)",
-  parameters: Type.Object({
-    id: Type.String({ minLength: 1, maxLength: 256 }),
-  }),
-  execute: async (_toolCallId, params) => {
-    const input = params as { id: string };
-    return toolResult({ removed: cron.removeJob(input.id) });
-  },
-};
+/**
+ * `remove_cronjob` — delete a scheduled task by id.
+ *
+ * A participant may only remove their own cron jobs; the assistant can remove any.
+ */
+function removeCronjobTool(employeeId: number): AnyPiTool {
+  return {
+    name: "remove_cronjob",
+    label: "Remove cron job",
+    description: "Delete a scheduled task by its id.",
+    promptSnippet: "remove_cronjob (delete a scheduled task)",
+    parameters: Type.Object({
+      id: Type.String({ minLength: 1, maxLength: 256 }),
+    }),
+    execute: async (_toolCallId, params) => {
+      const input = params as { id: string };
+      if (employeeId !== ASSISTANT_ID) {
+        const parsed = parseCronJobId(input.id);
+        if (parsed.employeeId !== employeeId) {
+          throw new Error("An employee can only remove their own cron job.");
+        }
+      }
+      return toolResult({ removed: cron.removeJob(input.id) });
+    },
+  };
+}
 
 /** `add_participant` — add members to a chat, notify, and prompt their agents. */
 function addParticipantTool(env: AgentEnvironment): AnyPiTool {
@@ -642,21 +679,32 @@ void addParticipantTool;
  * - Assistant (id 0): orchestration tools — `set_employees`, `create_chat`,
  *   `send_message`, `read_chat`, `list_employees`, `notify`, `set_cronjob`,
  *   `remove_cronjob`.
- * - Participant employee: `send_message`, `read_chat` only.
+ * - Participant employee: `send_message`, `read_chat`; plus `set_cronjob` /
+ *   `remove_cronjob` when the corresponding opt-in marker is present in `mcp`.
  */
 export function createTeamToolDefinitions(
   options: TeamToolOptions,
 ): AnyPiTool[] {
   const { env, employeeId } = options;
   const isAssistant = employeeId === ASSISTANT_ID;
+  const mcp = options.mcp ?? [];
   const tools: AnyPiTool[] = [];
   if (isAssistant) {
     tools.push(setEmployeesTool);
     tools.push(createChatTool(env));
     tools.push(listEmployeesTool);
     tools.push(notifyTool);
-    tools.push(setCronjobTool);
-    tools.push(removeCronjobTool);
+    tools.push(setCronjobTool(employeeId));
+    tools.push(removeCronjobTool(employeeId));
+  } else {
+    // Cron tools are opt-in: registered only when the employee selected the
+    // corresponding marker in their "Linked MCP" list.
+    if (mcp.includes(BUILTIN_SET_CRON_MARKER)) {
+      tools.push(setCronjobTool(employeeId));
+    }
+    if (mcp.includes(BUILTIN_REMOVE_CRON_MARKER)) {
+      tools.push(removeCronjobTool(employeeId));
+    }
   }
   tools.push(sendMessageTool(env));
   tools.push(readChatTool(employeeId));

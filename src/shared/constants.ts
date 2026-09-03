@@ -11,6 +11,15 @@ export const ASSISTANT_SYSTEM_PROMPT =
   "Help the user plan and complete work, answer questions, and operate the workspace (employees, models, MCP servers, skills). " +
   "Prefer concise, direct answers. Use the provided tools (read, bash, edit, write) when the user asks you to inspect or change files.";
 
+/**
+ * Built-in tools that non-assistant employees can opt into via their "Linked
+ * MCP" list. The markers (namespaced to avoid colliding with an MCP server
+ * name) are stored in `employee.mcp` and honored at runtime by
+ * `createTeamToolDefinitions`.
+ */
+export const BUILTIN_SET_CRON_MARKER = "builtin:set_cronjob";
+export const BUILTIN_REMOVE_CRON_MARKER = "builtin:remove_cronjob";
+
 // Setting keys
 export const SettingKeys = {
   NavCollapse: "ui.navCollapsed",

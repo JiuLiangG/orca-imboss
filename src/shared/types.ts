@@ -37,7 +37,8 @@ export interface Employee {
   name: string;
   role: string;
   systemPrompt: string;
-  /** Configured MCP server names (options come from `mcp:list`). */
+  /** Configured MCP server names (options come from `mcp:list`); may also
+   *  carry built-in opt-in markers (see `BUILTIN_*_MARKER` in constants). */
   mcp: string[];
   skills: string[];
   modelId: string | null;

@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { t } from "../../../../../../shared/libs/l10n";
+import {
+  BUILTIN_REMOVE_CRON_MARKER,
+  BUILTIN_SET_CRON_MARKER,
+} from "../../../../../../shared/constants";
 import type { Employee, EmployeeInput } from "../../../../../../shared/types";
 import { appStore, useApp } from "../../../../app-store";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
@@ -15,6 +19,7 @@ import { ItemList } from "../../../item-list";
 import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
 import { Modal } from "../../../modal";
+import type { MultiSelectOption } from "../../../multi-select";
 import "../../../modules/module-common.css";
 import { SearchInput } from "../../../search-input";
 import { employeeAvatarSrc } from "../employee-avatar";
@@ -69,6 +74,15 @@ export function EmployeesModule(): React.JSX.Element {
   useEffect(() => {
     appStore.ensureEmployees();
   }, []);
+
+  // Linked-MCP options = built-in opt-in cron tools + configured MCP servers.
+  const mcpOptions = useMemo((): MultiSelectOption[] => {
+    return [
+      { value: BUILTIN_SET_CRON_MARKER, label: t("Set cron job") },
+      { value: BUILTIN_REMOVE_CRON_MARKER, label: t("Remove cron job") },
+      ...data.mcp.items.map((m) => ({ value: m.name, label: m.name })),
+    ];
+  }, [data.mcp.items]);
 
   const multi = useMultiSelect<Employee, number>({
     getKey: (employee) => employee.id,
@@ -249,10 +263,7 @@ export function EmployeesModule(): React.JSX.Element {
     <EmployeeDetail
       key={selected.id}
       employee={selected}
-      mcpOptions={data.mcp.items.map((m) => ({
-        value: m.name,
-        label: m.name,
-      }))}
+      mcpOptions={mcpOptions}
       skillOptions={data.skills.items.map((s) => ({
         value: s.name,
         label: s.name,
@@ -292,10 +303,7 @@ export function EmployeesModule(): React.JSX.Element {
       <EmployeeRecruitModal
         open={recruitOpen}
         onClose={() => setRecruitOpen(false)}
-        mcpOptions={data.mcp.items.map((m) => ({
-          value: m.name,
-          label: m.name,
-        }))}
+        mcpOptions={mcpOptions}
         skillOptions={data.skills.items.map((s) => ({
           value: s.name,
           label: s.name,
