@@ -1,0 +1,52 @@
+.imb-tooltip {
+  position: fixed;
+  z-index: 60;
+  max-width: 240px;
+  padding: var(--imb-space-2) var(--imb-space-3);
+  background: var(--imb-fg);
+  color: var(--imb-bg);
+  font-size: var(--imb-text-sm);
+  line-height: var(--imb-leading-tight);
+  border-radius: var(--imb-radius-md);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-tooltip.imb-tooltip-open {
+  opacity: 1;
+}
+
+.imb-tooltip::before {
+  content: "";
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: inherit;
+  transform: rotate(45deg);
+}
+
+.imb-tooltip[data-placement="right"]::before {
+  left: -3px;
+  top: 50%;
+  margin-top: -3px;
+}
+
+.imb-tooltip[data-placement="left"]::before {
+  right: -3px;
+  top: 50%;
+  margin-top: -3px;
+}
+
+.imb-tooltip[data-placement="top"]::before {
+  bottom: -3px;
+  left: 50%;
+  margin-left: -3px;
+}
+
+.imb-tooltip[data-placement="bottom"]::before {
+  top: -3px;
+  left: 50%;
+  margin-left: -3px;
+}

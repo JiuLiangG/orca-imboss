@@ -4,7 +4,7 @@ import type {
   ChatSummary,
   PageQuery,
   PageResult,
-} from "../../../shared/types";
+} from "@shared/types";
 import { getDB } from "../index";
 import { parseNumberArray, stringifyArray } from "./json";
 import { escapeLike, toFtsPhrase } from "./text-search";
@@ -18,30 +18,21 @@ interface ChatRow {
   from_chat_id: number | null;
 }
 
-function toChat(row: ChatRow): Chat {
-  return {
-    id: row.id,
-    title: row.title ?? "",
-    participants: parseNumberArray(row.participants),
-    unread: row.unread ?? 0,
-    createdAt: row.created_at,
-    fromChatId: row.from_chat_id ?? null,
-  };
-}
-
 interface ChatSummaryRow extends ChatRow {
   preview: string | null;
   last_at: number | null;
 }
 
-function toChatSummary(row: ChatSummaryRow): ChatSummary {
-  return { ...toChat(row), preview: row.preview, lastAt: row.last_at };
-}
-
-const SELECT_ALL = "SELECT * FROM chats ORDER BY created_at DESC, id DESC";
+const MAX_PAGE_SIZE = 200;
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_QUERY_LENGTH = 200;
 
 export function listChats(): Chat[] {
-  return (getDB().prepare(SELECT_ALL).all() as ChatRow[]).map(toChat);
+  return (
+    getDB()
+      .prepare("SELECT * FROM chats ORDER BY created_at DESC, id DESC")
+      .all() as ChatRow[]
+  ).map(toChat);
 }
 
 export function getChat(id: number): Chat | null {
@@ -67,58 +58,6 @@ export function listChatSummaries(): ChatSummary[] {
     )
     .all() as ChatSummaryRow[];
   return rows.map(toChatSummary);
-}
-
-/** Clear a chat's unread counter (opening the chat). */
-export function markRead(id: number): void {
-  getDB().prepare("UPDATE chats SET unread = 0 WHERE id = ?").run(id);
-}
-
-/** Increment the unread counter (messages from employees). */
-export function bumpUnread(id: number): void {
-  getDB().prepare("UPDATE chats SET unread = unread + 1 WHERE id = ?").run(id);
-}
-
-/**
- * Add a (non-negative) delta to a chat's unread counter and return the new
- * value. The delta is clamped to `>= 0` (a negative delta never underflows
- * below zero; `markRead` is the explicit clear path).
- */
-export function addUnread(id: number, delta: number): number {
-  const numeric = Number(delta);
-  const safeDelta = Number.isFinite(numeric)
-    ? Math.max(0, Math.trunc(numeric))
-    : 0;
-  getDB()
-    .prepare("UPDATE chats SET unread = max(0, unread + ?) WHERE id = ?")
-    .run(safeDelta, id);
-  const row = getDB()
-    .prepare("SELECT unread FROM chats WHERE id = ?")
-    .get(id) as { unread: number } | undefined;
-  return row?.unread ?? 0;
-}
-
-// --- paged chat list (keyset cursor over `(created_at, id) DESC`) -----------
-
-const MAX_PAGE_SIZE = 200;
-const DEFAULT_PAGE_SIZE = 50;
-const MAX_QUERY_LENGTH = 200;
-
-/** Cursor payload: `"<createdAt>:<id>"` of the last row of the previous page. */
-function encodeChatCursor(createdAt: number, id: number): string {
-  return `${createdAt}:${id}`;
-}
-
-function decodeChatCursor(cursor: string): {
-  createdAt: number;
-  id: number;
-} | null {
-  const split = cursor.lastIndexOf(":");
-  if (split <= 0) return null;
-  const createdAt = Number(cursor.slice(0, split));
-  const id = Number(cursor.slice(split + 1));
-  if (!Number.isFinite(createdAt) || !Number.isSafeInteger(id)) return null;
-  return { createdAt, id };
 }
 
 /**
@@ -196,6 +135,35 @@ export function listChatSummariesPage(
       hasMore && last ? encodeChatCursor(last.createdAt, last.id) : null,
     hasMore,
   };
+}
+
+/** Clear a chat's unread counter (opening the chat). */
+export function markRead(id: number): void {
+  getDB().prepare("UPDATE chats SET unread = 0 WHERE id = ?").run(id);
+}
+
+/** Increment the unread counter (messages from employees). */
+export function bumpUnread(id: number): void {
+  getDB().prepare("UPDATE chats SET unread = unread + 1 WHERE id = ?").run(id);
+}
+
+/**
+ * Add a (non-negative) delta to a chat's unread counter and return the new
+ * value. The delta is clamped to `>= 0` (a negative delta never underflows
+ * below zero; `markRead` is the explicit clear path).
+ */
+export function addUnread(id: number, delta: number): number {
+  const numeric = Number(delta);
+  const safeDelta = Number.isFinite(numeric)
+    ? Math.max(0, Math.trunc(numeric))
+    : 0;
+  getDB()
+    .prepare("UPDATE chats SET unread = max(0, unread + ?) WHERE id = ?")
+    .run(safeDelta, id);
+  const row = getDB()
+    .prepare("SELECT unread FROM chats WHERE id = ?")
+    .get(id) as { unread: number } | undefined;
+  return row?.unread ?? 0;
 }
 
 /**
@@ -279,4 +247,36 @@ export function updateChatParticipants(
     .prepare("UPDATE chats SET participants = ? WHERE id = ?")
     .run(stringifyArray([...participants]), id);
   return getChat(id);
+}
+
+function toChat(row: ChatRow): Chat {
+  return {
+    id: row.id,
+    title: row.title ?? "",
+    participants: parseNumberArray(row.participants),
+    unread: row.unread ?? 0,
+    createdAt: row.created_at,
+    fromChatId: row.from_chat_id ?? null,
+  };
+}
+
+function toChatSummary(row: ChatSummaryRow): ChatSummary {
+  return { ...toChat(row), preview: row.preview, lastAt: row.last_at };
+}
+
+/** Cursor payload: `"<createdAt>:<id>"` of the last row of the previous page. */
+function encodeChatCursor(createdAt: number, id: number): string {
+  return `${createdAt}:${id}`;
+}
+
+function decodeChatCursor(cursor: string): {
+  createdAt: number;
+  id: number;
+} | null {
+  const split = cursor.lastIndexOf(":");
+  if (split <= 0) return null;
+  const createdAt = Number(cursor.slice(0, split));
+  const id = Number(cursor.slice(split + 1));
+  if (!Number.isFinite(createdAt) || !Number.isSafeInteger(id)) return null;
+  return { createdAt, id };
 }

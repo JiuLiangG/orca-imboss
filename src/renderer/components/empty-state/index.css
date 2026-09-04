@@ -1,0 +1,11 @@
+.imb-list-empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--imb-muted);
+  font-size: var(--imb-text-sm);
+  line-height: var(--imb-leading-body);
+}
+
+.imb-list-empty.imb-detail {
+  padding: 48px 24px;
+}

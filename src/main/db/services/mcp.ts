@@ -1,3 +1,4 @@
+import { MCP_TRANSPORTS } from "@shared/constants";
 import type {
   McpConfig,
   McpServer,
@@ -5,8 +6,7 @@ import type {
   McpTransport,
   PageQuery,
   PageResult,
-} from "../../../shared/types";
-import { MCP_TRANSPORTS } from "../../../shared/types";
+} from "@shared/types";
 import { getDB } from "../index";
 import { parseJsonObject } from "./json";
 import { escapeLike } from "./text-search";
@@ -38,7 +38,120 @@ const MAX_ENTRIES = 128;
 const MAX_KEY_LENGTH = 256;
 const MAX_VALUE_LENGTH = 4096;
 
+const MAX_PAGE_SIZE = 200;
+const DEFAULT_PAGE_SIZE = 50;
+
 const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+export function listMcpServers(): McpServer[] {
+  return (
+    getDB()
+      .prepare("SELECT * FROM mcp_servers ORDER BY id ASC")
+      .all() as McpRow[]
+  ).map(toMcpServer);
+}
+
+/**
+ * One page of MCP servers, ordered `id ASC` (unchanged from the full list).
+ * Search = `LIKE` on `name OR description` (ESCAPE-safe). Keyset seek on
+ * `id > ?` keeps scrolling stable under concurrent inserts.
+ */
+export function listMcpServersPage(
+  page: PageQuery = {},
+): PageResult<McpServer> {
+  const limit = Math.min(
+    Math.max(Math.trunc(page.limit ?? DEFAULT_PAGE_SIZE), 1),
+    MAX_PAGE_SIZE,
+  );
+  const needle = (page.query ?? "").trim();
+  const db = getDB();
+  const conditions: string[] = [];
+  const params: Array<string | number> = [];
+
+  if (page.cursor) {
+    const cursorId = Number(page.cursor);
+    if (Number.isSafeInteger(cursorId) && cursorId > 0) {
+      conditions.push("id > ?");
+      params.push(cursorId);
+    }
+  }
+  if (needle.length > 0) {
+    const pattern = `%${escapeLike(needle)}%`;
+    conditions.push(
+      "(name LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')",
+    );
+    params.push(pattern, pattern);
+  }
+
+  const rows = db
+    .prepare(
+      `SELECT * FROM mcp_servers
+       WHERE ${conditions.length > 0 ? conditions.join(" AND ") : "1 = 1"}
+       ORDER BY id ASC
+       LIMIT ?`,
+    )
+    .all(...params, limit + 1) as McpRow[];
+
+  const hasMore = rows.length > limit;
+  const items = rows.slice(0, limit).map(toMcpServer);
+  const last = items[items.length - 1];
+  return {
+    items,
+    nextCursor: hasMore && last ? String(last.id) : null,
+    hasMore,
+  };
+}
+
+export function getMcpServer(id: number): McpServer | null {
+  const row = getDB()
+    .prepare("SELECT * FROM mcp_servers WHERE id = ?")
+    .get(id) as McpRow | undefined;
+  return row ? toMcpServer(row) : null;
+}
+
+/** Create an MCP server. `env` keys must look like env-var names (defensive). */
+export function createMcpServer(input: McpServerInput): McpServer {
+  const config = validateConfig(input.config);
+  const result = getDB()
+    .prepare(
+      "INSERT INTO mcp_servers (name, description, transport, config) VALUES (?, ?, ?, ?)",
+    )
+    .run(
+      validateName(input.name),
+      validateDescription(input.description ?? ""),
+      config.transport,
+      configToJson(config),
+    );
+  const created = getMcpServer(Number(result.lastInsertRowid));
+  if (!created) throw new Error("Failed to create MCP server.");
+  return created;
+}
+
+/** Replace an MCP server's full configuration. */
+export function updateMcpServer(
+  id: number,
+  input: McpServerInput,
+): McpServer | null {
+  const config = validateConfig(input.config);
+  getDB()
+    .prepare(
+      "UPDATE mcp_servers SET name = ?, description = ?, transport = ?, config = ? WHERE id = ?",
+    )
+    .run(
+      validateName(input.name),
+      validateDescription(input.description ?? ""),
+      config.transport,
+      configToJson(config),
+      id,
+    );
+  return getMcpServer(id);
+}
+
+export function deleteMcpServer(id: number): boolean {
+  return (
+    getDB().prepare("DELETE FROM mcp_servers WHERE id = ?").run(id).changes > 0
+  );
+}
 
 function isTransport(value: unknown): value is McpTransport {
   return (
@@ -192,116 +305,4 @@ function configToJson(config: McpConfig): string {
     });
   }
   return JSON.stringify({ url: config.url, headers: config.headers });
-}
-
-const SELECT_ALL = "SELECT * FROM mcp_servers ORDER BY id ASC";
-const SELECT_BY_ID = "SELECT * FROM mcp_servers WHERE id = ?";
-
-export function listMcpServers(): McpServer[] {
-  return (getDB().prepare(SELECT_ALL).all() as McpRow[]).map(toMcpServer);
-}
-
-// --- paged MCP list (keyset cursor over `id ASC`) ---------------------------
-
-const MAX_PAGE_SIZE = 200;
-const DEFAULT_PAGE_SIZE = 50;
-
-/**
- * One page of MCP servers, ordered `id ASC` (unchanged from the full list).
- * Search = `LIKE` on `name OR description` (ESCAPE-safe). Keyset seek on
- * `id > ?` keeps scrolling stable under concurrent inserts.
- */
-export function listMcpServersPage(
-  page: PageQuery = {},
-): PageResult<McpServer> {
-  const limit = Math.min(
-    Math.max(Math.trunc(page.limit ?? DEFAULT_PAGE_SIZE), 1),
-    MAX_PAGE_SIZE,
-  );
-  const needle = (page.query ?? "").trim();
-  const db = getDB();
-  const conditions: string[] = [];
-  const params: Array<string | number> = [];
-
-  if (page.cursor) {
-    const cursorId = Number(page.cursor);
-    if (Number.isSafeInteger(cursorId) && cursorId > 0) {
-      conditions.push("id > ?");
-      params.push(cursorId);
-    }
-  }
-  if (needle.length > 0) {
-    const pattern = `%${escapeLike(needle)}%`;
-    conditions.push(
-      "(name LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')",
-    );
-    params.push(pattern, pattern);
-  }
-
-  const rows = db
-    .prepare(
-      `SELECT * FROM mcp_servers
-       WHERE ${conditions.length > 0 ? conditions.join(" AND ") : "1 = 1"}
-       ORDER BY id ASC
-       LIMIT ?`,
-    )
-    .all(...params, limit + 1) as McpRow[];
-
-  const hasMore = rows.length > limit;
-  const items = rows.slice(0, limit).map(toMcpServer);
-  const last = items[items.length - 1];
-  return {
-    items,
-    nextCursor: hasMore && last ? String(last.id) : null,
-    hasMore,
-  };
-}
-
-export function getMcpServer(id: number): McpServer | null {
-  const row = getDB().prepare(SELECT_BY_ID).get(id) as McpRow | undefined;
-  return row ? toMcpServer(row) : null;
-}
-
-/** Create an MCP server. `env` keys must look like env-var names (defensive). */
-export function createMcpServer(input: McpServerInput): McpServer {
-  const config = validateConfig(input.config);
-  const result = getDB()
-    .prepare(
-      "INSERT INTO mcp_servers (name, description, transport, config) VALUES (?, ?, ?, ?)",
-    )
-    .run(
-      validateName(input.name),
-      validateDescription(input.description ?? ""),
-      config.transport,
-      configToJson(config),
-    );
-  const created = getMcpServer(Number(result.lastInsertRowid));
-  if (!created) throw new Error("Failed to create MCP server.");
-  return created;
-}
-
-/** Replace an MCP server's full configuration. */
-export function updateMcpServer(
-  id: number,
-  input: McpServerInput,
-): McpServer | null {
-  const config = validateConfig(input.config);
-  getDB()
-    .prepare(
-      "UPDATE mcp_servers SET name = ?, description = ?, transport = ?, config = ? WHERE id = ?",
-    )
-    .run(
-      validateName(input.name),
-      validateDescription(input.description ?? ""),
-      config.transport,
-      configToJson(config),
-      id,
-    );
-  return getMcpServer(id);
-}
-
-export function deleteMcpServer(id: number): boolean {
-  return (
-    getDB().prepare("DELETE FROM mcp_servers WHERE id = ?").run(id).changes > 0
-  );
 }

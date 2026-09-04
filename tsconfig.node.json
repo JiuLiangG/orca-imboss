@@ -10,6 +10,11 @@
     "composite": true,
     "types": [
       "@desirecore/electron-vite/node"
-    ]
+    ],
+    "paths": {
+      "@shared/*": [
+        "./src/shared/*"
+      ]
+    }
   }
 }

@@ -1,16 +1,17 @@
 import {
+  ASSISTANT_ID,
   ASSISTANT_SYSTEM_PROMPT,
   BASE_TOOL_SNIPPETS,
-} from "../../shared/constants";
+} from "@shared/constants";
+import type { AgentEnvironment } from "@shared/types";
 import { getAgentRoot, getAgentSessionsDir, getWorkDir } from "../data-dir";
-import { ASSISTANT_ID, getEmployee } from "../db/services/employees";
+import { getEmployee } from "../db/services/employees";
 import { listMcpServers } from "../db/services/mcp";
 import { getSession } from "../db/services/sessions";
 import { getSetting } from "../db/services/settings";
 import { createTeamToolDefinitions } from "./builtin-tools";
 import type { EmployeeToolEntry } from "./employee-prompt";
 import { buildEmployeeSystemPrompt } from "./employee-prompt";
-import type { AgentEnvironment } from "./environment";
 import { createMcpToolDefinitions, type AnyPiTool } from "./mcp";
 import { getModelRuntime, type ModelRuntimeInstance } from "./model-runtime";
 import { loadPiSdk, type PiSdk } from "./pi-sdk";
@@ -38,9 +39,6 @@ type PiModel = NonNullable<ReturnType<ModelRuntimeInstance["getModel"]>>;
  * caller (`replyText`), which the chat pipeline persists.
  */
 
-/** Settings key holding the `provider/model` default (written by settings UI). */
-const DEFAULT_MODEL_KEY = "defaultModel";
-
 export interface AgentSessionContext {
   employeeId: number;
   chatId: number;
@@ -52,6 +50,9 @@ export interface AgentPromptResult {
   /** Final assistant reply text (all text content of the last `turn_end`). */
   replyText?: string;
 }
+
+/** Settings key holding the `provider/model` default (written by settings UI). */
+const DEFAULT_MODEL_KEY = "defaultModel";
 
 export class AgentSession {
   private _disposed = false;
@@ -345,7 +346,7 @@ function buildEmployeeToolEntries(
  * Collect text content from an assistant message (`turn_end`): text blocks
  * joined by newlines; thinking/image blocks are skipped.
  */
-export function extractMessageText(message: unknown): string {
+function extractMessageText(message: unknown): string {
   if (typeof message !== "object" || message === null) return "";
   const content = (message as { content?: unknown }).content;
   if (!Array.isArray(content)) return "";

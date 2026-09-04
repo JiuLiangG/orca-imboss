@@ -15,17 +15,62 @@ import { getSetting } from "../db/services/settings";
  *   mirroring the MCP service (`src/main/db/services/mcp.ts`).
  */
 
+interface UserEnvEntry {
+  key: string;
+  value: string;
+}
+
 /** Settings key where the env rows are persisted (`[{key,value}, ...]` JSON). */
-export const USER_ENV_SETTING_KEY = "env";
+const USER_ENV_SETTING_KEY = "env";
 
 const MAX_ENTRIES = 128;
 const MAX_KEY_LENGTH = 256;
 const MAX_VALUE_LENGTH = 4096;
 const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-export interface UserEnvEntry {
-  key: string;
-  value: string;
+/** Cache of the last raw setting value → fully expanded env record. */
+let cachedRaw: string | null | undefined;
+let cachedRecord: Record<string, string> = {};
+
+/**
+ * Read + expand the user-configured environment variables for subprocesses.
+ *
+ * The result is cached against the raw settings value, so repeated calls per
+ * spawned command stay cheap; any `settings:set("env", ...)` write invalidates
+ * it automatically on the next read.
+ */
+export function readUserEnv(
+  baseEnv: Record<string, string> = process.env as Record<string, string>,
+): Record<string, string> {
+  const raw = getSetting(USER_ENV_SETTING_KEY);
+  if (raw !== cachedRaw) {
+    const record: Record<string, string> = {};
+    for (const { key, value } of parseUserEnv(raw)) {
+      record[key] = expandValue(value, baseEnv);
+    }
+    cachedRaw = raw;
+    cachedRecord = record;
+  }
+  return cachedRecord;
+}
+
+/**
+ * Merge env layers in precedence order — later layers win:
+ * `mergeEnv(process.env, userEnv, serverEnv)` keeps `process.env` as the
+ * lowest layer (so binaries stay findable via `$PATH`) while user env
+ * overrides it and per-server / per-tool env wins over both.
+ */
+export function mergeEnv(
+  ...layers: Array<Record<string, string> | undefined>
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const layer of layers) {
+    if (!layer) continue;
+    for (const [key, value] of Object.entries(layer)) {
+      result[key] = value;
+    }
+  }
+  return result;
 }
 
 /**
@@ -37,10 +82,7 @@ export interface UserEnvEntry {
  * This is a pure scanner (no shell evaluation), so expansion can never
  * execute anything — env values stay inert data.
  */
-export function expandValue(
-  value: string,
-  env: Record<string, string>,
-): string {
+function expandValue(value: string, env: Record<string, string>): string {
   if (value.indexOf("$") < 0) return value;
 
   let out = "";
@@ -118,7 +160,7 @@ function isValidEnvName(name: string): boolean {
  * Parse the raw settings payload into a validated entry list. Malformed rows
  * are dropped defensively; everything is capped like the MCP service.
  */
-export function parseUserEnv(raw: string | null): UserEnvEntry[] {
+function parseUserEnv(raw: string | null): UserEnvEntry[] {
   if (raw === null || raw.trim().length === 0) return [];
   let parsed: unknown;
   try {
@@ -139,49 +181,4 @@ export function parseUserEnv(raw: string | null): UserEnvEntry[] {
     entries.push({ key, value });
   }
   return entries;
-}
-
-/** Cache of the last raw setting value → fully expanded env record. */
-let cachedRaw: string | null | undefined;
-let cachedRecord: Record<string, string> = {};
-
-/**
- * Read + expand the user-configured environment variables for subprocesses.
- *
- * The result is cached against the raw settings value, so repeated calls per
- * spawned command stay cheap; any `settings:set("env", ...)` write invalidates
- * it automatically on the next read.
- */
-export function readUserEnv(
-  baseEnv: Record<string, string> = process.env as Record<string, string>,
-): Record<string, string> {
-  const raw = getSetting(USER_ENV_SETTING_KEY);
-  if (raw !== cachedRaw) {
-    const record: Record<string, string> = {};
-    for (const { key, value } of parseUserEnv(raw)) {
-      record[key] = expandValue(value, baseEnv);
-    }
-    cachedRaw = raw;
-    cachedRecord = record;
-  }
-  return cachedRecord;
-}
-
-/**
- * Merge env layers in precedence order — later layers win:
- * `mergeEnv(process.env, userEnv, serverEnv)` keeps `process.env` as the
- * lowest layer (so binaries stay findable via `$PATH`) while user env
- * overrides it and per-server / per-tool env wins over both.
- */
-export function mergeEnv(
-  ...layers: Array<Record<string, string> | undefined>
-): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const layer of layers) {
-    if (!layer) continue;
-    for (const [key, value] of Object.entries(layer)) {
-      result[key] = value;
-    }
-  }
-  return result;
 }

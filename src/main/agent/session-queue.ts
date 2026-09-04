@@ -1,6 +1,7 @@
+import { type AgentEnvironment } from "@shared/types";
 import * as messagesService from "../db/services/messages";
 import { broadcast } from "../notifications";
-import { getAgentEnvironment, type AgentEnvironment } from "./environment";
+import { getAgentEnvironment } from "./environment";
 
 /**
  * App-level serialized queue per `{employeeId}/{chatId}`.
@@ -40,10 +41,6 @@ interface QueueState {
 
 const states = new Map<string, QueueState>();
 
-function keyFor(employeeId: number, chatId: number): string {
-  return `${employeeId}/${chatId}`;
-}
-
 /**
  * Schedule a message for an agent session, serialized per (employee, chat).
  *
@@ -67,6 +64,10 @@ export async function deliver(
   if (state.busy) return;
   state.busy = true;
   void drain(state);
+}
+
+function keyFor(employeeId: number, chatId: number): string {
+  return `${employeeId}/${chatId}`;
 }
 
 async function drain(state: QueueState): Promise<void> {

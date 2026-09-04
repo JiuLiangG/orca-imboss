@@ -23,15 +23,6 @@ export interface ShellToolsOptions {
   cwd: string;
 }
 
-/** Merge the user env into the child-process env of one shell spawn. */
-function withUserEnv(ctx: {
-  command: string;
-  cwd: string;
-  env: NodeJS.ProcessEnv;
-}): { command: string; cwd: string; env: NodeJS.ProcessEnv } {
-  return { ...ctx, env: { ...ctx.env, ...readUserEnv() } };
-}
-
 /**
  * Create the env-injected bash + PowerShell tool definitions.
  *
@@ -46,4 +37,13 @@ export async function createShellToolDefinitions(
     pi.createBashToolDefinition(options.cwd, { spawnHook: withUserEnv }),
     pi.createPowerShellToolDefinition(options.cwd, { spawnHook: withUserEnv }),
   ];
+}
+
+/** Merge the user env into the child-process env of one shell spawn. */
+function withUserEnv(ctx: {
+  command: string;
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+}): { command: string; cwd: string; env: NodeJS.ProcessEnv } {
+  return { ...ctx, env: { ...ctx.env, ...readUserEnv() } };
 }

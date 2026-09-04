@@ -1,0 +1,10 @@
+/* Transparent click target wrapper: in selectable mode the row click (with
+   modifier keys) is owned by ItemList, not by the row renderer. */
+.imb-item-list-row {
+  width: 100%;
+}
+
+.imb-item-list-hint {
+  color: var(--imb-muted);
+  font-size: var(--imb-text-sm);
+}

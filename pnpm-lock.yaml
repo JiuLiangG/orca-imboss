@@ -58,7 +58,7 @@ importers:
         specifier: ^26.15.3
         version: 26.15.3(electron-builder-squirrel-windows@26.15.3)
       prettier:
-        specifier: ^3.7.4
+        specifier: 3.9.6
         version: 3.9.6
       react:
         specifier: ^19.2.8

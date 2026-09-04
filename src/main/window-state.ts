@@ -1,5 +1,5 @@
+import { SettingKeys } from "@shared/constants";
 import { screen, type BrowserWindow } from "electron";
-import { SettingKeys } from "../shared/constants";
 import { getSetting, setSetting } from "./db/services/settings";
 
 // Window state persistence: stores the main window's normal (unmaximized) bounds
@@ -16,23 +16,6 @@ interface WindowBounds {
   y: number;
   width: number;
   height: number;
-}
-
-function isSafeInteger(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value);
-}
-
-/** True when `bounds` is fully contained inside `workArea` (CSS pixels). */
-function isContained(
-  workArea: { x: number; y: number; width: number; height: number },
-  bounds: WindowBounds,
-): boolean {
-  return (
-    bounds.x >= workArea.x &&
-    bounds.y >= workArea.y &&
-    bounds.x + bounds.width <= workArea.x + workArea.width &&
-    bounds.y + bounds.height <= workArea.y + workArea.height
-  );
 }
 
 /**
@@ -93,4 +76,20 @@ export function saveWindowBounds(win: BrowserWindow): void {
   const { x, y, width, height } = win.getNormalBounds();
   if (width <= 0 || height <= 0) return;
   setSetting(SettingKeys.WindowState, JSON.stringify({ x, y, width, height }));
+}
+
+function isSafeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value);
+}
+
+function isContained(
+  workArea: { x: number; y: number; width: number; height: number },
+  bounds: WindowBounds,
+): boolean {
+  return (
+    bounds.x >= workArea.x &&
+    bounds.y >= workArea.y &&
+    bounds.x + bounds.width <= workArea.x + workArea.width &&
+    bounds.y + bounds.height <= workArea.y + workArea.height
+  );
 }

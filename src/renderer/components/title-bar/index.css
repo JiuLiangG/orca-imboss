@@ -1,0 +1,51 @@
+.imb-titlebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--imb-titlebar-h, 32px);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  -webkit-app-region: drag;
+  app-region: drag;
+  user-select: none;
+  background: transparent;
+  z-index: 10;
+}
+
+.imb-winbtns {
+  display: flex;
+  align-items: center;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.imb-winbtn {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  width: 34px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--imb-text-2);
+  cursor: default;
+}
+
+.imb-winbtn .imb-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.imb-winbtn:hover {
+  background: var(--imb-fg-soft);
+  color: var(--imb-fg);
+}
+
+.imb-winbtn.imb-close:hover {
+  background: var(--imb-danger);
+  color: #fff;
+}

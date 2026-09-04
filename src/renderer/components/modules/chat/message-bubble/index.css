@@ -1,0 +1,82 @@
+.imb-msg {
+  display: flex;
+  gap: 10px;
+  max-width: 78%;
+}
+
+.imb-msg.imb-self {
+  margin-left: auto;
+  flex-direction: row-reverse;
+}
+
+.imb-bubble {
+  padding: 10px 14px;
+  border-radius: var(--imb-radius-lg);
+  font-size: var(--imb-text-base);
+  line-height: var(--imb-leading-body);
+  word-break: break-word;
+  min-width: 0;
+}
+
+.imb-msg.imb-self .imb-bubble {
+  background: var(--imb-bubble-self);
+  color: var(--imb-bubble-text);
+  border-top-right-radius: 4px;
+}
+
+.imb-msg.imb-other .imb-bubble {
+  background: var(--imb-surface);
+  color: var(--imb-fg);
+  border-top-left-radius: 4px;
+  box-shadow: var(--imb-elev-raised);
+}
+
+.imb-msg .imb-avatar {
+  width: 34px;
+  height: 34px;
+  font-size: 13px;
+}
+
+.imb-bubble-text {
+  white-space: pre-wrap;
+}
+
+.imb-bubble-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.imb-bubble-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: var(--imb-radius-sm);
+  font-size: var(--imb-text-xs);
+  color: inherit;
+  max-width: 260px;
+}
+
+.imb-msg.imb-self .imb-bubble-chip {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.imb-bubble-chip .imb-icon {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+.imb-bubble-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imb-bubble-chip-size {
+  opacity: 0.7;
+  flex: none;
+}

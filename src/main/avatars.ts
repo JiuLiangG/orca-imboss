@@ -34,41 +34,6 @@ const MIME_BY_EXT: Record<AvatarExt, string> = {
   gif: "image/gif",
 };
 
-function validateEmployeeId(id: number): void {
-  if (!Number.isSafeInteger(id) || id < 0) {
-    throw new Error("Invalid employee id.");
-  }
-}
-
-function validateExt(ext: string): AvatarExt {
-  const normalized = ext.toLowerCase().replace(/^\./, "");
-  if (!(AVATAR_EXTENSIONS as readonly string[]).includes(normalized)) {
-    throw new Error("Unsupported avatar format.");
-  }
-  return normalized as AvatarExt;
-}
-
-/** Existing avatar file for an employee, or null. */
-function findAvatarFile(id: number): string | null {
-  const dir = getAvatarsDir();
-  try {
-    const entries = readdirSync(dir);
-    for (const entry of entries) {
-      // `name = employee id int` — match exactly, ignore anything else.
-      if (entry === `${id}`) continue; // not a file we own
-      const match = /^(\d+)\.([a-z]+)$/.exec(entry);
-      if (!match || match[1] !== String(id)) continue;
-      const ext = match[2].toLowerCase();
-      if (!(AVATAR_EXTENSIONS as readonly string[]).includes(ext)) continue;
-      const file = join(dir, entry);
-      if (existsSync(file)) return file;
-    }
-  } catch {
-    // Missing/corrupt dir → no avatar.
-  }
-  return null;
-}
-
 /**
  * Persist an avatar image for an employee. Replaces any previous avatar
  * (regardless of format). Returns the stored absolute path.
@@ -146,4 +111,39 @@ export function readAvatarDataUrl(id: number): string | null {
   } catch {
     return null;
   }
+}
+
+function validateEmployeeId(id: number): void {
+  if (!Number.isSafeInteger(id) || id < 0) {
+    throw new Error("Invalid employee id.");
+  }
+}
+
+function validateExt(ext: string): AvatarExt {
+  const normalized = ext.toLowerCase().replace(/^\./, "");
+  if (!(AVATAR_EXTENSIONS as readonly string[]).includes(normalized)) {
+    throw new Error("Unsupported avatar format.");
+  }
+  return normalized as AvatarExt;
+}
+
+/** Existing avatar file for an employee, or null. */
+function findAvatarFile(id: number): string | null {
+  const dir = getAvatarsDir();
+  try {
+    const entries = readdirSync(dir);
+    for (const entry of entries) {
+      // `name = employee id int` — match exactly, ignore anything else.
+      if (entry === `${id}`) continue; // not a file we own
+      const match = /^(\d+)\.([a-z]+)$/.exec(entry);
+      if (!match || match[1] !== String(id)) continue;
+      const ext = match[2].toLowerCase();
+      if (!(AVATAR_EXTENSIONS as readonly string[]).includes(ext)) continue;
+      const file = join(dir, entry);
+      if (existsSync(file)) return file;
+    }
+  } catch {
+    // Missing/corrupt dir → no avatar.
+  }
+  return null;
 }

@@ -6,7 +6,7 @@ import type {
   MessageSearchResult,
   MessageStep,
   StepStatus,
-} from "../../../shared/types";
+} from "@shared/types";
 import { getDB } from "../index";
 import { bumpUnread } from "./chats";
 import { parseJsonObject } from "./json";
@@ -33,6 +33,183 @@ const MAX_ATTACH_NAME_LENGTH = 256;
 const MAX_ATTACH_TYPE_LENGTH = 128;
 const MAX_ATTACH_SIZE = 50 * 1024 * 1024; // metadata only
 const STEP_STATUSES: StepStatus[] = ["done", "busy"];
+
+const MAX_SEARCH_QUERY_LENGTH = 200;
+const MAX_SEARCH_RESULTS = 50;
+
+/** List a chat's messages in conversation order (`created_at` ascending; `id` breaks same-second ties). */
+export function listMessages(chatId: number): Message[] {
+  return (
+    getDB()
+      .prepare(
+        "SELECT * FROM messages WHERE chat_id = ? ORDER BY created_at ASC, id ASC",
+      )
+      .all(chatId) as MessageRow[]
+  ).map(toMessage);
+}
+
+/**
+ * List new messages after a read cursor (`id > afterId`), in conversation
+ * order, with an optional page cap the caller re-invokes with to page through.
+ */
+export function listMessagesAfter(
+  chatId: number,
+  afterId: number,
+  limit = 100,
+): Message[] {
+  const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 200);
+  return (
+    getDB()
+      .prepare(
+        "SELECT * FROM messages WHERE chat_id = ? AND id > ? " +
+          "ORDER BY created_at ASC, id ASC LIMIT ?",
+      )
+      .all(chatId, afterId, safeLimit) as MessageRow[]
+  ).map(toMessage);
+}
+
+/** Fetch a single message by its global row id, or null when absent. */
+export function getMessageById(id: number): Message | null {
+  const row = getDB().prepare("SELECT * FROM messages WHERE id = ?").get(id) as
+    MessageRow | undefined;
+  return row ? toMessage(row) : null;
+}
+
+/**
+ * Append one message at the end of the chat. The row id is global and
+ * monotonically increasing, so per-chat conversation order is simply
+ * `created_at ASC, id ASC` (id breaks same-second ties); writes are already
+ * serialized on the main-process event loop (synchronous driver).
+ *
+ * Messages from employees (sender_employee_id != NULL) also bump the chat's
+ * unread counter; opening a chat clears it via `chats:markRead`.
+ */
+export function appendMessage(
+  chatId: number,
+  senderEmployeeId: number | null,
+  content: string,
+  options: AppendMessageOptions = {},
+): Message {
+  const db = getDB();
+  if (typeof content !== "string" || content.length === 0) {
+    throw new Error("Message content must be a non-empty string.");
+  }
+  if (content.length > MAX_CONTENT_LENGTH) {
+    throw new Error("Message is too long.");
+  }
+  if (!db.prepare("SELECT 1 FROM chats WHERE id = ?").get(chatId)) {
+    throw new Error("Chat does not exist.");
+  }
+  if (
+    senderEmployeeId != null &&
+    !db.prepare("SELECT 1 FROM employees WHERE id = ?").get(senderEmployeeId)
+  ) {
+    throw new Error("Sender employee does not exist.");
+  }
+
+  const kind: MessageKind = options.kind ?? "text";
+  if (
+    typeof kind !== "string" ||
+    kind.length === 0 ||
+    kind.length > MAX_KIND_LENGTH
+  ) {
+    throw new Error("Message kind is invalid.");
+  }
+  const steps = validateSteps(options.steps);
+  if (kind === "task_progress" && steps !== undefined && steps.length === 0) {
+    throw new Error("Progress messages need at least one step.");
+  }
+  const attachments = validateAttachments(options.attachments);
+
+  const createdAt = Math.floor(Date.now() / 1000);
+  const result = db
+    .prepare(
+      "INSERT INTO messages (chat_id, sender_employee_id, kind, content, steps, attachments, created_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+    )
+    .run(
+      chatId,
+      senderEmployeeId,
+      kind,
+      content,
+      steps !== undefined ? JSON.stringify({ steps }) : null,
+      attachments !== undefined ? JSON.stringify({ attachments }) : null,
+      createdAt,
+    );
+
+  // Unread bump lives here (single append write path): assistant/employee
+  // messages mark the chat as unread; user messages do not.
+  if (senderEmployeeId != null) {
+    bumpUnread(chatId);
+  }
+  return toMessage({
+    id: Number(result.lastInsertRowid),
+    chat_id: chatId,
+    sender_employee_id: senderEmployeeId,
+    kind,
+    content,
+    steps: steps !== undefined ? JSON.stringify({ steps }) : null,
+    attachments:
+      attachments !== undefined ? JSON.stringify({ attachments }) : null,
+    created_at: createdAt,
+  });
+}
+
+/**
+ * Search messages by content. Queries of 3+ characters use the FTS5 trigram
+ * index (ranked, highlighted snippet); shorter queries fall back to a LIKE
+ * substring scan so Chinese 1-2 char queries still work. Returns up to
+ * `MAX_SEARCH_RESULTS` matches, newest first in the LIKE path.
+ */
+export function searchMessages(query: string): MessageSearchResult[] {
+  const needle = query.trim().slice(0, MAX_SEARCH_QUERY_LENGTH);
+  if (needle.length === 0) return [];
+
+  const db = getDB();
+  if (needle.length < 3) {
+    const pattern = `%${escapeLike(needle)}%`;
+    const rows = db
+      .prepare(
+        `SELECT m.chat_id AS chatId, m.id AS messageId, m.created_at AS createdAt,
+                m.content AS content, c.title AS chatTitle
+         FROM messages m JOIN chats c ON c.id = m.chat_id
+         WHERE m.content LIKE ? ESCAPE '\\'
+         ORDER BY m.created_at DESC, m.id DESC
+         LIMIT ?`,
+      )
+      .all(pattern, MAX_SEARCH_RESULTS) as Array<{
+      chatId: number;
+      messageId: number;
+      createdAt: number;
+      content: string;
+      chatTitle: string;
+    }>;
+    return rows.map((row) => ({
+      chatId: row.chatId,
+      messageId: row.messageId,
+      chatTitle: row.chatTitle,
+      snippet: likeSnippet(row.content, needle),
+      createdAt: row.createdAt,
+    }));
+  }
+
+  // Treat user input as a literal phrase: quote it and escape inner quotes.
+  const phrase = toFtsPhrase(needle);
+  const rows = db
+    .prepare(
+      `SELECT m.chat_id AS chatId, m.id AS messageId, m.created_at AS createdAt,
+              c.title AS chatTitle,
+              snippet(messages_fts, 0, '«', '»', '…', 24) AS snippet
+       FROM messages_fts
+       JOIN messages m ON m.id = messages_fts.rowid
+       JOIN chats c ON c.id = m.chat_id
+       WHERE messages_fts MATCH ?
+       ORDER BY rank
+       LIMIT ?`,
+    )
+    .all(phrase, MAX_SEARCH_RESULTS) as MessageSearchResult[];
+  return rows;
+}
 
 function toMessage(row: MessageRow): Message {
   return {
@@ -161,127 +338,6 @@ function validateAttachments(
   return result;
 }
 
-/** List a chat's messages in conversation order (`created_at` ascending; `id` breaks same-second ties). */
-export function listMessages(chatId: number): Message[] {
-  return (
-    getDB()
-      .prepare(
-        "SELECT * FROM messages WHERE chat_id = ? ORDER BY created_at ASC, id ASC",
-      )
-      .all(chatId) as MessageRow[]
-  ).map(toMessage);
-}
-
-/**
- * List new messages after a read cursor (`id > afterId`), in conversation
- * order, with an optional page cap the caller re-invokes with to page through.
- */
-export function listMessagesAfter(
-  chatId: number,
-  afterId: number,
-  limit = 100,
-): Message[] {
-  const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 200);
-  return (
-    getDB()
-      .prepare(
-        "SELECT * FROM messages WHERE chat_id = ? AND id > ? " +
-          "ORDER BY created_at ASC, id ASC LIMIT ?",
-      )
-      .all(chatId, afterId, safeLimit) as MessageRow[]
-  ).map(toMessage);
-}
-
-/** Fetch a single message by its global row id, or null when absent. */
-export function getMessageById(id: number): Message | null {
-  const row = getDB().prepare("SELECT * FROM messages WHERE id = ?").get(id) as
-    MessageRow | undefined;
-  return row ? toMessage(row) : null;
-}
-
-/**
- * Append one message at the end of the chat. The row id is global and
- * monotonically increasing, so per-chat conversation order is simply
- * `created_at ASC, id ASC` (id breaks same-second ties); writes are already
- * serialized on the main-process event loop (synchronous driver).
- *
- * Messages from employees (sender_employee_id != NULL) also bump the chat's
- * unread counter; opening a chat clears it via `chats:markRead`.
- */
-export function appendMessage(
-  chatId: number,
-  senderEmployeeId: number | null,
-  content: string,
-  options: AppendMessageOptions = {},
-): Message {
-  const db = getDB();
-  if (typeof content !== "string" || content.length === 0) {
-    throw new Error("Message content must be a non-empty string.");
-  }
-  if (content.length > MAX_CONTENT_LENGTH) {
-    throw new Error("Message is too long.");
-  }
-  if (!db.prepare("SELECT 1 FROM chats WHERE id = ?").get(chatId)) {
-    throw new Error("Chat does not exist.");
-  }
-  if (
-    senderEmployeeId != null &&
-    !db.prepare("SELECT 1 FROM employees WHERE id = ?").get(senderEmployeeId)
-  ) {
-    throw new Error("Sender employee does not exist.");
-  }
-
-  const kind: MessageKind = options.kind ?? "text";
-  if (
-    typeof kind !== "string" ||
-    kind.length === 0 ||
-    kind.length > MAX_KIND_LENGTH
-  ) {
-    throw new Error("Message kind is invalid.");
-  }
-  const steps = validateSteps(options.steps);
-  if (kind === "task_progress" && steps !== undefined && steps.length === 0) {
-    throw new Error("Progress messages need at least one step.");
-  }
-  const attachments = validateAttachments(options.attachments);
-
-  const createdAt = Math.floor(Date.now() / 1000);
-  const result = db
-    .prepare(
-      "INSERT INTO messages (chat_id, sender_employee_id, kind, content, steps, attachments, created_at) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-    )
-    .run(
-      chatId,
-      senderEmployeeId,
-      kind,
-      content,
-      steps !== undefined ? JSON.stringify({ steps }) : null,
-      attachments !== undefined ? JSON.stringify({ attachments }) : null,
-      createdAt,
-    );
-
-  // Unread bump lives here (single append write path): assistant/employee
-  // messages mark the chat as unread; user messages do not.
-  if (senderEmployeeId != null) {
-    bumpUnread(chatId);
-  }
-  return toMessage({
-    id: Number(result.lastInsertRowid),
-    chat_id: chatId,
-    sender_employee_id: senderEmployeeId,
-    kind,
-    content,
-    steps: steps !== undefined ? JSON.stringify({ steps }) : null,
-    attachments:
-      attachments !== undefined ? JSON.stringify({ attachments }) : null,
-    created_at: createdAt,
-  });
-}
-
-const MAX_SEARCH_QUERY_LENGTH = 200;
-const MAX_SEARCH_RESULTS = 50;
-
 /** Wrap the first (case-insensitive) match in the same markers FTS uses. */
 function likeSnippet(content: string, needle: string): string {
   const lower = content.toLowerCase();
@@ -294,60 +350,4 @@ function likeSnippet(content: string, needle: string): string {
   const prefix = start > 0 ? "…" : "";
   const suffix = end < content.length ? "…" : "";
   return `${prefix}${content.slice(start, at)}«${content.slice(at, at + needle.length)}»${content.slice(at + needle.length, end)}${suffix}`;
-}
-
-/**
- * Search messages by content. Queries of 3+ characters use the FTS5 trigram
- * index (ranked, highlighted snippet); shorter queries fall back to a LIKE
- * substring scan so Chinese 1-2 char queries still work. Returns up to
- * `MAX_SEARCH_RESULTS` matches, newest first in the LIKE path.
- */
-export function searchMessages(query: string): MessageSearchResult[] {
-  const needle = query.trim().slice(0, MAX_SEARCH_QUERY_LENGTH);
-  if (needle.length === 0) return [];
-
-  const db = getDB();
-  if (needle.length < 3) {
-    const pattern = `%${escapeLike(needle)}%`;
-    const rows = db
-      .prepare(
-        `SELECT m.chat_id AS chatId, m.id AS messageId, m.created_at AS createdAt,
-                m.content AS content, c.title AS chatTitle
-         FROM messages m JOIN chats c ON c.id = m.chat_id
-         WHERE m.content LIKE ? ESCAPE '\\'
-         ORDER BY m.created_at DESC, m.id DESC
-         LIMIT ?`,
-      )
-      .all(pattern, MAX_SEARCH_RESULTS) as Array<{
-      chatId: number;
-      messageId: number;
-      createdAt: number;
-      content: string;
-      chatTitle: string;
-    }>;
-    return rows.map((row) => ({
-      chatId: row.chatId,
-      messageId: row.messageId,
-      chatTitle: row.chatTitle,
-      snippet: likeSnippet(row.content, needle),
-      createdAt: row.createdAt,
-    }));
-  }
-
-  // Treat user input as a literal phrase: quote it and escape inner quotes.
-  const phrase = toFtsPhrase(needle);
-  const rows = db
-    .prepare(
-      `SELECT m.chat_id AS chatId, m.id AS messageId, m.created_at AS createdAt,
-              c.title AS chatTitle,
-              snippet(messages_fts, 0, '«', '»', '…', 24) AS snippet
-       FROM messages_fts
-       JOIN messages m ON m.id = messages_fts.rowid
-       JOIN chats c ON c.id = m.chat_id
-       WHERE messages_fts MATCH ?
-       ORDER BY rank
-       LIMIT ?`,
-    )
-    .all(phrase, MAX_SEARCH_RESULTS) as MessageSearchResult[];
-  return rows;
 }

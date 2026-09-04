@@ -1,10 +1,11 @@
+import { ASSISTANT_ID } from "@shared/constants";
 import type {
   Employee,
   EmployeeDeleteResult,
   EmployeeInput,
   PageQuery,
   PageResult,
-} from "../../../shared/types";
+} from "@shared/types";
 import { readAvatarDataUrl } from "../../avatars";
 import { getDB } from "../index";
 import { parseNumberArray, parseStringArray, stringifyArray } from "./json";
@@ -22,56 +23,28 @@ interface EmployeeRow {
   disabled: number;
 }
 
-function toEmployee(row: EmployeeRow): Employee {
-  return {
-    id: row.id,
-    name: row.name ?? "",
-    role: row.role ?? "",
-    systemPrompt: row.system_prompt ?? "",
-    mcp: parseStringArray(row.mcp),
-    skills: parseStringArray(row.skills),
-    modelId: row.model_id,
-    avatar: row.avatar,
-    // Main-owned file read; data URL (or null) is the only form ever sent
-    // to the renderer — raw paths are not useful there.
-    avatarUrl: readAvatarDataUrl(row.id),
-    disabled: row.disabled === 1,
-  };
-}
-
-/** The built-in assistant's reserved id — it must always exist. */
-export const ASSISTANT_ID = 0;
-
-/** Hard cap on a single `set_employees` batch (mirrors the tool's `maxItems`). */
-const MAX_BATCH_SIZE = 50;
-
 /** One employee in a `set_employees` batch: omit `id` to create, pass `id` to update. */
-export interface EmployeeUpsertInput extends EmployeeInput {
+interface EmployeeUpsertInput extends EmployeeInput {
   id?: number;
 }
 
-const SELECT_ACTIVE =
-  "SELECT * FROM employees WHERE disabled = 0 ORDER BY id ASC";
-const SELECT_BY_ID = "SELECT * FROM employees WHERE id = ?";
-
-export function listEmployees(): Employee[] {
-  return (getDB().prepare(SELECT_ACTIVE).all() as EmployeeRow[]).map(
-    toEmployee,
-  );
+/** One employee purged at startup (session file paths captured pre-delete). */
+interface PurgedEmployee {
+  employeeId: number;
+  sessionPaths: string[];
 }
 
-// --- paged employee list (keyset cursor over `id ASC`) ----------------------
-
+/** Hard cap on a single `set_employees` batch (mirrors the tool's `maxItems`). */
+const MAX_BATCH_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
 const DEFAULT_PAGE_SIZE = 50;
 
-/** Case-insensitive name/role match used to decide whether the assistant is pinned. */
-function matchesNeedle(employee: Employee, needle: string): boolean {
-  const lower = needle.toLowerCase();
+export function listEmployees(): Employee[] {
   return (
-    employee.name.toLowerCase().includes(lower) ||
-    employee.role.toLowerCase().includes(lower)
-  );
+    getDB()
+      .prepare("SELECT * FROM employees WHERE disabled = 0 ORDER BY id ASC")
+      .all() as EmployeeRow[]
+  ).map(toEmployee);
 }
 
 /**
@@ -135,64 +108,14 @@ export function listEmployeesPage(page: PageQuery = {}): PageResult<Employee> {
 }
 
 export function getEmployee(id: number): Employee | null {
-  const row = getDB().prepare(SELECT_BY_ID).get(id) as EmployeeRow | undefined;
+  const row = getDB()
+    .prepare("SELECT * FROM employees WHERE id = ?")
+    .get(id) as EmployeeRow | undefined;
   return row ? toEmployee(row) : null;
 }
 
-/** Fetch the built-in assistant (id 0); never null thanks to seed + guards. */
 export function getAssistant(): Employee | null {
   return getEmployee(ASSISTANT_ID);
-}
-
-function validateName(name: string | undefined): string | undefined {
-  if (name === undefined) return undefined;
-  if (name.length > 200) throw new Error("Name is too long.");
-  return name;
-}
-
-function validateRole(role: string | undefined): string | undefined {
-  if (role === undefined) return undefined;
-  if (role.length > 200) throw new Error("Role is too long.");
-  return role;
-}
-
-function validatePrompt(prompt: string | undefined): string | undefined {
-  if (prompt === undefined) return undefined;
-  if (prompt.length > 100_000) throw new Error("System prompt is too long.");
-  return prompt;
-}
-
-/**
- * Validate an MCP/skill reference list defensively: strings only, sane length
- * caps, deduplicated preserving first-seen order. Names used for filesystem
- * operations are validated more strictly where those operations happen.
- */
-function validateRefList(
-  values: string[] | undefined,
-  field: "mcp" | "skills",
-): string[] | undefined {
-  if (values === undefined) return undefined;
-  if (!Array.isArray(values)) throw new Error(`${field} must be an array.`);
-  if (values.length > 256) throw new Error(`Too many ${field} entries.`);
-  for (const value of values) {
-    if (typeof value !== "string") {
-      throw new Error(`${field} entries must be strings.`);
-    }
-    if (value.length === 0 || value.length > 256) {
-      throw new Error(`${field} entry has invalid length.`);
-    }
-  }
-  return [...new Set(values)];
-}
-
-/** Validate `model_id` — either NULL/empty or `"provider/modelId"` form. */
-function validateModelId(modelId: string | null | undefined): string | null {
-  if (modelId == null || modelId === "") return null;
-  const valid = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(modelId);
-  if (!valid) {
-    throw new Error('Model id must look like "provider/model".');
-  }
-  return modelId;
 }
 
 export function createEmployee(input: EmployeeInput): Employee {
@@ -322,33 +245,6 @@ export function updateEmployeeAvatar(
   return getEmployee(id);
 }
 
-/** True when the employee id appears in at least one chat's participants array. */
-function isEmployeeInAnyChat(id: number): boolean {
-  const rows = getDB()
-    .prepare("SELECT participants FROM chats")
-    .all() as Array<{ participants: string }>;
-  return rows.some((row) => parseNumberArray(row.participants).includes(id));
-}
-
-/** Strip an employee id from every chat's participants array. */
-function stripFromAllChats(db: ReturnType<typeof getDB>, id: number): void {
-  // Desktop scale: scan all chats and filter exactly rather than guessing
-  // with LIKE patterns that can mis-candidate overlapping digits.
-  const rows = db.prepare("SELECT id, participants FROM chats").all() as Array<{
-    id: number;
-    participants: string;
-  }>;
-  for (const chat of rows) {
-    const participants = parseNumberArray(chat.participants);
-    if (participants.includes(id)) {
-      db.prepare("UPDATE chats SET participants = ? WHERE id = ?").run(
-        stringifyArray(participants.filter((pid) => pid !== id)),
-        chat.id,
-      );
-    }
-  }
-}
-
 /**
  * Delete a non-reserved employee.
  *
@@ -382,12 +278,6 @@ export function deleteEmployee(id: number): EmployeeDeleteResult {
   return removed ? "deleted" : null;
 }
 
-/** One employee purged at startup (session file paths captured pre-delete). */
-export interface PurgedEmployee {
-  employeeId: number;
-  sessionPaths: string[];
-}
-
 /**
  * Hard-delete every employee that is `disabled = 1` AND no longer a participant
  * of any chat. Returns the purged employees plus their recorded session file
@@ -415,4 +305,108 @@ export function purgeDisabledEmployees(): PurgedEmployee[] {
     purged.push({ employeeId: id, sessionPaths });
   }
   return purged;
+}
+
+function toEmployee(row: EmployeeRow): Employee {
+  return {
+    id: row.id,
+    name: row.name ?? "",
+    role: row.role ?? "",
+    systemPrompt: row.system_prompt ?? "",
+    mcp: parseStringArray(row.mcp),
+    skills: parseStringArray(row.skills),
+    modelId: row.model_id,
+    avatar: row.avatar,
+    // Main-owned file read; data URL (or null) is the only form ever sent
+    // to the renderer — raw paths are not useful there.
+    avatarUrl: readAvatarDataUrl(row.id),
+    disabled: row.disabled === 1,
+  };
+}
+
+/** Case-insensitive name/role match used to decide whether the assistant is pinned. */
+function matchesNeedle(employee: Employee, needle: string): boolean {
+  const lower = needle.toLowerCase();
+  return (
+    employee.name.toLowerCase().includes(lower) ||
+    employee.role.toLowerCase().includes(lower)
+  );
+}
+
+function validateName(name: string | undefined): string | undefined {
+  if (name === undefined) return undefined;
+  if (name.length > 200) throw new Error("Name is too long.");
+  return name;
+}
+
+function validateRole(role: string | undefined): string | undefined {
+  if (role === undefined) return undefined;
+  if (role.length > 200) throw new Error("Role is too long.");
+  return role;
+}
+
+function validatePrompt(prompt: string | undefined): string | undefined {
+  if (prompt === undefined) return undefined;
+  if (prompt.length > 100_000) throw new Error("System prompt is too long.");
+  return prompt;
+}
+
+/**
+ * Validate an MCP/skill reference list defensively: strings only, sane length
+ * caps, deduplicated preserving first-seen order. Names used for filesystem
+ * operations are validated more strictly where those operations happen.
+ */
+function validateRefList(
+  values: string[] | undefined,
+  field: "mcp" | "skills",
+): string[] | undefined {
+  if (values === undefined) return undefined;
+  if (!Array.isArray(values)) throw new Error(`${field} must be an array.`);
+  if (values.length > 256) throw new Error(`Too many ${field} entries.`);
+  for (const value of values) {
+    if (typeof value !== "string") {
+      throw new Error(`${field} entries must be strings.`);
+    }
+    if (value.length === 0 || value.length > 256) {
+      throw new Error(`${field} entry has invalid length.`);
+    }
+  }
+  return [...new Set(values)];
+}
+
+/** Validate `model_id` — either NULL/empty or `"provider/modelId"` form. */
+function validateModelId(modelId: string | null | undefined): string | null {
+  if (modelId == null || modelId === "") return null;
+  const valid = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(modelId);
+  if (!valid) {
+    throw new Error('Model id must look like "provider/model".');
+  }
+  return modelId;
+}
+
+/** True when the employee id appears in at least one chat's participants array. */
+function isEmployeeInAnyChat(id: number): boolean {
+  const rows = getDB()
+    .prepare("SELECT participants FROM chats")
+    .all() as Array<{ participants: string }>;
+  return rows.some((row) => parseNumberArray(row.participants).includes(id));
+}
+
+/** Strip an employee id from every chat's participants array. */
+function stripFromAllChats(db: ReturnType<typeof getDB>, id: number): void {
+  // Desktop scale: scan all chats and filter exactly rather than guessing
+  // with LIKE patterns that can mis-candidate overlapping digits.
+  const rows = db.prepare("SELECT id, participants FROM chats").all() as Array<{
+    id: number;
+    participants: string;
+  }>;
+  for (const chat of rows) {
+    const participants = parseNumberArray(chat.participants);
+    if (participants.includes(id)) {
+      db.prepare("UPDATE chats SET participants = ? WHERE id = ?").run(
+        stringifyArray(participants.filter((pid) => pid !== id)),
+        chat.id,
+      );
+    }
+  }
 }

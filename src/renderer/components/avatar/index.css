@@ -1,0 +1,32 @@
+.imb-avatar {
+  border-radius: var(--imb-radius-pill);
+  display: grid;
+  place-items: center;
+  flex: none;
+  background: color-mix(in oklch, var(--imb-accent) 15%, var(--imb-surface));
+  color: var(--imb-accent);
+  font-weight: 600;
+  overflow: hidden;
+  user-select: none;
+}
+
+.imb-avatar.imb-alt {
+  background: color-mix(in oklch, var(--imb-muted) 16%, var(--imb-surface));
+  color: var(--imb-muted);
+}
+
+.imb-is-active .imb-avatar {
+  background: color-mix(in oklch, var(--imb-accent) 30%, var(--imb-surface));
+}
+
+.imb-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--imb-radius-pill);
+  object-fit: cover;
+}
+
+.imb-avatar svg {
+  width: 100%;
+  height: 100%;
+}

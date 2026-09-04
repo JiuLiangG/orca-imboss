@@ -1,4 +1,4 @@
-import type { ModelOption } from "../../shared/types";
+import type { ModelOption } from "@shared/types";
 import { getAuthPath, getModelsPath } from "../data-dir";
 import { loadPiSdk, type PiSdk } from "./pi-sdk";
 

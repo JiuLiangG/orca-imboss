@@ -1,4 +1,3 @@
-import { contextBridge, ipcRenderer } from "electron";
 import type {
   Chat,
   ChatParticipantUpdate,
@@ -19,35 +18,26 @@ import type {
   ProviderModelsQuery,
   ProviderUpsert,
   ThemeState,
-} from "../shared/types";
+} from "@shared/types";
+import { contextBridge, ipcRenderer } from "electron";
 
-function readArg(name: string): string | null {
-  const prefix = `--${name}=`;
-  const found = process.argv.find((a) => a.startsWith(prefix));
-  return found ? found.slice(prefix.length) : null;
-}
-
-function on<T>(channel: string, cb: (payload: T) => void): () => void {
-  const listener = (_event: unknown, payload: T) => cb(payload);
-  ipcRenderer.on(channel, listener);
-  return () => ipcRenderer.removeListener(channel, listener);
-}
-
-const runtimeLocale = readArg("locale") ?? "en";
+const initialLocale = readArg("locale") ?? "en";
 
 const api = {
   platform: process.platform,
-  locale: runtimeLocale,
-  getLocale: () => ipcRenderer.invoke("locale:get") as Promise<string>,
+
+  initialLocale,
   setLocale: (locale: string) =>
     ipcRenderer.invoke("locale:set", locale) as Promise<string>,
   onLocaleChanged: (cb: (locale: string) => void) => on("locale:changed", cb),
+
   settings: {
     get: (key: string) =>
       ipcRenderer.invoke("settings:get", key) as Promise<string | null>,
     set: (key: string, value: string) =>
       ipcRenderer.invoke("settings:set", key, value) as Promise<void>,
   },
+
   getVersion: () => ipcRenderer.invoke("app:getVersion") as Promise<string>,
 
   windowControls: {
@@ -238,6 +228,18 @@ const api = {
   },
 };
 
+contextBridge.exposeInMainWorld("imb", api);
+
 export type IMB = typeof api;
 
-contextBridge.exposeInMainWorld("imb", api);
+function readArg(name: string): string | null {
+  const prefix = `--${name}=`;
+  const found = process.argv.find((a) => a.startsWith(prefix));
+  return found ? found.slice(prefix.length) : null;
+}
+
+function on<T>(channel: string, cb: (payload: T) => void): () => void {
+  const listener = (_event: unknown, payload: T) => cb(payload);
+  ipcRenderer.on(channel, listener);
+  return () => ipcRenderer.removeListener(channel, listener);
+}

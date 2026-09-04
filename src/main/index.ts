@@ -1,15 +1,16 @@
 import { app, BrowserWindow, shell } from "electron";
 import { join } from "path";
 import icon from "../../resources/icon.png?asset";
+import { refreshModelStore } from "./agent/model-runtime";
 import { deleteAvatarFiles } from "./avatars";
+import * as cron from "./cron";
 import { initDatabase } from "./db";
 import { purgeDisabledEmployees } from "./db/services/employees";
 import { unlinkSessionFile } from "./db/services/sessions";
-import { refreshModelStore } from "./agent/model-runtime";
-import * as cron from "./cron";
-import { registerIpcHandlers, setupNativeTheme } from "./ipc";
+import { registerIpcHandlers } from "./ipc";
 import { getResolvedLocale } from "./locale";
 import { setMainWindow } from "./notifications";
+import { initTheme } from "./theme";
 import { initUpdater } from "./updater";
 import {
   DEFAULT_WINDOW_HEIGHT,
@@ -20,11 +21,13 @@ import {
   saveWindowBounds,
 } from "./window-state";
 
+// Single instance
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) {
   app.quit();
 }
 
+// Single window
 app.on("second-instance", () => {
   const win = BrowserWindow.getAllWindows()[0];
   if (win) {
@@ -48,10 +51,33 @@ app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
 
+app.whenReady().then(() => {
+  // Matches `appId` in electron-builder.yml.
+  app.setAppUserModelId("com.orcastudio.imboss");
+
+  initDatabase();
+  registerIpcHandlers();
+  initTheme();
+
+  // Re-register persisted cron jobs (fire-and-forget; only while app is alive).
+  cron.initCron();
+
+  createWindow();
+
+  // Best-effort cleanup of disabled employees no longer in any chat. Fire-and-
+  // forget: a failure is logged and never blocks startup.
+  void purgeDisabledEmployeesOnStartup();
+
+  // Warm the app's model store over the network so configured provider/model
+  // catalogs are fresh for the whole session. Fire-and-forget (non-blocking):
+  // startup stays responsive and a failed refresh is only logged, never shown.
+  void refreshModelStore(new AbortController().signal);
+
+  if (app.isPackaged) initUpdater();
+});
+
 function createWindow(): void {
   const locale = getResolvedLocale();
-  // Restore the last session's position+size; fall back to centered defaults when
-  // the saved bounds are invalid (missing, below minimum, or outside every display).
   const savedBounds = loadWindowBounds();
 
   const mainWindow = new BrowserWindow({
@@ -64,8 +90,6 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     titleBarStyle: "hidden",
-    // macOS: nudge the native traffic lights into the collapsed sidebar column.
-    // ...(isMac ? { trafficLightPosition: { x: 8, y: 9 } } : {}),
     ...(process.platform === "linux" ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
@@ -86,8 +110,6 @@ function createWindow(): void {
     mainWindow.webContents.send("window:maximized", false),
   );
 
-  // Persist the window's position and size (its normal, unmaximized bounds) so
-  // they can be restored on the next launch.
   mainWindow.on("close", () => saveWindowBounds(mainWindow));
 
   // Register the window for OS notification click-to-focus + jump-to-chat.
@@ -106,31 +128,6 @@ function createWindow(): void {
     mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
   }
 }
-
-app.whenReady().then(() => {
-  // Matches `appId` in electron-builder.yml.
-  app.setAppUserModelId("com.orcastudio.imboss");
-
-  initDatabase();
-  registerIpcHandlers();
-  setupNativeTheme();
-
-  // Re-register persisted cron jobs (fire-and-forget; only while app is alive).
-  cron.initCron();
-
-  createWindow();
-
-  // Best-effort cleanup of disabled employees no longer in any chat. Fire-and-
-  // forget: a failure is logged and never blocks startup.
-  void purgeDisabledEmployeesOnStartup();
-
-  // Warm the app's model store over the network so configured provider/model
-  // catalogs are fresh for the whole session. Fire-and-forget (non-blocking):
-  // startup stays responsive and a failed refresh is only logged, never shown.
-  void refreshModelStore(new AbortController().signal);
-
-  if (app.isPackaged) initUpdater();
-});
 
 /**
  * Hard-delete employees that were disabled and are no longer a chat participant,

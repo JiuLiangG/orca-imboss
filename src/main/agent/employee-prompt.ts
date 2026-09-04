@@ -1,4 +1,4 @@
-import { BUILTIN_SKILLS, TOOLS_GUIDELINES } from "../../shared/constants";
+import { BUILTIN_SKILLS, TOOLS_GUIDELINES } from "@shared/constants";
 
 /**
  * One entry for the `[tools]` block's `Available tools` list. The base SDK

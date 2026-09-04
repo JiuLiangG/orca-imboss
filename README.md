@@ -2,8 +2,6 @@
 
 An Electron desktop application for running an **AI agent as your "one man company"**, with a chat-based (WeChat–style) interface. You chat with your **assistant**, who coordinates **employees** (sub-agents) to complete work, collects feedback, and reports progress back to you.
 
-> **Status:** Data folder (`~/.imboss`), full SQLite schema, and the prototype UI are implemented (chat/employees/models/MCP/skills/settings modules). Core agent interaction (chat + agent) is still stubbed (placeholder replies). See [Deferred / TODO](#deferred--todo).
-
 ---
 
 ## Highlights
@@ -29,14 +27,14 @@ The app follows the standard Electron process model, with the **data layer and a
         IPC │ (invoke / events)             IPC │ (invoke / events)
 ┌───────────────┴───────────────────────────────────┴──────────────────┐
 │                        Preload (contextBridge)                       │
-│             window.imb: locale, settings, agents, events             │
+│             imb: locale, settings, agents, events                    │
 └───────────────┬───────────────────────────────────┬──────────────────┘
          invoke │                                   │ push events
 ┌───────────────┴───────────────────────────────────┴──────────────────┐
 │                         Main process (Node)                          │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌────────────────────┐  │
 │  │  SQLite (WAL)    │  │  Pi Agent SDK    │  │  Update / Notify   │  │
-│  │  SQLite schema   │  │  (~/.imboss)    │  │  electron-updater  │  │
+│  │  SQLite schema   │  │  (~/.imboss)     │  │  electron-updater  │  │
 │  └──────────────────┘  └──────────────────┘  └────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────┘
 ```
@@ -59,7 +57,7 @@ The app follows the standard Electron process model, with the **data layer and a
 | Package manager | pnpm                                                                 |
 | Data layer      | `better-sqlite3` (WAL, synchronous, atomic writes)                   |
 | Agent           | `@earendil-works/pi-coding-agent` (Pi SDK)                           |
-| Localization    | `src/shared/libs/l10n.ts`                                            |
+| Localization    | `src/shared/l10n.ts`                                                 |
 | Auto-update     | `electron-updater` + GitHub releases                                 |
 | Packaging       | `electron-builder` (DMG / NSIS / AppImage)                           |
 
@@ -86,7 +84,7 @@ pnpm dev                # start electron-vite dev (with HMR)
 
 - **English is the source of truth**: English text is passed directly to `t("...")`, so an English dictionary file is **not** required. When the active locale has no translation, `t()` returns the key (English) as-is.
 - Only the **`zh-CN`** dictionary is shipped (`src/shared/translations/zhCN.json`), mapping English keys to Simplified Chinese.
-- `src/shared/libs/l10n.ts` exposes `setupL10N(locale, translations)`, `t(key, args?, locale?)`, and `getLocale()`.
+- `src/shared/l10n.ts` exposes `setupL10N(locale, translations)`, `t(key, args?, locale?)`, and `getLocale()`.
 
 ---
 
@@ -95,15 +93,6 @@ pnpm dev                # start electron-vite dev (with HMR)
 The app uses **`better-sqlite3`** with **WAL mode** (`journal_mode = WAL`) for concurrent reads while writes remain serialized. The database lives in the main process only, at **`~/.imboss/db/imboss.db`** — inside the app's dedicated data folder (see below).
 
 - A lightweight migration runner (`src/main/db/migrations.ts`) tracks schema version via `PRAGMA user_version`. While unreleased, the schema is maintained directly in migration 0 (with a defensive "ensure columns" pass for dev-era databases).
-- Tables:
-  - **`settings`** — key/value store (locale, theme.mode, theme.color, defaultModel, env, ui.*).
-  - **`employees`** — assistant + sub-agents; the built-in assistant always exists under reserved id `0`. Columns: `name`, `role`, `system_prompt`, `mcp` (JSON array of MCP server names), `skills` (JSON array), `model_id` (`provider/model`), `avatar` (stored file path).
-  - **`chats`** — title, participants (JSON array), `unread` count.
-  - **`messages`** — per-chat rows ordered by `pos`; `kind` (`text` | `task_progress`), `steps` (JSON progress steps), `attachments` (JSON metadata).
-  - **`sessions`** — Pi session path per employee per chat.
-  - **`mcp_servers`** — MCP server configs: `transport` (`stdio` | `sse` | `streamable-http`) + transport-specific `config` JSON.
-
-```
 
 ---
 
@@ -146,72 +135,6 @@ Packaging is configured in `electron-builder.yml`.
 
 ---
 
-## Project structure
-
-```
-
-src/
-├── main/
-│ ├── agent/ # Pi environment management
-│ │ ├── environment.ts # agentDir root (~/.imboss/agent)
-│ │ ├── providers.ts # auth.json / models.json owner (source of truth)
-│ │ ├── skills.ts # skills install/uninstall
-│ │ ├── session.ts # Pi session orchestration (stubbed)
-│ │ └── tools.ts # defineAgentTools (stubbed)
-│ ├── avatars.ts # ~/.imboss/avatars/<id>.<ext> store (data URLs via service)
-│ ├── data-dir.ts # ~/.imboss path resolution + layout + hardening
-│ ├── db/
-│ │ ├── index.ts # SQLite connection + WAL + FK + init
-│ │ ├── migrations.ts # user_version migration runner (schema in migration 0)
-│ │ └── services/ # settings, employees, chats, messages, sessions, mcp
-│ ├── ipc/index.ts # renderer ↔ main channels (mcp/chat/theme/avatar + CRUD)
-│ ├── theme.ts # nativeTheme.themeSource + DB persistence + broadcast
-│ ├── notifications/ # OS notifications (stubbed)
-│ ├── updater/ # electron-updater wiring
-│ ├── index.ts # app entry (window, single-instance, wiring)
-│ └── locale.ts # locale resolution
-├── preload/
-│ ├── index.ts # contextBridge API
-│ └── index.d.ts # window.imb typings
-├── renderer/
-│ ├── index.html
-│ └── src/
-│ ├── App.tsx # app shell + module switching
-│ ├── app-store.ts # global app state (valtio): module/locale/theme/nav
-│ ├── theme.ts # 12 accent presets + CSS variable injection
-│ ├── main.tsx
-│ ├── styles/ # tokens.css (design tokens), base.css (reset)
-│ └── components/ # one folder per component (index.tsx + index.css)
-│ ├── button, select, multi-select, modal, avatar, …
-│ ├── app-shell, nav, list-pane, detail-pane, context-menu…
-│ └── modules/ # chat, employees, models, mcp, skills, settings
-└── shared/
-├── libs/l10n.ts # t() / setupL10N()
-├── constants.ts # locales, normalization
-├── types.ts # shared types (employees/chats/messages/mcp/theme/…)
-└── translations/zhCN.json
-
-```
-
-## Data folder (~/.imboss)
-
-All app data lives in a dedicated folder under the user's home directory:
-
-```
-
-~/.imboss/
-├── db/imboss.db # SQLite (WAL) — settings/employees/chats/messages/sessions/mcp_servers
-├── avatars/ # employee avatar files <id>.<ext> (0600)
-└── agent/ # isolated Pi environment (agentDir)
-├── auth.json # provider API keys (0600)
-├── models.json # custom providers & models
-├── skills/<name>/SKILL.md
-└── sessions/ # Pi session files (used once runtime wiring lands)
-
-```
-
----
-
 ## Deferred / TODO
 
 These areas are scoped for upcoming iterations and are intentionally left as stubs or extension points:
@@ -227,4 +150,3 @@ These areas are scoped for upcoming iterations and are intentionally left as stu
 
 - Native modules (`better-sqlite3`) are rebuilt for the Electron ABI via `postinstall` (`electron-builder install-app-deps`).
 - The CSP in `src/renderer/index.html` is intentionally strict (inline styles allowed for the theme accent injection).
-```

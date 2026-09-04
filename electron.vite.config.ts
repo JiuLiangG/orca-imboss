@@ -1,6 +1,6 @@
 import { defineConfig } from "@desirecore/electron-vite";
 import react from "@vitejs/plugin-react";
-// import { resolve } from "path";
+import { resolve } from "path";
 
 export default defineConfig({
   main: {
@@ -13,18 +13,28 @@ export default defineConfig({
       // import() from CommonJS). Setting the option to `false` would *force*
       // the require() rewrite and break ESM-only deps.
     },
+    resolve: {
+      alias: {
+        "@shared": resolve("src/shared"),
+      },
+    },
   },
   preload: {
     build: {
       externalizeDeps: true,
     },
+    resolve: {
+      alias: {
+        "@shared": resolve("src/shared"),
+      },
+    },
   },
   renderer: {
-    // resolve: {
-    //   alias: {
-    //     "@renderer": resolve("src/renderer/src"),
-    //   },
-    // },
+    resolve: {
+      alias: {
+        "@shared": resolve("src/shared"),
+      },
+    },
     plugins: [react()],
   },
 });

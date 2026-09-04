@@ -1,5 +1,4 @@
 import { app } from "electron";
-import { DEFAULT_LOCALE } from "../shared/constants";
 import { getSetting } from "./db/services/settings";
 
 export function getResolvedLocale(): string {
@@ -9,5 +8,3 @@ export function getResolvedLocale(): string {
   }
   return app.getLocale();
 }
-
-export { DEFAULT_LOCALE };

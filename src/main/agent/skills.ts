@@ -1,7 +1,7 @@
+import type { InstalledSkill, PageQuery, PageResult } from "@shared/types";
 import { cpSync, existsSync, mkdirSync, statSync } from "fs";
 import { readdir, readFile, rm } from "fs/promises";
 import { join, resolve } from "path";
-import type { InstalledSkill, PageQuery, PageResult } from "../../shared/types";
 import { getAgentSkillsDir } from "../data-dir";
 
 /**
@@ -14,9 +14,8 @@ const SKILL_FILE = "SKILL.md";
 
 const SAFE_NAME_RE = /^[A-Za-z0-9._-]{1,64}$/;
 
-export function isValidSkillName(name: string): boolean {
-  return SAFE_NAME_RE.test(name);
-}
+const MAX_PAGE_SIZE = 200;
+const DEFAULT_PAGE_SIZE = 50;
 
 export async function listSkills(): Promise<InstalledSkill[]> {
   let entries: string[];
@@ -43,11 +42,6 @@ export async function listSkills(): Promise<InstalledSkill[]> {
   }
   return installed.sort((a, b) => a.name.localeCompare(b.name));
 }
-
-// --- paged skill list (keyset cursor over `name ASC`, in-memory source) -----
-
-const MAX_PAGE_SIZE = 200;
-const DEFAULT_PAGE_SIZE = 50;
 
 /**
  * One page of installed skills, ordered `name ASC` (unchanged from the full
@@ -93,35 +87,6 @@ export async function listSkillsPage(
     nextCursor: hasMore && last ? last.name : null,
     hasMore,
   };
-}
-
-/**
- * Best-effort extraction of `name:` and `description:` from SKILL.md YAML
- * frontmatter. Purely informational (list UI); malformed files simply yield
- * `null` rather than failing.
- */
-async function readSkillMetadata(skillFilePath: string): Promise<{
-  name: string | null;
-  description: string | null;
-}> {
-  try {
-    const head = (await readFile(skillFilePath, "utf8")).slice(0, 4096);
-    const nameMatch = /^name:\s*(.+)$/m.exec(head);
-    const descMatch = /^description:\s*(.+)$/m.exec(head);
-    const clean = (raw: string | undefined): string | null =>
-      raw ? raw.trim().replace(/^["']|["']$/g, "") : null;
-    const name = clean(nameMatch?.[1]);
-    const description = clean(descMatch?.[1]);
-    return {
-      name: name && name.length > 0 ? name : null,
-      description:
-        description && description.length > 0
-          ? description.slice(0, 500)
-          : null,
-    };
-  } catch {
-    return { name: null, description: null };
-  }
 }
 
 /**
@@ -197,4 +162,37 @@ export async function uninstallSkill(name: string): Promise<void> {
     throw new Error("Refusing to delete outside the skills folder.");
   }
   await rm(dest, { recursive: true, force: true });
+}
+
+function isValidSkillName(name: string): boolean {
+  return SAFE_NAME_RE.test(name);
+}
+
+/**
+ * Best-effort extraction of `name:` and `description:` from SKILL.md YAML
+ * frontmatter. Purely informational (list UI); malformed files simply yield
+ * `null` rather than failing.
+ */
+async function readSkillMetadata(skillFilePath: string): Promise<{
+  name: string | null;
+  description: string | null;
+}> {
+  try {
+    const head = (await readFile(skillFilePath, "utf8")).slice(0, 4096);
+    const nameMatch = /^name:\s*(.+)$/m.exec(head);
+    const descMatch = /^description:\s*(.+)$/m.exec(head);
+    const clean = (raw: string | undefined): string | null =>
+      raw ? raw.trim().replace(/^["']|["']$/g, "") : null;
+    const name = clean(nameMatch?.[1]);
+    const description = clean(descMatch?.[1]);
+    return {
+      name: name && name.length > 0 ? name : null,
+      description:
+        description && description.length > 0
+          ? description.slice(0, 500)
+          : null,
+    };
+  } catch {
+    return { name: null, description: null };
+  }
 }

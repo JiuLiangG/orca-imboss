@@ -1,8 +1,5 @@
+import { AgentEnvironment } from "@shared/types";
 import { getAgentRoot } from "../data-dir";
-
-export interface AgentEnvironment {
-  rootDir: string;
-}
 
 /**
  * Return the app's *own* Pi environment location under `~/.imboss/agent`,

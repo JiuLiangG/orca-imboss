@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "One man company agent",
   "main": "./out/main/index.js",
-  "author": "sethyuan@qq.com",
+  "author": "kefroth@outlook.com",
   "homepage": "https://orca-studio.com/imboss/",
   "repository": {
     "type": "git",
@@ -42,7 +42,7 @@
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^44.0.0",
     "electron-builder": "^26.15.3",
-    "prettier": "^3.7.4",
+    "prettier": "3.9.6",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "reactutils": "^5.13.3",

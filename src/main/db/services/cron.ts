@@ -1,6 +1,12 @@
+import type { CronJob, CronJobInput } from "@shared/types";
 import { Cron } from "croner";
-import type { CronJob } from "../../../shared/types";
 import { getDB } from "../index";
+
+interface ParsedCronJobId {
+  chatId: number;
+  employeeId: number;
+  jobId: string;
+}
 
 interface CronJobRow {
   id: string;
@@ -14,72 +20,21 @@ interface CronJobRow {
   next_run_at: number | null;
 }
 
-function toCronJob(row: CronJobRow): CronJob {
-  return {
-    id: row.id,
-    chatId: row.chat_id,
-    employeeId: row.employee_id,
-    schedule: row.schedule,
-    content: row.content,
-    enabled: row.enabled === 1,
-    createdAt: row.created_at,
-    lastRunAt: row.last_run_at,
-    nextRunAt: row.next_run_at,
-  };
-}
-
-const SELECT_ALL = "SELECT * FROM cron_jobs";
-
 export function listEnabledJobs(): CronJob[] {
   return (
     getDB()
       .prepare(
-        `${SELECT_ALL} WHERE enabled = 1 ORDER BY created_at ASC, id ASC`,
+        `SELECT * FROM cron_jobs WHERE enabled = 1 ORDER BY created_at ASC, id ASC`,
       )
       .all() as CronJobRow[]
   ).map(toCronJob);
 }
 
 export function getJob(id: string): CronJob | null {
-  const row = getDB().prepare(`${SELECT_ALL} WHERE id = ?`).get(id) as
-    CronJobRow | undefined;
+  const row = getDB()
+    .prepare(`SELECT * FROM cron_jobs WHERE id = ?`)
+    .get(id) as CronJobRow | undefined;
   return row ? toCronJob(row) : null;
-}
-
-/**
- * Normalize a 5-field cron expression to 6-field by prefixing an implicit
- * `0` seconds field, and validate the field count. Croner is otherwise used
- * as-is (6-field, seconds included).
- */
-export function normalizeSchedule(schedule: string): string {
-  const trimmed = (schedule ?? "").trim();
-  if (trimmed.length === 0) throw new Error("Cron schedule must not be empty.");
-  const parts = trimmed.split(/\s+/);
-  if (parts.length < 5) {
-    throw new Error(
-      "Cron schedule must have at least 5 fields (seconds optional).",
-    );
-  }
-  if (parts.length === 5) return `0 ${trimmed}`;
-  if (parts.length === 6 || parts.length === 7) return trimmed;
-  throw new Error("Cron schedule must have 5, 6, or 7 fields.");
-}
-
-/**
- * Compute the next run time (epoch seconds) for a schedule, or `null` when
- * the schedule can never fire again. Also validates the expression by parsing
- * it with croner (throws on invalid patterns).
- */
-export function nextRunForSchedule(schedule: string): number | null {
-  const cron = new Cron(normalizeSchedule(schedule), { mode: "auto" });
-  const next = cron.nextRun();
-  return next ? Math.floor(next.getTime() / 1000) : null;
-}
-
-export interface ParsedCronJobId {
-  chatId: number;
-  employeeId: number;
-  jobId: string;
 }
 
 /** Parse + validate a composite cron job id `"chatId/employeeId/jobId"`. */
@@ -104,14 +59,6 @@ export function parseCronJobId(id: string): ParsedCronJobId {
     throw new Error("Cron job id has an empty jobId.");
   }
   return { chatId, employeeId, jobId };
-}
-
-export interface CronJobInput {
-  id: string;
-  chatId: number;
-  employeeId: number;
-  schedule: string;
-  content: string;
 }
 
 /**
@@ -165,8 +112,9 @@ export function deleteJob(id: string): boolean {
 
 /** Record a run and recompute the next run time from the stored schedule. */
 export function markRun(id: string, at: number): void {
-  const row = getDB().prepare(`${SELECT_ALL} WHERE id = ?`).get(id) as
-    CronJobRow | undefined;
+  const row = getDB()
+    .prepare(`SELECT * FROM cron_jobs WHERE id = ?`)
+    .get(id) as CronJobRow | undefined;
   if (!row) return;
   let nextRun: number | null;
   try {
@@ -186,4 +134,48 @@ export function setNextRun(id: string, at: number | null): void {
   getDB()
     .prepare("UPDATE cron_jobs SET next_run_at = ? WHERE id = ?")
     .run(at, id);
+}
+
+function toCronJob(row: CronJobRow): CronJob {
+  return {
+    id: row.id,
+    chatId: row.chat_id,
+    employeeId: row.employee_id,
+    schedule: row.schedule,
+    content: row.content,
+    enabled: row.enabled === 1,
+    createdAt: row.created_at,
+    lastRunAt: row.last_run_at,
+    nextRunAt: row.next_run_at,
+  };
+}
+
+/**
+ * Normalize a 5-field cron expression to 6-field by prefixing an implicit
+ * `0` seconds field, and validate the field count. Croner is otherwise used
+ * as-is (6-field, seconds included).
+ */
+function normalizeSchedule(schedule: string): string {
+  const trimmed = (schedule ?? "").trim();
+  if (trimmed.length === 0) throw new Error("Cron schedule must not be empty.");
+  const parts = trimmed.split(/\s+/);
+  if (parts.length < 5) {
+    throw new Error(
+      "Cron schedule must have at least 5 fields (seconds optional).",
+    );
+  }
+  if (parts.length === 5) return `0 ${trimmed}`;
+  if (parts.length === 6 || parts.length === 7) return trimmed;
+  throw new Error("Cron schedule must have 5, 6, or 7 fields.");
+}
+
+/**
+ * Compute the next run time (epoch seconds) for a schedule, or `null` when
+ * the schedule can never fire again. Also validates the expression by parsing
+ * it with croner (throws on invalid patterns).
+ */
+function nextRunForSchedule(schedule: string): number | null {
+  const cron = new Cron(normalizeSchedule(schedule), { mode: "auto" });
+  const next = cron.nextRun();
+  return next ? Math.floor(next.getTime() / 1000) : null;
 }

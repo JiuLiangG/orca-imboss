@@ -1,0 +1,52 @@
+.imb-segmented-group {
+  display: flex;
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-md);
+  overflow: hidden;
+  background: var(--imb-surface);
+}
+
+.imb-segmented-btn {
+  flex: 1;
+  padding: 5px 0;
+  font: inherit;
+  font-size: var(--imb-text-base);
+  background: transparent;
+  border: none;
+  color: var(--imb-muted);
+  cursor: pointer;
+  transition:
+    background var(--imb-motion-fast) var(--imb-ease-standard),
+    color var(--imb-motion-fast) var(--imb-ease-standard);
+  position: relative;
+}
+
+.imb-segmented-btn + .imb-segmented-btn {
+  border-left: 1px solid var(--imb-border);
+}
+
+.imb-segmented-btn:hover:not(:disabled) {
+  background: var(--imb-fg-soft);
+  color: var(--imb-fg);
+}
+
+.imb-segmented-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+  z-index: 1;
+}
+
+.imb-segmented-btn.imb-is-active {
+  background: var(--imb-accent);
+  color: var(--imb-accent-on);
+  font-weight: 500;
+}
+
+.imb-segmented-btn.imb-is-active:hover {
+  background: var(--imb-accent-hover);
+}
+
+.imb-segmented-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

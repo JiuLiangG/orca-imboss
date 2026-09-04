@@ -1,0 +1,77 @@
+.imb-progress-card {
+  background: var(--imb-surface);
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-lg);
+  padding: var(--imb-space-3) var(--imb-space-4);
+  box-shadow: var(--imb-elev-raised);
+  min-width: 0;
+  flex: 1;
+}
+
+.imb-progress-card-title {
+  font-size: var(--imb-text-sm);
+  color: var(--imb-muted);
+}
+
+.imb-progress-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--imb-text-base);
+}
+
+.imb-progress-row .imb-pname {
+  font-size: var(--imb-text-base);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imb-progress-row .imb-pname-role {
+  color: var(--imb-muted);
+  font-size: var(--imb-text-xs);
+  font-weight: 400;
+}
+
+.imb-progress-tag {
+  font-size: var(--imb-text-xs);
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.imb-progress-tag.imb-done {
+  color: var(--imb-accent-active);
+}
+
+.imb-progress-tag.imb-busy {
+  color: var(--imb-text-2);
+}
+
+.imb-status-dot {
+  display: inline-block;
+  margin-right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.imb-progress-tag.imb-busy .imb-status-dot {
+  animation: status-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}

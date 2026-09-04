@@ -12,12 +12,9 @@ import {
   type Transport,
 } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
+import type { McpConfig, McpServer } from "@shared/types";
 import { Type, type TSchema } from "typebox";
-import type { McpConfig, McpServer } from "../../shared/types";
 import { mergeEnv, readUserEnv } from "./user-env";
-
-/** Shared Pi tool definition type (any params/details — variance-safe). */
-export type AnyPiTool = ToolDefinition<any, any, any>;
 
 /**
  * App-side MCP client bridge.
@@ -35,13 +32,88 @@ export type AnyPiTool = ToolDefinition<any, any, any>;
  *   the agent session.
  */
 
+/** Shared Pi tool definition type (any params/details — variance-safe). */
+export type AnyPiTool = ToolDefinition<any, any, any>;
+
 const CONNECT_TIMEOUT_MS = 20_000;
 const MAX_TOOL_NAME_LENGTH = 128;
 const MAX_SCHEMA_DEPTH = 6;
 
+export interface McpToolDefinitions {
+  /** Wrapped Pi tool definitions (one per MCP tool of the connected servers). */
+  tools: AnyPiTool[];
+  /** Close every client connection (stdio child processes included). */
+  close: () => Promise<void>;
+}
+
+/**
+ * Connect every configured server and wrap its tools for Pi.
+ *
+ * A failing server is skipped (logged) so one misconfigured MCP server cannot
+ * break the whole agent session.
+ */
+export async function createMcpToolDefinitions(
+  servers: McpServer[],
+): Promise<McpToolDefinitions> {
+  const clients: Client[] = [];
+  const tools: AnyPiTool[] = [];
+  for (const server of servers) {
+    try {
+      const client = new Client({
+        name: `imboss-mcp-${server.name}`,
+        version: "0.1.0",
+      });
+      const transport = buildMcpTransport(server.config);
+      await connectWithTimeout(client, transport);
+      clients.push(client);
+      const listed = await client.listTools();
+      for (const mcpTool of listed.tools) {
+        tools.push(toPiToolDefinition(client, server, mcpTool));
+      }
+    } catch (err) {
+      console.error(
+        `[mcp] Failed to connect "${server.name}":`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+  return {
+    tools,
+    close: async (): Promise<void> => {
+      await Promise.all(
+        clients.map((client) => client.close().catch(() => undefined)),
+      );
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
-// stdio argv parsing
+// transport construction
 // ---------------------------------------------------------------------------
+
+/** Build the client transport for one server config (env merged for stdio). */
+function buildMcpTransport(config: McpConfig): Transport {
+  if (config.transport === "stdio") {
+    return new StdioClientTransport({
+      command: config.command,
+      args: parseMcpArgs(config.args),
+      // More specific wins: process env → user env → per-server env.
+      env: mergeEnv(
+        process.env as Record<string, string>,
+        readUserEnv(),
+        config.env,
+      ),
+    });
+  }
+  if (config.transport === "sse") {
+    return new SSEClientTransport(new URL(config.url), {
+      requestInit: { headers: { ...config.headers } },
+    });
+  }
+  return new StreamableHTTPClientTransport(new URL(config.url), {
+    requestInit: { headers: { ...config.headers } },
+  });
+}
 
 /**
  * Parse a stored command-arguments string into an argv array.
@@ -52,7 +124,7 @@ const MAX_SCHEMA_DEPTH = 6;
  * - a backslash escapes the next character (outside single quotes).
  * Unbalanced quotes are taken literally (defensive; never throws).
  */
-export function parseMcpArgs(args: string): string[] {
+function parseMcpArgs(args: string): string[] {
   const tokens: string[] = [];
   let current = "";
   let hasToken = false;
@@ -119,34 +191,6 @@ export function parseMcpArgs(args: string): string[] {
   return tokens;
 }
 
-// ---------------------------------------------------------------------------
-// transport construction
-// ---------------------------------------------------------------------------
-
-/** Build the client transport for one server config (env merged for stdio). */
-export function buildMcpTransport(config: McpConfig): Transport {
-  if (config.transport === "stdio") {
-    return new StdioClientTransport({
-      command: config.command,
-      args: parseMcpArgs(config.args),
-      // More specific wins: process env → user env → per-server env.
-      env: mergeEnv(
-        process.env as Record<string, string>,
-        readUserEnv(),
-        config.env,
-      ),
-    });
-  }
-  if (config.transport === "sse") {
-    return new SSEClientTransport(new URL(config.url), {
-      requestInit: { headers: { ...config.headers } },
-    });
-  }
-  return new StreamableHTTPClientTransport(new URL(config.url), {
-    requestInit: { headers: { ...config.headers } },
-  });
-}
-
 /** Connect the client; fail (and close the transport) after a bounded wait. */
 async function connectWithTimeout(
   client: Client,
@@ -180,7 +224,7 @@ async function connectWithTimeout(
  * Unsupported constructs degrade to `Type.Unknown()` so the tool stays
  * callable — argument semantics remain enforced by the MCP server itself.
  */
-export function jsonSchemaToTypeBox(schema: unknown, depth = 0): TSchema {
+function jsonSchemaToTypeBox(schema: unknown, depth = 0): TSchema {
   if (depth > MAX_SCHEMA_DEPTH) return Type.Unknown();
   if (typeof schema !== "object" || schema === null || Array.isArray(schema)) {
     return Type.Unknown();
@@ -445,56 +489,4 @@ function toPiToolDefinition(
     },
   };
   return result;
-}
-
-// ---------------------------------------------------------------------------
-// public API
-// ---------------------------------------------------------------------------
-
-export interface McpToolDefinitions {
-  /** Wrapped Pi tool definitions (one per MCP tool of the connected servers). */
-  tools: AnyPiTool[];
-  /** Close every client connection (stdio child processes included). */
-  close: () => Promise<void>;
-}
-
-/**
- * Connect every configured server and wrap its tools for Pi.
- *
- * A failing server is skipped (logged) so one misconfigured MCP server cannot
- * break the whole agent session.
- */
-export async function createMcpToolDefinitions(
-  servers: McpServer[],
-): Promise<McpToolDefinitions> {
-  const clients: Client[] = [];
-  const tools: AnyPiTool[] = [];
-  for (const server of servers) {
-    try {
-      const client = new Client({
-        name: `imboss-mcp-${server.name}`,
-        version: "0.1.0",
-      });
-      const transport = buildMcpTransport(server.config);
-      await connectWithTimeout(client, transport);
-      clients.push(client);
-      const listed = await client.listTools();
-      for (const mcpTool of listed.tools) {
-        tools.push(toPiToolDefinition(client, server, mcpTool));
-      }
-    } catch (err) {
-      console.error(
-        `[mcp] Failed to connect "${server.name}":`,
-        err instanceof Error ? err.message : err,
-      );
-    }
-  }
-  return {
-    tools,
-    close: async (): Promise<void> => {
-      await Promise.all(
-        clients.map((client) => client.close().catch(() => undefined)),
-      );
-    },
-  };
 }

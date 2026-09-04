@@ -83,3 +83,55 @@ export const SettingKeys = {
   Module: "ui.module",
   WindowState: "ui.window",
 };
+
+export const MCP_TRANSPORTS = ["stdio", "sse", "streamable-http"] as const;
+
+/** Providers offered in the settings dropdown in addition to "Custom". */
+export const CURATED_PROVIDERS = [
+  "anthropic",
+  "deepseek",
+  "github-copilot",
+  "google",
+  "groq",
+  "minimax-cn",
+  "minimax",
+  "moonshotai-cn",
+  "moonshotai",
+  "openai",
+  "openrouter",
+  "xai",
+  "xiaomi",
+  "zai",
+] as const;
+
+/** Names for the providers to display in UI */
+export const CURATED_PROVIDERS_LABELS = {
+  anthropic: "Anthropic",
+  deepseek: "DeepSeek",
+  "github-copilot": "GitHub Copilot",
+  google: "Google",
+  groq: "Groq",
+  "minimax-cn": "MiniMax (CN)",
+  minimax: "MiniMax",
+  "moonshotai-cn": "Moonshot AI (CN)",
+  moonshotai: "Moonshot AI",
+  openai: "OpenAI",
+  openrouter: "OpenRouter",
+  xai: "xAI",
+  xiaomi: "Xiaomi",
+  zai: "Z.ai",
+} as const;
+
+/** API protocol flavors supported for custom providers (`models.json` `api`). */
+export const PROVIDER_API_TYPES = [
+  "openai-completions",
+  "openai-responses",
+  "anthropic-messages",
+  "google-generative-ai",
+] as const; /** The built-in assistant's reserved id — it must always exist. */
+
+export const ASSISTANT_ID = 0;
+/** Default signal sent to a participant whose chat was just written to. */
+
+export const READ_CHAT_PROMPT =
+  "You have new messages in this chat. Call imb_read_chat to read the latest messages and respond as appropriate.";

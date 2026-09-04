@@ -1,31 +1,33 @@
 import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
+import {
+  ASSISTANT_ID,
+  BUILTIN_REMOVE_CRON_MARKER,
+  BUILTIN_SET_CRON_MARKER,
+  READ_CHAT_PROMPT,
+} from "@shared/constants";
+import type {
+  AgentEnvironment,
+  EmployeeSession,
+  Message,
+  MessageAttachment,
+} from "@shared/types";
 import { mkdir, stat, writeFile } from "fs/promises";
 import { homedir } from "os";
 import { basename, dirname, extname, join } from "path";
 import { Type } from "typebox";
-import type {
-  EmployeeSession,
-  Message,
-  MessageAttachment,
-} from "../../shared/types";
-import {
-  BUILTIN_REMOVE_CRON_MARKER,
-  BUILTIN_SET_CRON_MARKER,
-} from "../../shared/constants";
+import * as cron from "../cron";
 import { getAgentSessionsDir } from "../data-dir";
 import { getDB } from "../db";
-import * as cron from "../cron";
 import * as chatsService from "../db/services/chats";
 import { parseCronJobId } from "../db/services/cron";
 import * as employeesService from "../db/services/employees";
 import * as messagesService from "../db/services/messages";
 import * as sessionsService from "../db/services/sessions";
 import { broadcast, notifyUnread } from "../notifications";
-import type { AgentEnvironment } from "./environment";
 import type { AnyPiTool } from "./mcp";
 import { loadPiSdk } from "./pi-sdk";
 import { deliver } from "./session-queue";
-const ASSISTANT_ID = employeesService.ASSISTANT_ID;
+
 const getEmployee = employeesService.getEmployee;
 
 /**
@@ -56,89 +58,6 @@ export interface TeamToolOptions {
   mcp?: string[];
 }
 
-/** Path of a persistent per-(employee, chat) Pi session file. */
-function sessionPathFor(chatId: number, employeeId: number): string {
-  return join(
-    getAgentSessionsDir(),
-    "chats",
-    String(chatId),
-    `${employeeId}.jsonl`,
-  );
-}
-
-/**
- * Materialize an empty Pi session file at `path` so it can be resumed later.
- *
- * `SessionManager.open` on a zero-byte file immediately writes a valid session
- * header, which is exactly the deterministic file we want on disk from the
- * start. Best-effort: a materialization failure is logged and never thrown, so
- * a file problem can never roll back a committed DB transaction.
- */
-async function materializeSessionFile(path: string): Promise<void> {
-  const pi = await loadPiSdk();
-  const dir = dirname(path);
-  await mkdir(dir, { recursive: true });
-  try {
-    await writeFile(path, "", { flag: "wx" });
-  } catch {
-    // File already exists (valid or empty) — opening below handles it.
-  }
-  try {
-    // Empty file => open writes a valid header; existing session => loads.
-    pi.SessionManager.open(path, dir, homedir());
-  } catch (err) {
-    console.error(
-      `[builtin-tools] Failed to materialize session ${path}:`,
-      err instanceof Error ? err.message : err,
-    );
-  }
-}
-
-/** Ensure a session row exists for (employee, chat), creating row + file if not. */
-async function ensureSession(
-  employeeId: number,
-  chatId: number,
-): Promise<void> {
-  if (sessionsService.getSession(employeeId, chatId)) return;
-  const path = sessionPathFor(chatId, employeeId);
-  try {
-    await materializeSessionFile(path);
-  } catch (err) {
-    console.error(
-      `[builtin-tools] Failed to materialize session for ${employeeId} in chat ${chatId}:`,
-      err instanceof Error ? err.message : err,
-    );
-  }
-  // Record the row even when the file write failed: a later resume re-opens
-  // (and re-creates the header) from the empty file.
-  sessionsService.setSession(employeeId, chatId, path);
-}
-
-/**
- * Fire-and-forget a participant's agent turn, serialized per (employee, chat)
- * by the session queue. The sub-agent mirrors the normal per-(employee, chat)
- * session (resumed from its own file) and is told to act on a new signal (read
- * a chat, process a prompt). No auto-persist here — the participant posts its
- * reply via `send_message` itself. Failures are logged and never propagated
- * back to the tool that scheduled the run.
- */
-function fireAndForgetPrompt(
-  _env: AgentEnvironment,
-  employeeId: number,
-  chatId: number,
-  text: string,
-): void {
-  void deliver(employeeId, chatId, text);
-}
-
-/** Default signal sent to a participant whose chat was just written to. */
-export const READ_CHAT_PROMPT =
-  "You have new messages in this chat. Call imb_read_chat to read the latest messages and respond as appropriate.";
-
-// ---------------------------------------------------------------------------
-// shared internals
-// ---------------------------------------------------------------------------
-
 const MIME_BY_EXT: Record<string, string> = {
   png: "image/png",
   jpg: "image/jpeg",
@@ -167,118 +86,7 @@ const MIME_BY_EXT: Record<string, string> = {
   ppt: "application/vnd.ms-powerpoint",
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 };
-
-function mimeByExtension(path: string): string {
-  const ext = extname(path).slice(1).toLowerCase();
-  return MIME_BY_EXT[ext] ?? "application/octet-stream";
-}
-
 const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
-
-/** Resolve file paths → attachment metadata (name/size/type); no previews. */
-async function resolveAttachments(
-  paths: string[] | undefined,
-): Promise<MessageAttachment[] | undefined> {
-  if (!paths || paths.length === 0) return undefined;
-  if (paths.length > 16) throw new Error("Too many attachments.");
-  const result: MessageAttachment[] = [];
-  for (const path of paths) {
-    let stats;
-    try {
-      stats = await stat(path);
-    } catch {
-      throw new Error(`Attachment file not found: ${path}`);
-    }
-    if (!stats.isFile()) throw new Error(`Attachment is not a file: ${path}`);
-    if (stats.size > MAX_ATTACHMENT_BYTES) {
-      throw new Error("Attachment is too large.");
-    }
-    result.push({
-      name: basename(path),
-      size: stats.size,
-      type: mimeByExtension(path),
-    });
-  }
-  return result;
-}
-
-/**
- * Shared send pipeline used by the `send_message` tool and by internal sends
- * (`create_chat.card`, `add_participant.join_notice`).
- *
- * The tool enforces that the sender is an active non-disabled participant of
- * the chat; internal sends pass `skipSenderCheck` so the orchestrating
- * assistant can post without being a participant of the target chat.
- */
-async function performSendMessage(
-  env: AgentEnvironment,
-  input: {
-    senderEmployeeId: number;
-    chatId: number;
-    kind?: string;
-    content: string;
-    attachments?: string[];
-    notify?: number[];
-    notifyPrompt?: string;
-    skipSenderCheck?: boolean;
-  },
-): Promise<Message> {
-  const chat = chatsService.getChat(input.chatId);
-  if (!chat) throw new Error("Chat does not exist.");
-  if (
-    !input.skipSenderCheck &&
-    !chat.participants.includes(input.senderEmployeeId)
-  ) {
-    throw new Error("Sender is not a participant of this chat.");
-  }
-  const sender = employeesService.getEmployee(input.senderEmployeeId);
-  if (!sender || sender.disabled) {
-    throw new Error("Sender is not an active employee.");
-  }
-  const attachments = await resolveAttachments(input.attachments);
-  const message = messagesService.appendMessage(
-    input.chatId,
-    input.senderEmployeeId,
-    input.content,
-    {
-      kind: input.kind ?? "text",
-      attachments,
-    },
-  );
-
-  // Tell the renderer that this chat's thread changed (agent/cron/tool writes).
-  broadcast("messages:changed", input.chatId);
-
-  for (const pid of input.notify ?? []) {
-    if (!chat.participants.includes(pid)) continue;
-    const target = employeesService.getEmployee(pid);
-    if (!target || target.disabled) continue;
-    await ensureSession(pid, input.chatId);
-    fireAndForgetPrompt(
-      env,
-      pid,
-      input.chatId,
-      input.notifyPrompt ?? READ_CHAT_PROMPT,
-    );
-  }
-  return message;
-}
-
-/** Wrap a tool payload as a Pi text tool result. */
-function toolResult(value: unknown): AgentToolResult<unknown> {
-  return {
-    content: [{ type: "text", text: JSON.stringify(value) }],
-    details: { result: value },
-  };
-}
-
-/** Validate an employee id is an active (non-disabled) employee. */
-function assertActiveEmployee(employeeId: number): void {
-  const employee = getEmployee(employeeId);
-  if (!employee || employee.disabled) {
-    throw new Error(`Employee ${employeeId} is not an active employee.`);
-  }
-}
 
 // ---------------------------------------------------------------------------
 // tools
@@ -811,10 +619,6 @@ function imbAnswerTool(env: AgentEnvironment): AnyPiTool {
 // disabled definition is not reported as an unused local.
 void addParticipantTool;
 
-// ---------------------------------------------------------------------------
-// public API
-// ---------------------------------------------------------------------------
-
 /**
  * Build the role-based tool set for the calling agent.
  *
@@ -858,4 +662,189 @@ export function createTeamToolDefinitions(
   // kept in the file for reference and updated if re-enabled.
   // tools.push(addParticipantTool(env));
   return tools;
+}
+
+/** Path of a persistent per-(employee, chat) Pi session file. */
+function sessionPathFor(chatId: number, employeeId: number): string {
+  return join(
+    getAgentSessionsDir(),
+    "chats",
+    String(chatId),
+    `${employeeId}.jsonl`,
+  );
+}
+
+/**
+ * Materialize an empty Pi session file at `path` so it can be resumed later.
+ *
+ * `SessionManager.open` on a zero-byte file immediately writes a valid session
+ * header, which is exactly the deterministic file we want on disk from the
+ * start. Best-effort: a materialization failure is logged and never thrown, so
+ * a file problem can never roll back a committed DB transaction.
+ */
+async function materializeSessionFile(path: string): Promise<void> {
+  const pi = await loadPiSdk();
+  const dir = dirname(path);
+  await mkdir(dir, { recursive: true });
+  try {
+    await writeFile(path, "", { flag: "wx" });
+  } catch {
+    // File already exists (valid or empty) — opening below handles it.
+  }
+  try {
+    // Empty file => open writes a valid header; existing session => loads.
+    pi.SessionManager.open(path, dir, homedir());
+  } catch (err) {
+    console.error(
+      `[builtin-tools] Failed to materialize session ${path}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+/** Ensure a session row exists for (employee, chat), creating row + file if not. */
+async function ensureSession(
+  employeeId: number,
+  chatId: number,
+): Promise<void> {
+  if (sessionsService.getSession(employeeId, chatId)) return;
+  const path = sessionPathFor(chatId, employeeId);
+  try {
+    await materializeSessionFile(path);
+  } catch (err) {
+    console.error(
+      `[builtin-tools] Failed to materialize session for ${employeeId} in chat ${chatId}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+  // Record the row even when the file write failed: a later resume re-opens
+  // (and re-creates the header) from the empty file.
+  sessionsService.setSession(employeeId, chatId, path);
+}
+
+/**
+ * Fire-and-forget a participant's agent turn, serialized per (employee, chat)
+ * by the session queue. The sub-agent mirrors the normal per-(employee, chat)
+ * session (resumed from its own file) and is told to act on a new signal (read
+ * a chat, process a prompt). No auto-persist here — the participant posts its
+ * reply via `send_message` itself. Failures are logged and never propagated
+ * back to the tool that scheduled the run.
+ */
+function fireAndForgetPrompt(
+  _env: AgentEnvironment,
+  employeeId: number,
+  chatId: number,
+  text: string,
+): void {
+  void deliver(employeeId, chatId, text);
+}
+
+function mimeByExtension(path: string): string {
+  const ext = extname(path).slice(1).toLowerCase();
+  return MIME_BY_EXT[ext] ?? "application/octet-stream";
+}
+
+/** Resolve file paths → attachment metadata (name/size/type); no previews. */
+async function resolveAttachments(
+  paths: string[] | undefined,
+): Promise<MessageAttachment[] | undefined> {
+  if (!paths || paths.length === 0) return undefined;
+  if (paths.length > 16) throw new Error("Too many attachments.");
+  const result: MessageAttachment[] = [];
+  for (const path of paths) {
+    let stats;
+    try {
+      stats = await stat(path);
+    } catch {
+      throw new Error(`Attachment file not found: ${path}`);
+    }
+    if (!stats.isFile()) throw new Error(`Attachment is not a file: ${path}`);
+    if (stats.size > MAX_ATTACHMENT_BYTES) {
+      throw new Error("Attachment is too large.");
+    }
+    result.push({
+      name: basename(path),
+      size: stats.size,
+      type: mimeByExtension(path),
+    });
+  }
+  return result;
+}
+
+/**
+ * Shared send pipeline used by the `send_message` tool and by internal sends
+ * (`create_chat.card`, `add_participant.join_notice`).
+ *
+ * The tool enforces that the sender is an active non-disabled participant of
+ * the chat; internal sends pass `skipSenderCheck` so the orchestrating
+ * assistant can post without being a participant of the target chat.
+ */
+async function performSendMessage(
+  env: AgentEnvironment,
+  input: {
+    senderEmployeeId: number;
+    chatId: number;
+    kind?: string;
+    content: string;
+    attachments?: string[];
+    notify?: number[];
+    notifyPrompt?: string;
+    skipSenderCheck?: boolean;
+  },
+): Promise<Message> {
+  const chat = chatsService.getChat(input.chatId);
+  if (!chat) throw new Error("Chat does not exist.");
+  if (
+    !input.skipSenderCheck &&
+    !chat.participants.includes(input.senderEmployeeId)
+  ) {
+    throw new Error("Sender is not a participant of this chat.");
+  }
+  const sender = employeesService.getEmployee(input.senderEmployeeId);
+  if (!sender || sender.disabled) {
+    throw new Error("Sender is not an active employee.");
+  }
+  const attachments = await resolveAttachments(input.attachments);
+  const message = messagesService.appendMessage(
+    input.chatId,
+    input.senderEmployeeId,
+    input.content,
+    {
+      kind: input.kind ?? "text",
+      attachments,
+    },
+  );
+
+  // Tell the renderer that this chat's thread changed (agent/cron/tool writes).
+  broadcast("messages:changed", input.chatId);
+
+  for (const pid of input.notify ?? []) {
+    if (!chat.participants.includes(pid)) continue;
+    const target = employeesService.getEmployee(pid);
+    if (!target || target.disabled) continue;
+    await ensureSession(pid, input.chatId);
+    fireAndForgetPrompt(
+      env,
+      pid,
+      input.chatId,
+      input.notifyPrompt ?? READ_CHAT_PROMPT,
+    );
+  }
+  return message;
+}
+
+/** Wrap a tool payload as a Pi text tool result. */
+function toolResult(value: unknown): AgentToolResult<unknown> {
+  return {
+    content: [{ type: "text", text: JSON.stringify(value) }],
+    details: { result: value },
+  };
+}
+
+/** Validate an employee id is an active (non-disabled) employee. */
+function assertActiveEmployee(employeeId: number): void {
+  const employee = getEmployee(employeeId);
+  if (!employee || employee.disabled) {
+    throw new Error(`Employee ${employeeId} is not an active employee.`);
+  }
 }

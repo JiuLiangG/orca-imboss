@@ -1,6 +1,6 @@
+import type { EmployeeSession } from "@shared/types";
 import { rm } from "fs/promises";
 import { resolve } from "path";
-import type { EmployeeSession } from "../../../shared/types";
 import { getAgentSessionsDir } from "../../data-dir";
 import { getDB } from "../index";
 
@@ -11,41 +11,14 @@ interface SessionRow {
   last_read_message_id: number;
 }
 
-function toRecord(row: SessionRow): EmployeeSession {
-  return {
-    employeeId: row.employee_id,
-    chatId: row.chat_id,
-    session: row.session,
-    lastReadMessageId: row.last_read_message_id ?? 0,
-  };
-}
-
-const SELECT_BY_PAIR =
-  "SELECT * FROM sessions WHERE employee_id = ? AND chat_id = ?";
-
 export function getSession(
   employeeId: number,
   chatId: number,
 ): EmployeeSession | null {
-  const row = getDB().prepare(SELECT_BY_PAIR).get(employeeId, chatId) as
-    SessionRow | undefined;
+  const row = getDB()
+    .prepare("SELECT * FROM sessions WHERE employee_id = ? AND chat_id = ?")
+    .get(employeeId, chatId) as SessionRow | undefined;
   return row ? toRecord(row) : null;
-}
-
-export function listByEmployee(employeeId: number): EmployeeSession[] {
-  return (
-    getDB()
-      .prepare("SELECT * FROM sessions WHERE employee_id = ?")
-      .all(employeeId) as SessionRow[]
-  ).map(toRecord);
-}
-
-export function listByChat(chatId: number): EmployeeSession[] {
-  return (
-    getDB()
-      .prepare("SELECT * FROM sessions WHERE chat_id = ?")
-      .all(chatId) as SessionRow[]
-  ).map(toRecord);
 }
 
 /** Persist (or replace) the Pi session path for an employee in a chat. */
@@ -70,6 +43,22 @@ export function setSession(
   ).run(employeeId, chatId, sessionPath);
 }
 
+export function listByEmployee(employeeId: number): EmployeeSession[] {
+  return (
+    getDB()
+      .prepare("SELECT * FROM sessions WHERE employee_id = ?")
+      .all(employeeId) as SessionRow[]
+  ).map(toRecord);
+}
+
+export function listByChat(chatId: number): EmployeeSession[] {
+  return (
+    getDB()
+      .prepare("SELECT * FROM sessions WHERE chat_id = ?")
+      .all(chatId) as SessionRow[]
+  ).map(toRecord);
+}
+
 /** Read the per-(employee, chat) read cursor (0 when no session row exists). */
 export function getReadCursor(employeeId: number, chatId: number): number {
   const row = getDB()
@@ -91,26 +80,6 @@ export function setReadCursor(
       "UPDATE sessions SET last_read_message_id = ? WHERE employee_id = ? AND chat_id = ?",
     )
     .run(messageId, employeeId, chatId);
-}
-
-/**
- * Delete session row(s); the DB cascade handles rows when whole employees or
- * chats are removed, while this helper also unlinks recorded session files.
- *
- * Security: a stored path is only honored for unlinking when it resolves
- * strictly inside `~/.imboss/agent/sessions`. Anything else (stale, hand-edited,
- * or malicious rows) is dropped from the DB but never deleted from disk.
- */
-function isInsideSessionsDir(filePath: string): boolean {
-  const norm = (p: string): string =>
-    process.platform === "win32" ? p.toLowerCase() : p;
-  const root = norm(resolve(getAgentSessionsDir()));
-  const target = norm(resolve(filePath));
-  return (
-    target === root ||
-    target.startsWith(root + "/") ||
-    target.startsWith(root + "\\")
-  );
 }
 
 /** Unlink a recorded session file when (and only when) contained. */
@@ -146,4 +115,33 @@ export async function deleteForEmployee(employeeId: number): Promise<void> {
 /** Delete every session belonging to one chat (DB rows only here). */
 export async function deleteForChat(chatId: number): Promise<void> {
   getDB().prepare("DELETE FROM sessions WHERE chat_id = ?").run(chatId);
+}
+
+function toRecord(row: SessionRow): EmployeeSession {
+  return {
+    employeeId: row.employee_id,
+    chatId: row.chat_id,
+    session: row.session,
+    lastReadMessageId: row.last_read_message_id ?? 0,
+  };
+}
+
+/**
+ * Delete session row(s); the DB cascade handles rows when whole employees or
+ * chats are removed, while this helper also unlinks recorded session files.
+ *
+ * Security: a stored path is only honored for unlinking when it resolves
+ * strictly inside `~/.imboss/agent/sessions`. Anything else (stale, hand-edited,
+ * or malicious rows) is dropped from the DB but never deleted from disk.
+ */
+function isInsideSessionsDir(filePath: string): boolean {
+  const norm = (p: string): string =>
+    process.platform === "win32" ? p.toLowerCase() : p;
+  const root = norm(resolve(getAgentSessionsDir()));
+  const target = norm(resolve(filePath));
+  return (
+    target === root ||
+    target.startsWith(root + "/") ||
+    target.startsWith(root + "\\")
+  );
 }

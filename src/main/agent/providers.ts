@@ -1,3 +1,4 @@
+import { CURATED_PROVIDERS, PROVIDER_API_TYPES } from "@shared/constants";
 import type {
   PageQuery,
   PageResult,
@@ -5,8 +6,7 @@ import type {
   ProviderInfo,
   ProviderModelsQuery,
   ProviderUpsert,
-} from "../../shared/types";
-import { CURATED_PROVIDERS, PROVIDER_API_TYPES } from "../../shared/types";
+} from "@shared/types";
 import { getAuthPath, getModelsPath } from "../data-dir";
 
 /**
@@ -47,111 +47,12 @@ interface ModelsFile {
   providers?: Record<string, ProviderSpec>;
 }
 
-// --- safe JSON file plumbing -------------------------------------------------
+const MAX_PAGE_SIZE = 200;
+const DEFAULT_PAGE_SIZE = 50;
 
-async function readJson<T>(filePath: string): Promise<Partial<T>> {
-  const { readFile, stat } = await import("fs/promises");
-  try {
-    await stat(filePath);
-  } catch {
-    return {};
-  }
-  try {
-    return JSON.parse(await readFile(filePath, "utf8")) as Partial<T>;
-  } catch {
-    // A corrupt config file must not brick the app; treat as empty and let
-    // the next write recreate it. (Defensive, per project guidelines.)
-    return {};
-  }
-}
-
-/** Write atomically and restrict perms on POSIX (both files may embed keys). */
-async function writeJson(filePath: string, value: unknown): Promise<void> {
-  const { writeFile, rename, chmod } = await import("fs/promises");
-  const tmp = `${filePath}.tmp`;
-  await writeFile(tmp, JSON.stringify(value, null, 2), "utf8");
-  await rename(tmp, filePath);
-  if (process.platform !== "win32") {
-    try {
-      await chmod(filePath, 0o600);
-    } catch {
-      // Best-effort hardening only.
-    }
-  }
-}
-
-// --- validation helpers ------------------------------------------------------
+const MODELS_FETCH_TIMEOUT_MS = 10_000;
 
 const SAFE_ID_RE = /^[A-Za-z0-9._-]+$/;
-
-function validateProviderId(id: unknown): string {
-  if (
-    typeof id !== "string" ||
-    !SAFE_ID_RE.test(id) ||
-    id.length === 0 ||
-    id.length > 64
-  ) {
-    throw new Error('Invalid provider id. Use letters, digits, ".", "_", "-".');
-  }
-  return id;
-}
-
-function validateModelIds(modelIds: string[] | undefined): string[] {
-  if (!Array.isArray(modelIds) || modelIds.length === 0) {
-    throw new Error("At least one model id is required.");
-  }
-  if (modelIds.length > 256) throw new Error("Too many model ids.");
-  for (const mid of modelIds) {
-    if (typeof mid !== "string" || !SAFE_ID_RE.test(mid) || mid.length > 128) {
-      throw new Error(`Invalid model id: ${String(mid).slice(0, 32)}`);
-    }
-  }
-  return [...new Set(modelIds)];
-}
-
-function validateApiKey(key: string | undefined): string | undefined {
-  if (key === undefined) return undefined;
-  if (typeof key !== "string" || key.trim().length < 8 || key.length > 4096) {
-    throw new Error("API key looks invalid.");
-  }
-  return key.trim();
-}
-
-function validateBaseUrl(url: string | undefined): string {
-  if (typeof url !== "string" || url.length === 0 || url.length > 2048) {
-    throw new Error("A base URL is required.");
-  }
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-      throw new Error("bad protocol");
-    }
-    return url;
-  } catch {
-    throw new Error("Base URL must be a valid http(s) URL.");
-  }
-}
-
-function toModelSpecs(ids: string[]): ModelSpec[] {
-  // Sensible generic defaults; cost/context numbers can be refined later once
-  // per-model metadata handling lands with runtime integration.
-  return ids.map((id) => ({
-    id,
-    name: id,
-    reasoning: false,
-    input: ["text"],
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: 128_000,
-    maxTokens: 8192,
-  }));
-}
-
-function maskKey(key: string | undefined): string | null {
-  if (!key || key.length < 4) return null;
-  return `…${key.slice(-4)}`;
-}
-
-// --- public API ----------------------------------------------------------------
 
 export async function listProviders(): Promise<ProviderInfo[]> {
   const [auth, models] = await Promise.all([
@@ -205,11 +106,6 @@ export async function listProviders(): Promise<ProviderInfo[]> {
 
   return infos;
 }
-
-// --- paged provider list (keyset cursor over `id ASC`, JSON source) ---------
-
-const MAX_PAGE_SIZE = 200;
-const DEFAULT_PAGE_SIZE = 50;
 
 /**
  * One page of providers, ordered `id ASC` (the full list is curated-first;
@@ -306,41 +202,6 @@ export async function upsertProvider(input: ProviderUpsert): Promise<void> {
   await writeJson(getModelsPath(), models);
 }
 
-const MODELS_FETCH_TIMEOUT_MS = 10_000;
-
-/** Model-list endpoint for a custom provider, derived from its base URL + api type. */
-function modelsEndpoint(baseUrl: string, apiType: ProviderApiType): string {
-  const base = baseUrl.replace(/\/+$/, "");
-  switch (apiType) {
-    case "google-generative-ai":
-      return `${base}/models`;
-    case "anthropic-messages": {
-      const v1 = base.endsWith("/v1") ? base : `${base}/v1`;
-      return `${v1}/models`;
-    }
-    default:
-      // OpenAI-compatible: assume the base already includes the API root (e.g. /v1).
-      return `${base}/models`;
-  }
-}
-
-/** Map a models response payload to a list of model ids, per api type. */
-function parseModelIds(apiType: ProviderApiType, data: unknown): string[] {
-  const obj = data as Record<string, unknown>;
-  if (apiType === "google-generative-ai") {
-    const models = (obj.models ?? []) as Array<{ name?: string }>;
-    return models
-      .map((m) =>
-        typeof m.name === "string" ? m.name.replace(/^models\//, "") : "",
-      )
-      .filter(Boolean);
-  }
-  const dataList = (obj.data ?? []) as Array<{ id?: string }>;
-  return dataList
-    .map((m) => (typeof m.id === "string" ? m.id : ""))
-    .filter(Boolean);
-}
-
 /**
  * Fetch the model list for a custom provider from its base URL + api type.
  * Used by the add-provider flow's "Fetch models" button. The API key is only
@@ -423,4 +284,139 @@ export async function revealProviderKey(id: string): Promise<string | null> {
   return credential && typeof credential.key === "string"
     ? credential.key
     : null;
+}
+
+// --- safe JSON file plumbing -------------------------------------------------
+
+async function readJson<T>(filePath: string): Promise<Partial<T>> {
+  const { readFile, stat } = await import("fs/promises");
+  try {
+    await stat(filePath);
+  } catch {
+    return {};
+  }
+  try {
+    return JSON.parse(await readFile(filePath, "utf8")) as Partial<T>;
+  } catch {
+    // A corrupt config file must not brick the app; treat as empty and let
+    // the next write recreate it. (Defensive, per project guidelines.)
+    return {};
+  }
+}
+
+/** Write atomically and restrict perms on POSIX (both files may embed keys). */
+async function writeJson(filePath: string, value: unknown): Promise<void> {
+  const { writeFile, rename, chmod } = await import("fs/promises");
+  const tmp = `${filePath}.tmp`;
+  await writeFile(tmp, JSON.stringify(value, null, 2), "utf8");
+  await rename(tmp, filePath);
+  if (process.platform !== "win32") {
+    try {
+      await chmod(filePath, 0o600);
+    } catch {
+      // Best-effort hardening only.
+    }
+  }
+}
+
+// --- validation helpers ------------------------------------------------------
+
+function validateProviderId(id: unknown): string {
+  if (
+    typeof id !== "string" ||
+    !SAFE_ID_RE.test(id) ||
+    id.length === 0 ||
+    id.length > 64
+  ) {
+    throw new Error('Invalid provider id. Use letters, digits, ".", "_", "-".');
+  }
+  return id;
+}
+
+function validateModelIds(modelIds: string[] | undefined): string[] {
+  if (!Array.isArray(modelIds) || modelIds.length === 0) {
+    throw new Error("At least one model id is required.");
+  }
+  if (modelIds.length > 256) throw new Error("Too many model ids.");
+  for (const mid of modelIds) {
+    if (typeof mid !== "string" || !SAFE_ID_RE.test(mid) || mid.length > 128) {
+      throw new Error(`Invalid model id: ${String(mid).slice(0, 32)}`);
+    }
+  }
+  return [...new Set(modelIds)];
+}
+
+function validateApiKey(key: string | undefined): string | undefined {
+  if (key === undefined) return undefined;
+  if (typeof key !== "string" || key.trim().length < 8 || key.length > 4096) {
+    throw new Error("API key looks invalid.");
+  }
+  return key.trim();
+}
+
+function validateBaseUrl(url: string | undefined): string {
+  if (typeof url !== "string" || url.length === 0 || url.length > 2048) {
+    throw new Error("A base URL is required.");
+  }
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      throw new Error("bad protocol");
+    }
+    return url;
+  } catch {
+    throw new Error("Base URL must be a valid http(s) URL.");
+  }
+}
+
+function toModelSpecs(ids: string[]): ModelSpec[] {
+  // Sensible generic defaults; cost/context numbers can be refined later once
+  // per-model metadata handling lands with runtime integration.
+  return ids.map((id) => ({
+    id,
+    name: id,
+    reasoning: false,
+    input: ["text"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 128_000,
+    maxTokens: 8192,
+  }));
+}
+
+function maskKey(key: string | undefined): string | null {
+  if (!key || key.length < 4) return null;
+  return `…${key.slice(-4)}`;
+}
+
+/** Model-list endpoint for a custom provider, derived from its base URL + api type. */
+function modelsEndpoint(baseUrl: string, apiType: ProviderApiType): string {
+  const base = baseUrl.replace(/\/+$/, "");
+  switch (apiType) {
+    case "google-generative-ai":
+      return `${base}/models`;
+    case "anthropic-messages": {
+      const v1 = base.endsWith("/v1") ? base : `${base}/v1`;
+      return `${v1}/models`;
+    }
+    default:
+      // OpenAI-compatible: assume the base already includes the API root (e.g. /v1).
+      return `${base}/models`;
+  }
+}
+
+/** Map a models response payload to a list of model ids, per api type. */
+function parseModelIds(apiType: ProviderApiType, data: unknown): string[] {
+  const obj = data as Record<string, unknown>;
+  if (apiType === "google-generative-ai") {
+    const models = (obj.models ?? []) as Array<{ name?: string }>;
+    return models
+      .map((m) =>
+        typeof m.name === "string" ? m.name.replace(/^models\//, "") : "",
+      )
+      .filter(Boolean);
+  }
+  const dataList = (obj.data ?? []) as Array<{ id?: string }>;
+  return dataList
+    .map((m) => (typeof m.id === "string" ? m.id : ""))
+    .filter(Boolean);
 }

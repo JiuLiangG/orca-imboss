@@ -1,5 +1,5 @@
+import type { ThemeMode, ThemeState } from "@shared/types";
 import { nativeTheme } from "electron";
-import type { ThemeMode, ThemeState } from "../shared/types";
 import { getSetting, setSetting } from "./db/services/settings";
 
 /**

@@ -1,0 +1,226 @@
+.imb-chat-input-wrap {
+  flex: none;
+  padding: var(--imb-space-2);
+  background: var(--imb-surface);
+  border-top: 1px solid var(--imb-border);
+}
+
+.imb-chat-input-card {
+  background: var(--imb-bg);
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-md);
+  overflow: hidden;
+}
+
+.imb-attached-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px 0;
+}
+
+.imb-attached-file-thumb {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--imb-radius-sm);
+  overflow: hidden;
+  background: var(--imb-surface);
+  border: 1px solid var(--imb-border);
+}
+
+.imb-attached-file-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.imb-attached-file-thumb .imb-file-icon-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--imb-muted);
+}
+
+.imb-attached-file-thumb .imb-file-icon-placeholder svg {
+  width: 24px;
+  height: 24px;
+}
+
+.imb-attached-file-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.imb-attached-file-remove:hover {
+  background: var(--imb-danger);
+}
+
+.imb-chat-input-textarea {
+  display: block;
+  width: 100%;
+  min-height: 72px;
+  max-height: 160px;
+  padding: 10px 12px 6px;
+  background: transparent;
+  border: none;
+  font: inherit;
+  font-size: var(--imb-text-base);
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  color: var(--imb-fg);
+}
+
+.imb-chat-input-textarea::placeholder {
+  color: var(--imb-muted);
+}
+
+.imb-chat-input-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px 8px;
+}
+
+.imb-attach-btn {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: var(--imb-radius-md);
+  cursor: pointer;
+  color: var(--imb-muted);
+  transition:
+    color var(--imb-motion-fast),
+    background var(--imb-motion-fast);
+  position: relative;
+}
+
+.imb-attach-btn:hover {
+  color: var(--imb-fg);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.imb-attach-btn:active {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.imb-attach-btn:focus-visible {
+  box-shadow: var(--imb-focus-ring);
+  outline: none;
+}
+
+.imb-attach-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+.imb-send-btn-circle {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--imb-accent);
+  border: none;
+  border-radius: var(--imb-radius-pill);
+  cursor: pointer;
+  color: #fff;
+  transition:
+    background var(--imb-motion-fast),
+    transform var(--imb-motion-fast);
+}
+
+.imb-send-btn-circle:hover:not(:disabled) {
+  background: var(--imb-accent-hover);
+  transform: scale(1.05);
+}
+
+.imb-send-btn-circle:active:not(:disabled) {
+  background: var(--imb-accent-active);
+  transform: scale(0.96);
+}
+
+.imb-send-btn-circle:focus-visible {
+  box-shadow: var(--imb-focus-ring);
+  outline: none;
+}
+
+.imb-send-btn-circle:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.imb-send-btn-circle svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* attach popup */
+.imb-attach-popup {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--imb-surface);
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-md);
+  box-shadow: var(--imb-elev-raised);
+  min-width: 120px;
+  padding: 4px 0;
+  z-index: 10;
+}
+
+.imb-attach-anchor {
+  position: relative;
+}
+
+.imb-attach-popup-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: var(--imb-text-sm);
+  color: var(--imb-fg);
+  transition: background var(--imb-motion-fast);
+  text-align: left;
+  width: 100%;
+}
+
+.imb-attach-popup-item:hover {
+  background: var(--imb-bg);
+}
+
+.imb-attach-popup-item svg {
+  width: 18px;
+  height: 18px;
+  color: var(--imb-muted);
+  flex-shrink: 0;
+}

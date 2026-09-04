@@ -1,3 +1,5 @@
+import { MCP_TRANSPORTS, PROVIDER_API_TYPES } from "./constants";
+
 export interface SettingsPayload {
   locale: string;
 }
@@ -185,11 +187,18 @@ export interface CronJob {
   nextRunAt: number | null;
 }
 
+export interface CronJobInput {
+  id: string;
+  chatId: number;
+  employeeId: number;
+  schedule: string;
+  content: string;
+}
+
 // ---------------------------------------------------------------------------
 // MCP servers
 // ---------------------------------------------------------------------------
 
-export const MCP_TRANSPORTS = ["stdio", "sse", "streamable-http"] as const;
 export type McpTransport = (typeof MCP_TRANSPORTS)[number];
 
 /**
@@ -228,49 +237,6 @@ export interface McpServerInput {
 // ---------------------------------------------------------------------------
 // Model providers (auth.json + models.json management)
 // ---------------------------------------------------------------------------
-
-/** Providers offered in the settings dropdown in addition to "Custom". */
-export const CURATED_PROVIDERS = [
-  "anthropic",
-  "deepseek",
-  "github-copilot",
-  "google",
-  "groq",
-  "minimax-cn",
-  "minimax",
-  "moonshotai-cn",
-  "moonshotai",
-  "openai",
-  "openrouter",
-  "xai",
-  "xiaomi",
-  "zai",
-] as const;
-
-export const CURATED_PROVIDERS_LABELS = {
-  anthropic: "Anthropic",
-  deepseek: "DeepSeek",
-  "github-copilot": "GitHub Copilot",
-  google: "Google",
-  groq: "Groq",
-  "minimax-cn": "MiniMax (CN)",
-  minimax: "MiniMax",
-  "moonshotai-cn": "Moonshot AI (CN)",
-  moonshotai: "Moonshot AI",
-  openai: "OpenAI",
-  openrouter: "OpenRouter",
-  xai: "xAI",
-  xiaomi: "Xiaomi",
-  zai: "Z.ai",
-};
-
-/** API protocol flavors supported for custom providers (`models.json` `api`). */
-export const PROVIDER_API_TYPES = [
-  "openai-completions",
-  "openai-responses",
-  "anthropic-messages",
-  "google-generative-ai",
-] as const;
 
 export type ProviderApiType = (typeof PROVIDER_API_TYPES)[number];
 
@@ -336,4 +302,12 @@ export interface InstalledSkill {
   name: string;
   /** Parsed from SKILL.md frontmatter when available. */
   description: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Agent
+// ---------------------------------------------------------------------------
+
+export interface AgentEnvironment {
+  rootDir: string;
 }
