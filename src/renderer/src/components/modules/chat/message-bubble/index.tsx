@@ -1,4 +1,5 @@
 import type { MessageAttachment } from "../../../../../../shared/types";
+import userAvatarUrl from "../../../../assets/boss.avif";
 import { IconFile } from "../../../icons";
 import "./index.css";
 
@@ -86,25 +87,13 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** Human/user avatar mark (prototype `userAvatar` svg). */
-export function UserMark(): React.JSX.Element {
+/** Human/user avatar (bundled `boss.avif` image). */
+export function UserAvatar(): React.JSX.Element {
   return (
-    <svg
-      width="34"
-      height="34"
-      viewBox="0 0 36 36"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
+    <img
+      src={userAvatarUrl}
+      alt="User"
       aria-hidden="true"
-    >
-      <circle cx="18" cy="18" r="18" fill="#1A1A1A" />
-      <path
-        d="M12 24 L14 16 L18 20 L22 16 L24 24 L24 26 L12 26 Z"
-        fill="white"
-        stroke="white"
-        strokeWidth="1"
-        strokeLinejoin="round"
-      />
-    </svg>
+    />
   );
 }

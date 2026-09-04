@@ -20,7 +20,7 @@ import { ListRow } from "../../../list-row";
 import { Modal } from "../../../modal";
 import { SearchInput } from "../../../search-input";
 import { ChatInputBar } from "../chat-input-bar";
-import { AssistantMark, MessageBubble, UserMark } from "../message-bubble";
+import { AssistantMark, MessageBubble, UserAvatar } from "../message-bubble";
 import { AskCard } from "../ask-card";
 import { AnswerCard } from "../answer-card";
 import { ProgressCard } from "../progress-card";
@@ -310,7 +310,7 @@ export function ChatModule(): React.JSX.Element {
               attachments={message.attachments}
               avatar={
                 message.senderEmployeeId === null ? (
-                  <UserMark />
+                  <UserAvatar />
                 ) : (
                   <AssistantMark size={34} />
                 )

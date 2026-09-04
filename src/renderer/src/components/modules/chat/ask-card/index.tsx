@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Message } from "../../../../../../shared/types";
 import { t } from "../../../../../../shared/libs/l10n";
-import { AssistantMark, MessageBubble, UserMark } from "../message-bubble";
+import { AssistantMark, MessageBubble, UserAvatar } from "../message-bubble";
 import "./index.css";
 
 export interface AskCardProps {
@@ -55,7 +55,7 @@ export function AskCard({
         self={self}
         content={message.content}
         attachments={message.attachments}
-        avatar={self ? <UserMark /> : <AssistantMark size={34} />}
+        avatar={self ? <UserAvatar /> : <AssistantMark size={34} />}
       />
     );
   }
@@ -87,7 +87,7 @@ export function AskCard({
   return (
     <div className={`imb-msg${self ? " imb-self" : " imb-other"}`}>
       <span className="imb-avatar">
-        {self ? <UserMark /> : <AssistantMark size={34} />}
+        {self ? <UserAvatar /> : <AssistantMark size={34} />}
       </span>
       <div className="imb-ask-card">
         <div className="imb-ask-card-title">{t("Question")}</div>
