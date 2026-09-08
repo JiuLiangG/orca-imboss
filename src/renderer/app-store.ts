@@ -241,11 +241,9 @@ export async function initApp(): Promise<void> {
   imb.onLocaleChanged(updateLocale);
   imb.theme.onChanged(updateThemeState);
 
-  // Centralized collections: load once, best-effort (non-blocking). A failed
-  // load leaves the collection empty; the module's ensure*() retries on visit.
-  await appStore.loadMcp();
-  await appStore.loadSkills();
-  await appStore.loadEmployees();
+  // MCP / skills / employees are NOT loaded here. They are lazy-loaded by the
+  // corresponding module on first visit (see ensureMcp/ensureSkills/ensureEmployees),
+  // and kept in sync by the modules after each mutation.
 
   // Chat unread mirror: load once, then keep in sync from the main process.
   await appStore.loadUnreads();

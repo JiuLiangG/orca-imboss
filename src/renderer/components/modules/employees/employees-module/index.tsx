@@ -70,9 +70,13 @@ export function EmployeesModule(): React.JSX.Element {
       });
   }, []);
 
-  // Re-fetch on revisit when the startup load failed (best-effort).
+  // Lazy-load the collections on first visit (best-effort). The MCP and skill
+  // option selects below read data.mcp.items / data.skills.items, so those must
+  // be ensured here too, in case the user opens Employees before those modules.
   useEffect(() => {
     appStore.ensureEmployees();
+    appStore.ensureMcp();
+    appStore.ensureSkills();
   }, []);
 
   // Linked-MCP options = built-in opt-in cron tools + configured MCP servers.
