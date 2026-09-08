@@ -1,6 +1,8 @@
+import { DEFAULT_LOCALE } from "./constants/locales";
+
 type Translations = { [locale: string]: { [key: string]: string } };
 
-let _locale = "en";
+let _locale = DEFAULT_LOCALE;
 let _translations: Translations = {};
 
 /**

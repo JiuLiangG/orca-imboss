@@ -1,5 +1,5 @@
 import { ipcMain } from "electron";
-import { deleteSession, getSession, setSession } from "../db/services/sessions";
+import { deleteSession, getSession, setSession } from "../db/sessions";
 import { assertInteger, assertString } from "./helpers";
 
 export function registerSessionHandlers(): void {

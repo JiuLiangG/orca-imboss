@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { appStore, useApp } from "../../../../app-store";
 import { useInfiniteList } from "../../../../hooks/use-infinite-list";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
-import { playNotificationSound } from "../../../../utils/sound";
+import { playNotificationSound } from "../../../../sound";
 import { ModuleView } from "../../../app-shell";
 import { Avatar } from "../../../avatar";
 import { Button } from "../../../button";

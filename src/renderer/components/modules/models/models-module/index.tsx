@@ -1,4 +1,4 @@
-import { CURATED_PROVIDERS_LABELS } from "@shared/constants";
+import { CURATED_PROVIDERS_LABELS } from "@shared/constants/providers";
 import { t } from "@shared/l10n";
 import {
   type PageQuery,

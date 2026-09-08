@@ -1,43 +1,21 @@
-import { ASSISTANT_ID } from "@shared/constants";
+import { ASSISTANT_ID } from "@shared/constants/employees";
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@shared/constants/paged";
 import type {
   Employee,
   EmployeeDeleteResult,
   EmployeeInput,
+  EmployeeRow,
+  EmployeeUpsertInput,
   PageQuery,
   PageResult,
+  PurgedEmployee,
 } from "@shared/types";
-import { readAvatarDataUrl } from "../../avatars";
-import { getDB } from "../index";
+import { readAvatarDataUrl } from "../avatars";
+import { getDB } from "./index";
 import { parseNumberArray, parseStringArray, stringifyArray } from "./json";
 import { escapeLike } from "./text-search";
 
-interface EmployeeRow {
-  id: number;
-  name: string;
-  role: string;
-  system_prompt: string;
-  mcp: string;
-  skills: string;
-  model_id: string | null;
-  avatar: string | null;
-  disabled: number;
-}
-
-/** One employee in a `set_employees` batch: omit `id` to create, pass `id` to update. */
-interface EmployeeUpsertInput extends EmployeeInput {
-  id?: number;
-}
-
-/** One employee purged at startup (session file paths captured pre-delete). */
-interface PurgedEmployee {
-  employeeId: number;
-  sessionPaths: string[];
-}
-
-/** Hard cap on a single `set_employees` batch (mirrors the tool's `maxItems`). */
 const MAX_BATCH_SIZE = 50;
-const MAX_PAGE_SIZE = 200;
-const DEFAULT_PAGE_SIZE = 50;
 
 export function listEmployees(): Employee[] {
   return (

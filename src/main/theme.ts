@@ -1,6 +1,7 @@
+import { SettingKeys } from "@shared/constants/settings";
 import type { ThemeMode, ThemeState } from "@shared/types";
 import { nativeTheme } from "electron";
-import { getSetting, setSetting } from "./db/services/settings";
+import { getSetting, setSetting } from "./db/settings";
 
 /**
  * Theme ownership (confirmed decision): the DB `settings` table owns the
@@ -25,13 +26,13 @@ export function getThemeMode(): ThemeMode {
 }
 
 export function getThemeColor(): string {
-  const stored = getSetting("theme.color");
+  const stored = getSetting(SettingKeys.ThemeColor);
   return stored && COLOR_RE.test(stored) ? stored.toUpperCase() : DEFAULT_COLOR;
 }
 
 export function setThemeMode(mode: ThemeMode): void {
   const safe = sanitizeMode(mode);
-  setSetting("theme.mode", safe);
+  setSetting(SettingKeys.ThemeMode, safe);
   nativeTheme.themeSource = safe;
 }
 
@@ -39,7 +40,7 @@ export function setThemeColor(color: string): void {
   if (typeof color !== "string" || !COLOR_RE.test(color)) {
     throw new Error("Invalid theme color.");
   }
-  setSetting("theme.color", color.toUpperCase());
+  setSetting(SettingKeys.ThemeColor, color.toUpperCase());
 }
 
 export function getThemeState(): ThemeState {
@@ -48,5 +49,5 @@ export function getThemeState(): ThemeState {
 
 /** Apply the persisted mode at startup (called after DB init). */
 export function initTheme(): void {
-  nativeTheme.themeSource = sanitizeMode(getSetting("theme.mode"));
+  nativeTheme.themeSource = sanitizeMode(getSetting(SettingKeys.ThemeMode));
 }

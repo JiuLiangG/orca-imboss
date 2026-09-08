@@ -1,7 +1,9 @@
+import { SettingKeys } from "@shared/constants/settings";
 import { useLayoutEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cls } from "reactutils";
 import {
+  appStore,
   contentPaneRef,
   detailPaneRef,
   listPaneRef,
@@ -40,8 +42,13 @@ const LIST_DETAIL_MODULES: ReadonlySet<AppModule> = new Set([
  * matching pane(s) (see ModuleView below).
  */
 export function AppShell(): React.JSX.Element {
-  const { module, navCollapsed, setNavCollapsed } = useApp();
+  const { module, navCollapsed } = useApp();
   const layout = shellLayoutFor(module);
+
+  async function setNavCollapsed(collapsed: boolean): Promise<void> {
+    appStore.navCollapsed = collapsed;
+    void imb.settings.set(SettingKeys.NavCollapse, collapsed ? "1" : "0");
+  }
 
   return (
     <div className={cls("imb-app", navCollapsed && "imb-is-collapsed")}>

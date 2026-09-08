@@ -5,8 +5,8 @@ import { refreshModelStore } from "./agent/model-runtime";
 import { deleteAvatarFiles } from "./avatars";
 import * as cron from "./cron";
 import { initDatabase } from "./db";
-import { purgeDisabledEmployees } from "./db/services/employees";
-import { unlinkSessionFile } from "./db/services/sessions";
+import { purgeDisabledEmployees } from "./db/employees";
+import { unlinkSessionFile } from "./db/sessions";
 import { registerIpcHandlers } from "./ipc";
 import { getResolvedLocale } from "./locale";
 import { setMainWindow } from "./notifications";
@@ -42,7 +42,6 @@ app.on("window-all-closed", () => {
   }
 });
 
-// Best-effort stop of in-process cron handles before the app quits.
 app.on("before-quit", () => {
   cron.stopAll();
 });
@@ -59,18 +58,12 @@ app.whenReady().then(() => {
   registerIpcHandlers();
   initTheme();
 
-  // Re-register persisted cron jobs (fire-and-forget; only while app is alive).
-  cron.initCron();
-
   createWindow();
 
-  // Best-effort cleanup of disabled employees no longer in any chat. Fire-and-
-  // forget: a failure is logged and never blocks startup.
+  cron.initCron();
+
   void purgeDisabledEmployeesOnStartup();
 
-  // Warm the app's model store over the network so configured provider/model
-  // catalogs are fresh for the whole session. Fire-and-forget (non-blocking):
-  // startup stays responsive and a failed refresh is only logged, never shown.
   void refreshModelStore(new AbortController().signal);
 
   if (app.isPackaged) initUpdater();
@@ -129,18 +122,11 @@ function createWindow(): void {
   }
 }
 
-/**
- * Hard-delete employees that were disabled and are no longer a chat participant,
- * then unlink their session and avatar files. Try/catch every step so the
- * app still launches when the data folder is in a weird state.
- */
 async function purgeDisabledEmployeesOnStartup(): Promise<void> {
   try {
     const purged = purgeDisabledEmployees();
     for (const entry of purged) {
-      await Promise.all(
-        entry.sessionPaths.map((path) => unlinkSessionFile(path)),
-      );
+      await Promise.all(entry.sessionPaths.map(unlinkSessionFile));
       deleteAvatarFiles(entry.employeeId);
     }
   } catch (err) {

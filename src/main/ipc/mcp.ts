@@ -1,6 +1,6 @@
 import type { McpServerInput } from "@shared/types";
 import { ipcMain } from "electron";
-import * as mcpService from "../db/services/mcp";
+import * as mcpService from "../db/mcp";
 import { assertInteger, parsePageQuery } from "./helpers";
 
 export function registerMcpHandlers(): void {

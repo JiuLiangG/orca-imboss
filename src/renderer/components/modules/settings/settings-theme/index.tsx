@@ -2,14 +2,14 @@ import { t } from "@shared/l10n";
 import type { ThemeMode } from "@shared/types";
 import { cls } from "reactutils";
 import { useApp } from "../../../../app-store";
-import { THEME_COLORS } from "../../../../theme";
+import { setTheme, THEME_COLORS } from "../../../../theme";
 import { DetailBody, DetailHead } from "../../../detail-pane";
 import { SegmentedControl } from "../../../segmented-control";
 import "./index.css";
 
 /** Settings → Theme: 18 accent swatches + light/dark/system mode. */
 export function SettingsTheme(): React.JSX.Element {
-  const { theme, setTheme } = useApp();
+  const { theme } = useApp();
 
   const activeColor = THEME_COLORS.find(
     (c) => c.hex.toLowerCase() === theme.color.toLowerCase(),

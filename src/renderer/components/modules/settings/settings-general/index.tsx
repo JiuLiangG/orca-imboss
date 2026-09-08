@@ -1,7 +1,8 @@
-import { SUPPORTED_LOCALES } from "@shared/constants";
+import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "@shared/constants/locales";
 import { t } from "@shared/l10n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useApp } from "../../../../app-store";
+import { setLocale } from "../../../../locale";
 import { DetailBody, DetailHead } from "../../../detail-pane";
 import { Field } from "../../../field";
 import { IconPlus, IconTrash } from "../../../icons";
@@ -20,7 +21,7 @@ const SAVE_DEBOUNCE_MS = 400;
 
 /** Settings → General: language, default model, environment variables. */
 export function SettingsGeneral(): React.JSX.Element {
-  const { locale, setLocale } = useApp();
+  const { locale } = useApp();
   const [defaultModel, setDefaultModel] = useState("");
   const [envVars, setEnvVars] = useState<EnvVar[]>([]);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
@@ -52,17 +53,17 @@ export function SettingsGeneral(): React.JSX.Element {
     };
   }, []);
 
-  const changeDefaultModel = (value: string): void => {
+  function changeDefaultModel(value: string): void {
     setDefaultModel(value);
     void imb.settings.set(DEFAULT_MODEL_KEY, value);
-  };
+  }
 
-  const updateEnv = (next: EnvVar[]): void => {
+  function updateEnv(next: EnvVar[]): void {
     setEnvVars(next);
     persistEnv(next);
-  };
+  }
 
-  const addEnv = (): void => {
+  function addEnv(): void {
     const next = [...envVars, { key: "", value: "" }];
     updateEnv(next);
     requestAnimationFrame(() => {
@@ -70,11 +71,11 @@ export function SettingsGeneral(): React.JSX.Element {
         document.querySelectorAll<HTMLInputElement>(".imb-env-key-input");
       rows[rows.length - 1]?.focus();
     });
-  };
+  }
 
-  const removeEnv = (index: number): void => {
+  function removeEnv(index: number): void {
     updateEnv(envVars.filter((_, i) => i !== index));
-  };
+  }
 
   return (
     <>
@@ -91,12 +92,12 @@ export function SettingsGeneral(): React.JSX.Element {
           )}
         >
           <Select
-            value={SUPPORTED_LOCALES.includes(locale) ? locale : "en"}
+            value={SUPPORTED_LOCALES.includes(locale) ? locale : DEFAULT_LOCALE}
             options={SUPPORTED_LOCALES.map((l) => ({
               value: l,
               label: l === "zh-CN" ? "简体中文" : "English",
             }))}
-            onChange={(value) => void setLocale(value)}
+            onChange={setLocale}
           />
         </Field>
 

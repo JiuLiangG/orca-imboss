@@ -1,7 +1,4 @@
-import type {
-  AgentToolResult,
-  ToolDefinition,
-} from "@earendil-works/pi-coding-agent";
+import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import {
   Client,
   SSEClientTransport,
@@ -12,7 +9,12 @@ import {
   type Transport,
 } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
-import type { McpConfig, McpServer } from "@shared/types";
+import type {
+  AnyPiTool,
+  McpConfig,
+  McpServer,
+  McpToolDefinitions,
+} from "@shared/types";
 import { Type, type TSchema } from "typebox";
 import { mergeEnv, readUserEnv } from "./user-env";
 
@@ -32,19 +34,9 @@ import { mergeEnv, readUserEnv } from "./user-env";
  *   the agent session.
  */
 
-/** Shared Pi tool definition type (any params/details — variance-safe). */
-export type AnyPiTool = ToolDefinition<any, any, any>;
-
 const CONNECT_TIMEOUT_MS = 20_000;
 const MAX_TOOL_NAME_LENGTH = 128;
 const MAX_SCHEMA_DEPTH = 6;
-
-export interface McpToolDefinitions {
-  /** Wrapped Pi tool definitions (one per MCP tool of the connected servers). */
-  tools: AnyPiTool[];
-  /** Close every client connection (stdio child processes included). */
-  close: () => Promise<void>;
-}
 
 /**
  * Connect every configured server and wrap its tools for Pi.

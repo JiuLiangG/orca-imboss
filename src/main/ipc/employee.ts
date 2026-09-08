@@ -1,8 +1,8 @@
 import type { Employee, EmployeeInput } from "@shared/types";
 import { ipcMain } from "electron";
 import { deleteAvatarFiles, saveAvatar } from "../avatars";
-import * as employeesService from "../db/services/employees";
-import { listByEmployee, unlinkSessionFile } from "../db/services/sessions";
+import * as employeesService from "../db/employees";
+import { listByEmployee, unlinkSessionFile } from "../db/sessions";
 import { assertInteger, assertString, parsePageQuery } from "./helpers";
 
 export function registerEmployeeHandlers(): void {

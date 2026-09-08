@@ -1,6 +1,7 @@
+import { SettingKeys } from "@shared/constants/settings";
 import { t } from "@shared/l10n";
 import { cls } from "reactutils";
-import { useApp, type AppModule } from "../../app-store";
+import { appStore, useApp, type AppModule } from "../../app-store";
 import { BrandLogo } from "../brand-logo";
 import {
   IconChat,
@@ -77,7 +78,13 @@ function NavButton({
   item: NavItem;
   collapsed: boolean;
 }): React.JSX.Element {
-  const { module, setModule } = useApp();
+  const { module } = useApp();
+
+  async function setModule(value: AppModule): Promise<void> {
+    appStore.module = value;
+    await imb.settings.set(SettingKeys.Module, value);
+  }
+
   const Icon = item.icon;
   const active = module === item.module;
   return (

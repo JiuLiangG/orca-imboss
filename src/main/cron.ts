@@ -1,7 +1,7 @@
 import type { CronJob, CronJobInput } from "@shared/types";
 import { Cron } from "croner";
 import { deliver } from "./agent/session-queue";
-import * as cronService from "./db/services/cron";
+import * as cronService from "./db/cron";
 
 /**
  * In-process cron scheduler.

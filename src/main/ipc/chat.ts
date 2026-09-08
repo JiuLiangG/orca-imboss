@@ -1,15 +1,12 @@
-import * as constants from "@shared/constants";
+import { ASSISTANT_ID } from "@shared/constants/employees";
 import type { ChatParticipantUpdate, MessageAttachment } from "@shared/types";
 import { ipcMain } from "electron";
 import { deliver } from "../agent/session-queue";
-import * as chatsService from "../db/services/chats";
-import * as messagesService from "../db/services/messages";
-import { listByChat, unlinkSessionFile } from "../db/services/sessions";
+import * as chatsService from "../db/chats";
+import * as messagesService from "../db/messages";
+import { listByChat, unlinkSessionFile } from "../db/sessions";
 import { broadcast, notifyUnread } from "../notifications";
 import { assertInteger, assertString, parsePageQuery } from "./helpers";
-
-const CANNED_REPLY =
-  "收到，已把任务拆解并派发给相关员工，完成后我会第一时间汇总给你。";
 
 export function registerChatHandlers(): void {
   ipcMain.handle("chats:list", () => chatsService.listChats());
@@ -101,9 +98,8 @@ export function registerChatHandlers(): void {
       );
 
       // Serialized run; the reply is auto-persisted as the assistant message.
-      void deliver(constants.ASSISTANT_ID, safeChatId, safeContent, {
-        persistReplyAs: constants.ASSISTANT_ID,
-        fallbackReply: CANNED_REPLY,
+      void deliver(ASSISTANT_ID, safeChatId, safeContent, {
+        persistReplyAs: ASSISTANT_ID,
       });
 
       return userMessage;

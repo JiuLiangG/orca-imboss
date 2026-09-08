@@ -17,6 +17,20 @@ import {
 } from "../agent/skills";
 import { assertString, parsePageQuery } from "./helpers";
 
+async function pickSkillFolders(): Promise<string[] | null> {
+  const win =
+    BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+  const options: Electron.OpenDialogOptions = {
+    title: "Select skill folders",
+    properties: ["openDirectory", "multiSelections"],
+  };
+  const result = win
+    ? await dialog.showOpenDialog(win, options)
+    : await dialog.showOpenDialog(options);
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths;
+}
+
 // --- providers / skills ---
 export function registerAgentEnvHandlers(): void {
   ipcMain.handle("providers:list", () => listProviders());
@@ -70,18 +84,4 @@ export function registerAgentEnvHandlers(): void {
   ipcMain.handle("skills:uninstall", async (_event, name: unknown) => {
     await uninstallSkill(assertString(name, "skill name"));
   });
-}
-
-async function pickSkillFolders(): Promise<string[] | null> {
-  const win =
-    BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-  const options: Electron.OpenDialogOptions = {
-    title: "Select skill folders",
-    properties: ["openDirectory", "multiSelections"],
-  };
-  const result = win
-    ? await dialog.showOpenDialog(win, options)
-    : await dialog.showOpenDialog(options);
-  if (result.canceled || result.filePaths.length === 0) return null;
-  return result.filePaths;
 }

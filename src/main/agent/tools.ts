@@ -1,4 +1,4 @@
-import type { AnyPiTool } from "./mcp";
+import type { AnyPiTool } from "@shared/types";
 import { loadPiSdk } from "./pi-sdk";
 import { readUserEnv } from "./user-env";
 

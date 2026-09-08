@@ -1,4 +1,4 @@
-import { MCP_TRANSPORTS } from "@shared/constants";
+import { MCP_TRANSPORTS } from "@shared/constants/mcp";
 import { t } from "@shared/l10n";
 import type { McpConfig, McpTransport } from "@shared/types";
 import { Field } from "../../../field";

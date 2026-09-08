@@ -1,7 +1,7 @@
 import {
   BUILTIN_REMOVE_CRON_MARKER,
   BUILTIN_SET_CRON_MARKER,
-} from "@shared/constants";
+} from "@shared/constants/agent_tools";
 import { t } from "@shared/l10n";
 import type { Employee, EmployeeInput } from "@shared/types";
 import { useCallback, useEffect, useMemo, useState } from "react";

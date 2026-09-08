@@ -1,5 +1,5 @@
-import { type AgentEnvironment } from "@shared/types";
-import * as messagesService from "../db/services/messages";
+import { DeliverOptions, type AgentEnvironment } from "@shared/types";
+import * as messagesService from "../db/messages";
 import { broadcast } from "../notifications";
 import { getAgentEnvironment } from "./environment";
 
@@ -15,17 +15,6 @@ import { getAgentEnvironment } from "./environment";
  * A failed run is logged and swallowed — it never loses the user's message
  * (the caller's own persistence already happened before `deliver` was called).
  */
-
-export interface DeliverOptions {
-  /**
-   * When set, persist the agent's reply as a message from this employee
-   * (`messages.appendMessage(chatId, replyAs, replyText)`). `null` disables
-   * auto-persist (the agent is expected to post via `send_message` itself).
-   */
-  persistReplyAs?: number | null;
-  /** Fallback reply text persisted when the run does not produce a reply. */
-  fallbackReply?: string | null;
-}
 
 interface QueueItem {
   text: string;

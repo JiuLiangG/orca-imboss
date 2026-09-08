@@ -1,28 +1,5 @@
-import { BUILTIN_SKILLS, TOOLS_GUIDELINES } from "@shared/constants";
-
-/**
- * One entry for the `[tools]` block's `Available tools` list. The base SDK
- * tools (read/bash/edit/write) use `BASE_TOOL_SNIPPETS`; custom tools
- * (MCP + team `imb_*`) use their `promptSnippet` (falling back to the
- * description).
- */
-export interface EmployeeToolEntry {
-  name: string;
-  snippet: string;
-}
-
-export interface BuildEmployeeSystemPromptArgs {
-  /** Persona parts joined before the built-in skills; empty strings dropped.
-   *  Assistant: `[ASSISTANT_SYSTEM_PROMPT, employee.systemPrompt]`.
-   *  Regular:   `[employee.systemPrompt]`. */
-  personaParts: string[];
-  /** Employee id (assistant = 0). */
-  employeeId: number;
-  /** Active tools for this employee-session (core + MCP + team `imb_*`). */
-  toolEntries: EmployeeToolEntry[];
-  /** Current date in `yyyy-MM-dd`. */
-  today: string;
-}
+import { BUILTIN_SKILLS, TOOLS_GUIDELINES } from "@shared/constants/prompts";
+import { BuildEmployeeSystemPromptArgs } from "@shared/types";
 
 /**
  * Assemble an employee-session's system prompt under the app's own
@@ -39,6 +16,7 @@ export interface BuildEmployeeSystemPromptArgs {
  * Employee ID: {ID}
  * ```
  */
+
 export function buildEmployeeSystemPrompt({
   personaParts,
   employeeId,

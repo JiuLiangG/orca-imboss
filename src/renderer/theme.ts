@@ -1,4 +1,5 @@
-import type { ThemeMode } from "@shared/types";
+import type { ThemeMode, ThemeState } from "@shared/types";
+import { appStore } from "./app-store";
 
 /**
  * Renderer theme helpers: the 18 accent presets and the CSS-variable
@@ -34,8 +35,21 @@ export const THEME_COLORS: ThemeColor[] = [
   { id: "Mint", hex: "#14B8A6" },
 ];
 
+export async function setTheme(patch: Partial<ThemeState>): Promise<void> {
+  const next = await imb.theme.set(patch);
+  applyThemeAccent(next.color);
+  applyThemeModeAttr(next.mode);
+  appStore.theme = next;
+}
+
+export function updateThemeState(state: ThemeState): void {
+  applyThemeAccent(state.color);
+  applyThemeModeAttr(state.mode);
+  appStore.theme = state;
+}
+
 /** Inject an accent preset as CSS variables (prototype-parity derivation). */
-export function applyThemeAccent(hex: string): void {
+function applyThemeAccent(hex: string): void {
   const { h, s, l } = hexToHsl(hex);
   const root = document.documentElement;
   root.style.setProperty("--imb-accent", hex);
@@ -60,7 +74,7 @@ export function applyThemeAccent(hex: string): void {
 }
 
 /** Set/clear the `data-theme-mode` attribute (system = clear). */
-export function applyThemeModeAttr(mode: ThemeMode): void {
+function applyThemeModeAttr(mode: ThemeMode): void {
   const root = document.documentElement;
   if (mode === "system") {
     root.removeAttribute("data-theme-mode");
@@ -69,7 +83,7 @@ export function applyThemeModeAttr(mode: ThemeMode): void {
   }
 }
 
-export function hexToHsl(hex: string): { h: number; s: number; l: number } {
+function hexToHsl(hex: string): { h: number; s: number; l: number } {
   let r = parseInt(hex.slice(1, 3), 16) / 255;
   let g = parseInt(hex.slice(3, 5), 16) / 255;
   let b = parseInt(hex.slice(5, 7), 16) / 255;

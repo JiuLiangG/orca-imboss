@@ -1,8 +1,8 @@
 import type { EmployeeSession } from "@shared/types";
 import { rm } from "fs/promises";
 import { resolve } from "path";
-import { getAgentSessionsDir } from "../../data-dir";
-import { getDB } from "../index";
+import { getAgentSessionsDir } from "../data-dir";
+import { getDB } from "./index";
 
 interface SessionRow {
   employee_id: number;

@@ -1,5 +1,5 @@
-export const DEFAULT_LOCALE = "en";
-export const SUPPORTED_LOCALES = ["en", "zh-CN"];
+export const READ_CHAT_PROMPT =
+  "You have new messages in this chat. Call imb_read_chat to read the latest messages and respond as appropriate.";
 
 /**
  * The built-in assistant's hardcoded base system prompt. This REPLACES the
@@ -18,18 +18,14 @@ export const ASSISTANT_SYSTEM_PROMPT = `# Receiving a Task
 4. For every employee in the task group, send a message via \`imb_send_message\` that @-mentions them (notify the employee; the message body contains \`@{ID}\`), assigns the task and describes exactly what they should do.
 5. Send a \`chat\`-kind message to the assistant↔user chat whose content is the new task group's chat id.`;
 
-// ---------------------------------------------------------------------------
-// Built-in skills appended to every employee's system prompt
-// ---------------------------------------------------------------------------
-
 /** Skill 1 — ask for clarification / collect feedback via `imb_ask`. */
-export const BUILTIN_SKILLS_ASK = `### Asking Questions / Collecting Feedback
+const BUILTIN_SKILLS_ASK = `### Asking Questions / Collecting Feedback
 
 When you need clarification on something or need to gather feedback, use this skill.
 Post the question(s) with the \`imb_ask\` tool. Once the message is sent, do nothing further — wait for the next instruction.`;
 
 /** Skill 2 — how to react when @-mentioned, by message `kind`. */
-export const BUILTIN_SKILLS_MENTION = `### Handling @-Mentions
+const BUILTIN_SKILLS_MENTION = `### Handling @-Mentions
 
 When you are @-mentioned (the message body contains \`@{ID}\`), handle it according to the message's \`kind\`:
 - \`text\`: Follow the instructions in the message.
@@ -40,11 +36,6 @@ When you are @-mentioned (the message body contains \`@{ID}\`), handle it accord
 export const BUILTIN_SKILLS = [BUILTIN_SKILLS_ASK, BUILTIN_SKILLS_MENTION].join(
   "\n\n",
 );
-
-// ---------------------------------------------------------------------------
-// `[tools]` block building blocks (the `customPrompt` branch of the Pi SDK's
-// buildSystemPrompt emits no `[tools]` section, so the app builds its own).
-// ---------------------------------------------------------------------------
 
 /** One-line snippets for the SDK core tools (used verbatim in `[tools]`). */
 export const BASE_TOOL_SNIPPETS: Record<string, string> = {
@@ -67,71 +58,3 @@ export const TOOLS_GUIDELINES: readonly string[] = [
   "Be concise in your responses",
   "Show file paths clearly when working with files",
 ];
-
-/**
- * Built-in tools that non-assistant employees can opt into via their "Linked
- * MCP" list. The markers (namespaced to avoid colliding with an MCP server
- * name) are stored in `employee.mcp` and honored at runtime by
- * `createTeamToolDefinitions`.
- */
-export const BUILTIN_SET_CRON_MARKER = "builtin:imb_set_cronjob";
-export const BUILTIN_REMOVE_CRON_MARKER = "builtin:imb_remove_cronjob";
-
-// Setting keys
-export const SettingKeys = {
-  NavCollapse: "ui.navCollapsed",
-  Module: "ui.module",
-  WindowState: "ui.window",
-};
-
-export const MCP_TRANSPORTS = ["stdio", "sse", "streamable-http"] as const;
-
-/** Providers offered in the settings dropdown in addition to "Custom". */
-export const CURATED_PROVIDERS = [
-  "anthropic",
-  "deepseek",
-  "github-copilot",
-  "google",
-  "groq",
-  "minimax-cn",
-  "minimax",
-  "moonshotai-cn",
-  "moonshotai",
-  "openai",
-  "openrouter",
-  "xai",
-  "xiaomi",
-  "zai",
-] as const;
-
-/** Names for the providers to display in UI */
-export const CURATED_PROVIDERS_LABELS = {
-  anthropic: "Anthropic",
-  deepseek: "DeepSeek",
-  "github-copilot": "GitHub Copilot",
-  google: "Google",
-  groq: "Groq",
-  "minimax-cn": "MiniMax (CN)",
-  minimax: "MiniMax",
-  "moonshotai-cn": "Moonshot AI (CN)",
-  moonshotai: "Moonshot AI",
-  openai: "OpenAI",
-  openrouter: "OpenRouter",
-  xai: "xAI",
-  xiaomi: "Xiaomi",
-  zai: "Z.ai",
-} as const;
-
-/** API protocol flavors supported for custom providers (`models.json` `api`). */
-export const PROVIDER_API_TYPES = [
-  "openai-completions",
-  "openai-responses",
-  "anthropic-messages",
-  "google-generative-ai",
-] as const; /** The built-in assistant's reserved id — it must always exist. */
-
-export const ASSISTANT_ID = 0;
-/** Default signal sent to a participant whose chat was just written to. */
-
-export const READ_CHAT_PROMPT =
-  "You have new messages in this chat. Call imb_read_chat to read the latest messages and respond as appropriate.";

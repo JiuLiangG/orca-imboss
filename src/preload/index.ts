@@ -1,8 +1,10 @@
+import { DEFAULT_LOCALE } from "@shared/constants/locales";
 import type {
   Chat,
   ChatParticipantUpdate,
   ChatSummary,
   Employee,
+  EmployeeDeleteResult,
   EmployeeInput,
   EmployeeSession,
   InstalledSkill,
@@ -21,14 +23,12 @@ import type {
 } from "@shared/types";
 import { contextBridge, ipcRenderer } from "electron";
 
-const initialLocale = readArg("locale") ?? "en";
+const initialLocale = readArg("locale") ?? DEFAULT_LOCALE;
 
 const api = {
   platform: process.platform,
 
   initialLocale,
-  setLocale: (locale: string) =>
-    ipcRenderer.invoke("locale:set", locale) as Promise<string>,
   onLocaleChanged: (cb: (locale: string) => void) => on("locale:changed", cb),
 
   settings: {
@@ -72,9 +72,10 @@ const api = {
         input,
       ) as Promise<Employee | null>,
     remove: (id: number) =>
-      ipcRenderer.invoke("employees:delete", id) as Promise<
-        "deleted" | "disabled" | null
-      >,
+      ipcRenderer.invoke(
+        "employees:delete",
+        id,
+      ) as Promise<EmployeeDeleteResult>,
     updateAvatar: (id: number, ext: string, data: Uint8Array) =>
       ipcRenderer.invoke(
         "employees:updateAvatar",

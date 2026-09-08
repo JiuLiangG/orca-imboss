@@ -1,4 +1,5 @@
-import { getSetting } from "../db/services/settings";
+import { SettingKeys } from "@shared/constants/settings";
+import { getSetting } from "../db/settings";
 
 /**
  * User-configured environment variables (Settings → General → "Environment
@@ -12,16 +13,13 @@ import { getSetting } from "../db/services/settings";
  * - Expansion: each value is expanded once using `expandValue` against
  *   `process.env` only. There are no user-var-to-user-var references.
  * - Validation: keys must look like env-var names and lengths are capped,
- *   mirroring the MCP service (`src/main/db/services/mcp.ts`).
+ *   mirroring the MCP service (`src/main/db/mcp.ts`).
  */
 
 interface UserEnvEntry {
   key: string;
   value: string;
 }
-
-/** Settings key where the env rows are persisted (`[{key,value}, ...]` JSON). */
-const USER_ENV_SETTING_KEY = "env";
 
 const MAX_ENTRIES = 128;
 const MAX_KEY_LENGTH = 256;
@@ -42,7 +40,7 @@ let cachedRecord: Record<string, string> = {};
 export function readUserEnv(
   baseEnv: Record<string, string> = process.env as Record<string, string>,
 ): Record<string, string> {
-  const raw = getSetting(USER_ENV_SETTING_KEY);
+  const raw = getSetting(SettingKeys.UserEnv);
   if (raw !== cachedRaw) {
     const record: Record<string, string> = {};
     for (const { key, value } of parseUserEnv(raw)) {

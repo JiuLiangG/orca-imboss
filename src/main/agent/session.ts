@@ -1,24 +1,29 @@
+import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { ASSISTANT_ID } from "@shared/constants/employees";
 import {
-  ASSISTANT_ID,
   ASSISTANT_SYSTEM_PROMPT,
   BASE_TOOL_SNIPPETS,
-} from "@shared/constants";
-import type { AgentEnvironment } from "@shared/types";
+} from "@shared/constants/prompts";
+import { SettingKeys } from "@shared/constants/settings";
+import type {
+  AgentEnvironment,
+  AgentPromptResult,
+  AgentSessionContext,
+  AnyPiTool,
+  EmployeeToolEntry,
+} from "@shared/types";
 import { getAgentRoot, getAgentSessionsDir, getWorkDir } from "../data-dir";
-import { getEmployee } from "../db/services/employees";
-import { listMcpServers } from "../db/services/mcp";
-import { getSession } from "../db/services/sessions";
-import { getSetting } from "../db/services/settings";
+import { getEmployee } from "../db/employees";
+import { listMcpServers } from "../db/mcp";
+import { getSession } from "../db/sessions";
+import { getSetting } from "../db/settings";
 import { createTeamToolDefinitions } from "./builtin-tools";
-import type { EmployeeToolEntry } from "./employee-prompt";
+import type {} from "./employee-prompt";
 import { buildEmployeeSystemPrompt } from "./employee-prompt";
-import { createMcpToolDefinitions, type AnyPiTool } from "./mcp";
-import { getModelRuntime, type ModelRuntimeInstance } from "./model-runtime";
+import { createMcpToolDefinitions } from "./mcp";
+import { getModelRuntime } from "./model-runtime";
 import { loadPiSdk, type PiSdk } from "./pi-sdk";
 import { createShellToolDefinitions } from "./tools";
-
-/** Model instance returned by the runtime's model registry. */
-type PiModel = NonNullable<ReturnType<ModelRuntimeInstance["getModel"]>>;
 
 /**
  * Pi-backed agent session.
@@ -39,20 +44,7 @@ type PiModel = NonNullable<ReturnType<ModelRuntimeInstance["getModel"]>>;
  * caller (`replyText`), which the chat pipeline persists.
  */
 
-export interface AgentSessionContext {
-  employeeId: number;
-  chatId: number;
-}
-
-export interface AgentPromptResult {
-  /** True when a real agent turn ran (a model was configured and answered). */
-  replied: boolean;
-  /** Final assistant reply text (all text content of the last `turn_end`). */
-  replyText?: string;
-}
-
-/** Settings key holding the `provider/model` default (written by settings UI). */
-const DEFAULT_MODEL_KEY = "defaultModel";
+type PiModel = NonNullable<ReturnType<ModelRuntime["getModel"]>>;
 
 export class AgentSession {
   private _disposed = false;
@@ -118,7 +110,7 @@ export class AgentSession {
   private _closeMcp: (() => Promise<void>) | undefined;
 
   private _resolveModel(
-    modelRuntime: ModelRuntimeInstance,
+    modelRuntime: ModelRuntime,
     employeeModelId: string | null | undefined,
   ): PiModel | undefined {
     // Cascade: employee's own model → app default model → first available.
@@ -127,7 +119,7 @@ export class AgentSession {
     // silently doing nothing.
     const refs: Array<string | null | undefined> = [
       employeeModelId?.trim(),
-      getSetting(DEFAULT_MODEL_KEY),
+      getSetting(SettingKeys.DefaultModel),
     ];
     for (const ref of refs) {
       const model = this._resolveModelRef(modelRuntime, ref);
@@ -138,7 +130,7 @@ export class AgentSession {
 
   /** Resolve a single `"provider/modelId"` reference against the runtime. */
   private _resolveModelRef(
-    modelRuntime: ModelRuntimeInstance,
+    modelRuntime: ModelRuntime,
     ref: string | null | undefined,
   ): PiModel | undefined {
     if (!ref) return undefined;
@@ -159,7 +151,7 @@ export class AgentSession {
       cwd: string;
       message: string;
       model: PiModel;
-      modelRuntime: ModelRuntimeInstance;
+      modelRuntime: ModelRuntime;
       employeeSystemPrompt: string;
       mcpServerNames: string[];
       employeeId: number;

@@ -1,6 +1,6 @@
-import { SettingKeys } from "@shared/constants";
+import { SettingKeys } from "@shared/constants/settings";
 import { screen, type BrowserWindow } from "electron";
-import { getSetting, setSetting } from "./db/services/settings";
+import { getSetting, setSetting } from "./db/settings";
 
 // Window state persistence: stores the main window's normal (unmaximized) bounds
 // so they can be restored on the next launch. Persisted via the DB `settings` KV

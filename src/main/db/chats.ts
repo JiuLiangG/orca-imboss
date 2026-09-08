@@ -1,30 +1,17 @@
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@shared/constants/paged";
 import type {
   Chat,
   ChatParticipantUpdate,
+  ChatRow,
   ChatSummary,
+  ChatSummaryRow,
   PageQuery,
   PageResult,
 } from "@shared/types";
-import { getDB } from "../index";
+import { getDB } from "./index";
 import { parseNumberArray, stringifyArray } from "./json";
 import { escapeLike, toFtsPhrase } from "./text-search";
 
-interface ChatRow {
-  id: number;
-  title: string;
-  participants: string;
-  unread: number;
-  created_at: number;
-  from_chat_id: number | null;
-}
-
-interface ChatSummaryRow extends ChatRow {
-  preview: string | null;
-  last_at: number | null;
-}
-
-const MAX_PAGE_SIZE = 200;
-const DEFAULT_PAGE_SIZE = 50;
 const MAX_QUERY_LENGTH = 200;
 
 export function listChats(): Chat[] {

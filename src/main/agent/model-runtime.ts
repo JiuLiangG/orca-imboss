@@ -1,13 +1,9 @@
+import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { ModelOption } from "@shared/types";
 import { getAuthPath, getModelsPath } from "../data-dir";
-import { loadPiSdk, type PiSdk } from "./pi-sdk";
+import { loadPiSdk } from "./pi-sdk";
 
-/** Pi ModelRuntime instance (the class itself has a private constructor). */
-export type ModelRuntimeInstance = Awaited<
-  ReturnType<PiSdk["ModelRuntime"]["create"]>
->;
-
-let runtimePromise: Promise<ModelRuntimeInstance> | null = null;
+let runtimePromise: Promise<ModelRuntime> | null = null;
 
 /**
  * Lazily create (once) and cache the app's shared ModelRuntime — the "model
@@ -23,11 +19,11 @@ let runtimePromise: Promise<ModelRuntimeInstance> | null = null;
  * On creation failure the cached promise is reset so a later call retries
  * (defensive, per project guidelines).
  */
-export function getModelRuntime(): Promise<ModelRuntimeInstance> {
+export function getModelRuntime(): Promise<ModelRuntime> {
   if (!runtimePromise) {
-    runtimePromise = (async (): Promise<ModelRuntimeInstance> => {
+    runtimePromise = (async (): Promise<ModelRuntime> => {
       const pi = await loadPiSdk();
-      return pi.ModelRuntime.create({
+      return await pi.ModelRuntime.create({
         authPath: getAuthPath(),
         modelsPath: getModelsPath(),
       });

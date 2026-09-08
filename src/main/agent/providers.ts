@@ -1,5 +1,12 @@
-import { CURATED_PROVIDERS, PROVIDER_API_TYPES } from "@shared/constants";
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@shared/constants/paged";
+import {
+  CURATED_PROVIDERS,
+  PROVIDER_API_TYPES,
+} from "@shared/constants/providers";
 import type {
+  AuthFile,
+  ModelsFile,
+  ModelSpec,
   PageQuery,
   PageResult,
   ProviderApiType,
@@ -17,41 +24,7 @@ import { getAuthPath, getModelsPath } from "../data-dir";
  * `auth.json` (chmod 0600). Renderer-facing reads return masked data.
  */
 
-interface AuthFile {
-  [providerId: string]:
-    { type: "api_key"; key: string } | { type: string; [k: string]: unknown };
-}
-
-interface ModelSpec {
-  id: string;
-  name: string;
-  reasoning: boolean;
-  input: string[];
-  cost: {
-    input: number;
-    output: number;
-    cacheRead: number;
-    cacheWrite: number;
-  };
-  contextWindow: number;
-  maxTokens: number;
-}
-
-interface ProviderSpec {
-  baseUrl?: string;
-  api?: ProviderApiType;
-  models?: ModelSpec[];
-}
-
-interface ModelsFile {
-  providers?: Record<string, ProviderSpec>;
-}
-
-const MAX_PAGE_SIZE = 200;
-const DEFAULT_PAGE_SIZE = 50;
-
 const MODELS_FETCH_TIMEOUT_MS = 10_000;
-
 const SAFE_ID_RE = /^[A-Za-z0-9._-]+$/;
 
 export async function listProviders(): Promise<ProviderInfo[]> {

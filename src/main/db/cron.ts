@@ -1,24 +1,11 @@
-import type { CronJob, CronJobInput } from "@shared/types";
+import type {
+  CronJob,
+  CronJobInput,
+  CronJobRow,
+  ParsedCronJobId,
+} from "@shared/types";
 import { Cron } from "croner";
-import { getDB } from "../index";
-
-interface ParsedCronJobId {
-  chatId: number;
-  employeeId: number;
-  jobId: string;
-}
-
-interface CronJobRow {
-  id: string;
-  chat_id: number;
-  employee_id: number;
-  schedule: string;
-  content: string;
-  enabled: number;
-  created_at: number;
-  last_run_at: number | null;
-  next_run_at: number | null;
-}
+import { getDB } from "./index";
 
 export function listEnabledJobs(): CronJob[] {
   return (

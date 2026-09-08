@@ -1,4 +1,5 @@
-import { MCP_TRANSPORTS } from "@shared/constants";
+import { MCP_TRANSPORTS } from "@shared/constants/mcp";
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@shared/constants/paged";
 import type {
   McpConfig,
   McpServer,
@@ -7,7 +8,7 @@ import type {
   PageQuery,
   PageResult,
 } from "@shared/types";
-import { getDB } from "../index";
+import { getDB } from "./index";
 import { parseJsonObject } from "./json";
 import { escapeLike } from "./text-search";
 
@@ -37,9 +38,6 @@ const MAX_URL_LENGTH = 2048;
 const MAX_ENTRIES = 128;
 const MAX_KEY_LENGTH = 256;
 const MAX_VALUE_LENGTH = 4096;
-
-const MAX_PAGE_SIZE = 200;
-const DEFAULT_PAGE_SIZE = 50;
 
 const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 

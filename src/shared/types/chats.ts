@@ -1,0 +1,39 @@
+/** Summary view of a chat row (includes unread count). */
+export interface Chat {
+  id: number;
+  title: string;
+  participants: number[];
+  unread: number;
+  /** UNIX timestamp in seconds (all date-kind fields are INTEGER seconds). */
+  createdAt: number;
+  /** Id of the user chat that spawned this group chat, or null for a root chat. */
+  fromChatId: number | null;
+}
+
+/** List item of the chat module: chat + derived last-message preview. */
+export interface ChatSummary extends Chat {
+  /** Last message content, truncated (null when the chat has no messages). */
+  preview: string | null;
+  /** UNIX timestamp in seconds of the last message (null when the chat has no messages). */
+  lastAt: number | null;
+}
+
+/** Participant edits applied in one call (additive/removal merge). */
+export interface ChatParticipantUpdate {
+  add?: number[];
+  remove?: number[];
+}
+
+export interface ChatRow {
+  id: number;
+  title: string;
+  participants: string;
+  unread: number;
+  created_at: number;
+  from_chat_id: number | null;
+}
+
+export interface ChatSummaryRow extends ChatRow {
+  preview: string | null;
+  last_at: number | null;
+}

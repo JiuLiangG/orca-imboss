@@ -1,5 +1,5 @@
 import { BrowserWindow, Notification } from "electron";
-import * as chatsService from "./db/services/chats";
+import * as chatsService from "./db/chats";
 
 let mainWindow: BrowserWindow | null = null;
 

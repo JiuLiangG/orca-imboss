@@ -1,3 +1,4 @@
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@shared/constants/paged";
 import type { InstalledSkill, PageQuery, PageResult } from "@shared/types";
 import { cpSync, existsSync, mkdirSync, statSync } from "fs";
 import { readdir, readFile, rm } from "fs/promises";
@@ -13,9 +14,6 @@ import { getAgentSkillsDir } from "../data-dir";
 const SKILL_FILE = "SKILL.md";
 
 const SAFE_NAME_RE = /^[A-Za-z0-9._-]{1,64}$/;
-
-const MAX_PAGE_SIZE = 200;
-const DEFAULT_PAGE_SIZE = 50;
 
 export async function listSkills(): Promise<InstalledSkill[]> {
   let entries: string[];

@@ -1,4 +1,4 @@
-import notifySound from "../assets/notify.wav";
+import notifySound from "./assets/notify.wav";
 
 let lastPlay = 0;
 

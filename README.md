@@ -42,7 +42,7 @@ The app follows the standard Electron process model, with the **data layer and a
 **Data flow**
 
 - The **renderer never touches SQLite directly**; it goes through IPC.
-- Data is read/written in the main process by services (`src/main/db/services/*`) and, in the future, by **Pi tools** that close over the same data layer.
+- Data is read/written in the main process by services (`src/main/db/*`) and, in the future, by **Pi tools** that close over the same data layer.
 - **Agent events** stream from the Pi session (in main) to the renderer over IPC.
 
 ---

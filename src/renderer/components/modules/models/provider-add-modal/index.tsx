@@ -2,7 +2,7 @@ import {
   CURATED_PROVIDERS,
   CURATED_PROVIDERS_LABELS,
   PROVIDER_API_TYPES,
-} from "@shared/constants";
+} from "@shared/constants/providers";
 import { t } from "@shared/l10n";
 import { type ProviderApiType, type ProviderUpsert } from "@shared/types";
 import { useCallback, useState } from "react";

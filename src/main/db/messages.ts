@@ -7,8 +7,8 @@ import type {
   MessageStep,
   StepStatus,
 } from "@shared/types";
-import { getDB } from "../index";
 import { bumpUnread } from "./chats";
+import { getDB } from "./index";
 import { parseJsonObject } from "./json";
 import { escapeLike, toFtsPhrase } from "./text-search";
 

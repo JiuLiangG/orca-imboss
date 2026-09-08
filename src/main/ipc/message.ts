@@ -1,7 +1,7 @@
-import { READ_CHAT_PROMPT } from "@shared/constants";
+import { READ_CHAT_PROMPT } from "@shared/constants/prompts";
 import { ipcMain } from "electron";
 import { deliver } from "../agent/session-queue";
-import * as messagesService from "../db/services/messages";
+import * as messagesService from "../db/messages";
 import { assertInteger, assertObject, assertString } from "./helpers";
 
 export function registerMessageHandlers(): void {
