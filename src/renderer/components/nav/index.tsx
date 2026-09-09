@@ -32,8 +32,8 @@ const NAV_ITEMS: NavItem[] = [
     section: "main",
   },
   {
-    module: "models",
-    labelKey: "Models",
+    module: "providers",
+    labelKey: "Providers",
     icon: IconModels,
     section: "main",
   },

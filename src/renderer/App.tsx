@@ -4,17 +4,17 @@ import { AppShell } from "./components/app-shell";
 import { ChatModule } from "./components/modules/chat/chat-module";
 import { EmployeesModule } from "./components/modules/employees/employees-module";
 import { McpModule } from "./components/modules/mcp/mcp-module";
-import { ModelsModule } from "./components/modules/models/models-module";
 import {
   isPlaceholderModule,
   PlaceholderModule,
 } from "./components/modules/placeholder/placeholder-module";
+import { ProvidersModule } from "./components/modules/providers/providers-module";
 import { SettingsModule } from "./components/modules/settings/settings-module";
 import { SkillsModule } from "./components/modules/skills/skills-module";
 
 const MODULE_VIEWS: Partial<Record<AppModule, () => React.JSX.Element>> = {
   chat: ChatModule,
-  models: ModelsModule,
+  providers: ProvidersModule,
   mcp: McpModule,
   skills: SkillsModule,
   employees: EmployeesModule,

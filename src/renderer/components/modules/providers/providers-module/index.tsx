@@ -24,7 +24,7 @@ import { ProviderDetail } from "../provider-detail";
 const PAGE_SIZE = 50;
 
 /** Models module: provider list + detail (masked key reveal) + add. */
-export function ModelsModule(): React.JSX.Element {
+export function ProvidersModule(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
