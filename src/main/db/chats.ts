@@ -17,7 +17,10 @@ const MAX_QUERY_LENGTH = 200;
 export function listChats(): Chat[] {
   return (
     getDB()
-      .prepare("SELECT * FROM chats ORDER BY created_at DESC, id DESC")
+      .prepare(
+        "SELECT * FROM chats WHERE from_chat_id IS NULL " +
+          "ORDER BY last_message_at DESC, id DESC",
+      )
       .all() as ChatRow[]
   ).map(toChat);
 }
@@ -29,35 +32,59 @@ export function getChat(id: number): Chat | null {
 }
 
 /**
- * Chat list with the latest-message preview (chat module). Ordered by chat
- * creation date — newest first.
+ * Chat list with the latest-message preview (chat module). Root-only
+ * (assistant ↔ user); ordered by last-message time — newest first. A chat
+ * that has never received a message falls back to its creation time (set on
+ * insert, so a fresh chat tops the list).
  */
 export function listChatSummaries(): ChatSummary[] {
   const rows = getDB()
     .prepare(
       `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
+              c.last_message_at,
               (SELECT m.content FROM messages m WHERE m.chat_id = c.id
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
               (SELECT m.created_at FROM messages m WHERE m.chat_id = c.id
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_at
        FROM chats c
-       ORDER BY c.created_at DESC, c.id DESC`,
+       WHERE c.from_chat_id IS NULL
+       ORDER BY c.last_message_at DESC, c.id DESC`,
     )
     .all() as ChatSummaryRow[];
   return rows.map(toChatSummary);
 }
 
 /**
- * One page of chat summaries, ordered `created_at DESC, id DESC` (unchanged
- * from the full list). Search semantics (pushes the module's client-side
- * filter to the server):
+ * Single chat summary (any chat — root or group). The caller decides whether
+ * to ignore non-root chats; used by the renderer's live per-chat refresh.
+ */
+export function getChatSummary(id: number): ChatSummary | null {
+  const row = getDB()
+    .prepare(
+      `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
+              c.last_message_at,
+              (SELECT m.content FROM messages m WHERE m.chat_id = c.id
+               ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
+              (SELECT m.created_at FROM messages m WHERE m.chat_id = c.id
+               ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_at
+       FROM chats c
+       WHERE c.id = ?`,
+    )
+    .get(id) as ChatSummaryRow | undefined;
+  return row ? toChatSummary(row) : null;
+}
+
+/**
+ * One page of chat summaries, root-only, ordered `last_message_at DESC,
+ * id DESC` (same as the full list). Search semantics (pushes the module's
+ * server-side FTS/LIKE filter):
  * - `query.length >= 3` → title LIKE  **OR** FTS5 trigram match over any
  *   message content (phrase-quoted, same as `searchMessages`);
  * - shorter queries → title LIKE **OR** plain `content LIKE` scan (no
  *   trigram index; keeps 1–2 char / Chinese queries working).
  *
- * Cursor stability: seeks with the row-value comparison `(created_at, id) <`
- * so inserts/deletes during scrolling never skip or duplicate rows.
+ * Cursor stability: seeks with the row-value comparison `(last_message_at,
+ * id) <` so inserts/deletes during scrolling never skip or duplicate rows.
  */
 export function listChatSummariesPage(
   page: PageQuery = {},
@@ -69,14 +96,14 @@ export function listChatSummariesPage(
   const needle = (page.query ?? "").trim().slice(0, MAX_QUERY_LENGTH);
   const db = getDB();
   const params: Array<string | number> = [];
-  const conditions: string[] = [];
+  const conditions: string[] = ["c.from_chat_id IS NULL"];
 
   // Keyset seek — always the first predicate so the index is usable.
   if (page.cursor) {
     const cursor = decodeChatCursor(page.cursor);
     if (cursor) {
-      conditions.push("(c.created_at, c.id) < (?, ?)");
-      params.push(cursor.createdAt, cursor.id);
+      conditions.push("(c.last_message_at, c.id) < (?, ?)");
+      params.push(cursor.lastMessageAt, cursor.id);
     }
   }
 
@@ -102,13 +129,14 @@ export function listChatSummariesPage(
   const rows = db
     .prepare(
       `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
+              c.last_message_at,
               (SELECT m.content FROM messages m WHERE m.chat_id = c.id
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
               (SELECT m.created_at FROM messages m WHERE m.chat_id = c.id
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_at
        FROM chats c
-       WHERE ${conditions.length > 0 ? conditions.join(" AND ") : "1 = 1"}
-       ORDER BY c.created_at DESC, c.id DESC
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY c.last_message_at DESC, c.id DESC
        LIMIT ?`,
     )
     .all(...params, limit + 1) as ChatSummaryRow[];
@@ -119,7 +147,7 @@ export function listChatSummariesPage(
   return {
     items,
     nextCursor:
-      hasMore && last ? encodeChatCursor(last.createdAt, last.id) : null,
+      hasMore && last ? encodeChatCursor(last.lastMessageAt, last.id) : null,
     hasMore,
   };
 }
@@ -181,16 +209,15 @@ export function createChat(
 
   // Guard against `lastInsertRowid` ever handing out our reserved-ish
   // sequence unexpectedly: chats start at 1 (assistant id 0 lives elsewhere).
+  const createdAt = Math.floor(Date.now() / 1000);
+  // A fresh chat's `last_message_at` is its creation time, so an empty chat
+  // sorts to the top of the recency-ordered list.
   const result = db
     .prepare(
-      "INSERT INTO chats (title, participants, from_chat_id, created_at) VALUES (?, ?, ?, ?)",
+      "INSERT INTO chats (title, participants, from_chat_id, created_at, last_message_at) " +
+        "VALUES (?, ?, ?, ?, ?)",
     )
-    .run(
-      safeTitle,
-      stringifyArray(unique),
-      safeFrom,
-      Math.floor(Date.now() / 1000),
-    );
+    .run(safeTitle, stringifyArray(unique), safeFrom, createdAt, createdAt);
   return getChat(Number(result.lastInsertRowid)) as Chat;
 }
 
@@ -248,22 +275,27 @@ function toChat(row: ChatRow): Chat {
 }
 
 function toChatSummary(row: ChatSummaryRow): ChatSummary {
-  return { ...toChat(row), preview: row.preview, lastAt: row.last_at };
+  return {
+    ...toChat(row),
+    preview: row.preview,
+    lastAt: row.last_at,
+    lastMessageAt: row.last_message_at,
+  };
 }
 
-/** Cursor payload: `"<createdAt>:<id>"` of the last row of the previous page. */
-function encodeChatCursor(createdAt: number, id: number): string {
-  return `${createdAt}:${id}`;
+/** Cursor payload: `"<lastMessageAt>:<id>"` of the last row of the previous page. */
+function encodeChatCursor(lastMessageAt: number, id: number): string {
+  return `${lastMessageAt}:${id}`;
 }
 
 function decodeChatCursor(cursor: string): {
-  createdAt: number;
+  lastMessageAt: number;
   id: number;
 } | null {
   const split = cursor.lastIndexOf(":");
   if (split <= 0) return null;
-  const createdAt = Number(cursor.slice(0, split));
+  const lastMessageAt = Number(cursor.slice(0, split));
   const id = Number(cursor.slice(split + 1));
-  if (!Number.isFinite(createdAt) || !Number.isSafeInteger(id)) return null;
-  return { createdAt, id };
+  if (!Number.isFinite(lastMessageAt) || !Number.isSafeInteger(id)) return null;
+  return { lastMessageAt, id };
 }

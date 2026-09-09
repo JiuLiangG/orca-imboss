@@ -25,7 +25,7 @@ import { parseCronJobId } from "../db/cron";
 import * as employeesService from "../db/employees";
 import * as messagesService from "../db/messages";
 import * as sessionsService from "../db/sessions";
-import { broadcast, notifyUnread } from "../notifications";
+import { notifyUnread } from "../notifications";
 import { loadPiSdk } from "./pi-sdk";
 import { deliver } from "./session-queue";
 
@@ -231,9 +231,6 @@ async function performSendMessage(
       attachments,
     },
   );
-
-  // Tell the renderer that this chat's thread changed (agent/cron/tool writes).
-  broadcast("messages:changed", input.chatId);
 
   for (const pid of input.notify ?? []) {
     if (!chat.participants.includes(pid)) continue;

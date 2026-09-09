@@ -93,8 +93,8 @@ const api = {
       ipcRenderer.invoke("chats:summariesPage", page) as Promise<
         PageResult<ChatSummary>
       >,
-    unreads: () =>
-      ipcRenderer.invoke("chats:unreads") as Promise<Record<number, number>>,
+    summary: (id: number) =>
+      ipcRenderer.invoke("chats:summary", id) as Promise<ChatSummary | null>,
     addUnread: (id: number, delta: number) =>
       ipcRenderer.invoke("chats:addUnread", id, delta) as Promise<number>,
     markRead: (id: number) =>
@@ -142,7 +142,16 @@ const api = {
         askMessageId,
         answers,
       ) as Promise<Message>,
-    onChanged: (cb: (chatId: number) => void) => on("messages:changed", cb),
+    onChanged: (
+      cb: (payload: {
+        chatId: number;
+        senderEmployeeId: number | null;
+      }) => void,
+    ) =>
+      on<{ chatId: number; senderEmployeeId: number | null }>(
+        "messages:changed",
+        cb,
+      ),
   },
 
   chat: {

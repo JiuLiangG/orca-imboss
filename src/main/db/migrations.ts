@@ -34,12 +34,13 @@ const MIGRATIONS: Array<(db: Database) => void> = [
 
     db.exec(`
       CREATE TABLE IF NOT EXISTS chats (
-        id            INTEGER PRIMARY KEY,
-        title         TEXT NOT NULL DEFAULT '',
-        participants  TEXT NOT NULL DEFAULT '[]',
-        unread        INTEGER NOT NULL DEFAULT 0,
-        created_at    INTEGER NOT NULL DEFAULT (CAST(strftime('%s', 'now') AS INTEGER)),
-        from_chat_id  INTEGER
+        id              INTEGER PRIMARY KEY,
+        title           TEXT NOT NULL DEFAULT '',
+        participants    TEXT NOT NULL DEFAULT '[]',
+        unread          INTEGER NOT NULL DEFAULT 0,
+        created_at      INTEGER NOT NULL DEFAULT (CAST(strftime('%s', 'now') AS INTEGER)),
+        last_message_at INTEGER NOT NULL DEFAULT 0,
+        from_chat_id    INTEGER
       );
 
       CREATE INDEX IF NOT EXISTS idx_chats_created_id

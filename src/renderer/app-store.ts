@@ -1,8 +1,10 @@
 import { SettingKeys } from "@shared/constants/settings";
 import type {
+  ChatSummary,
   Employee,
   InstalledSkill,
   McpServer,
+  ProviderInfo,
   ThemeState,
 } from "@shared/types";
 import { createRef } from "react";
@@ -53,10 +55,21 @@ export const appStore = proxy({
   // notification click). Cleared once consumed.
   focusChatId: null as number | null,
 
-  // Centralized collections loaded once at startup and kept in sync by the
-  // modules after each mutation. Chats is intentionally NOT here (it stays a
-  // paged per-module list to keep large datasets lazy).
+  // Centralized collections loaded lazily on first visit and kept in sync by
+  // the modules after each mutation (see ensureChats/ensureProviders).
   data: {
+    chats: {
+      items: [] as ChatSummary[],
+      loading: false,
+      loaded: false,
+      error: null as string | null,
+    },
+    providers: {
+      items: [] as ProviderInfo[],
+      loading: false,
+      loaded: false,
+      error: null as string | null,
+    },
     mcp: {
       items: [] as McpServer[],
       loading: false,
@@ -74,12 +87,6 @@ export const appStore = proxy({
       loading: false,
       loaded: false,
       error: null as string | null,
-    },
-    // Chats stays a paged per-module list (kept lazy); only the unread mirror
-    // and the focus signal live here so notify/OS-notification jumps can reach
-    // the chat module without loading the full list.
-    chats: {
-      unread: {} as Record<number, number>,
     },
   },
 
@@ -198,26 +205,137 @@ export const appStore = proxy({
     }
   },
 
-  // --- Chats (unread mirror) ----------------------------------------------------
-  async loadUnreads(): Promise<void> {
+  // --- Chats (full cache) --------------------------------------------------------
+  async loadChats(): Promise<void> {
+    if (appStore.data.chats.loading) return;
+    appStore.data.chats.loading = true;
+    appStore.data.chats.error = null;
     try {
-      appStore.data.chats.unread = await imb.chats.unreads();
+      appStore.data.chats.items = await imb.chats.summaries();
+      appStore.data.chats.loaded = true;
+      sortChats();
+    } catch (err) {
+      console.error("[data:chats]", err instanceof Error ? err.message : err);
+      appStore.data.chats.error =
+        err instanceof Error ? err.message : String(err);
+    } finally {
+      appStore.data.chats.loading = false;
+    }
+  },
+  ensureChats(): void {
+    if (!appStore.data.chats.loaded && !appStore.data.chats.loading) {
+      void appStore.loadChats();
+    }
+  },
+  async reloadChats(): Promise<void> {
+    try {
+      appStore.data.chats.items = await imb.chats.summaries();
+      appStore.data.chats.loaded = true;
+      appStore.data.chats.error = null;
+      sortChats();
+    } catch (err) {
+      console.error("[data:chats]", err instanceof Error ? err.message : err);
+      appStore.data.chats.error =
+        err instanceof Error ? err.message : String(err);
+    }
+  },
+  async refreshChatSummary(id: number): Promise<void> {
+    try {
+      const summary = await imb.chats.summary(id);
+      if (summary === null) {
+        appStore.removeChat(id);
+        return;
+      }
+      // Group chats (from_chat_id != null) are never cached as root chats.
+      if (summary.fromChatId !== null) return;
+      appStore.replaceChat(summary);
     } catch (err) {
       console.error(
-        "[data:chats:unread]",
+        "[data:chats:refresh]",
         err instanceof Error ? err.message : err,
       );
     }
   },
-  setChatUnread(chatId: number, unread: number): void {
-    appStore.data.chats.unread[chatId] = Math.max(0, unread);
+  addChat(chat: ChatSummary): void {
+    appStore.data.chats.items.push(chat);
+    sortChats();
   },
+  replaceChat(chat: ChatSummary): void {
+    const index = appStore.data.chats.items.findIndex((c) => c.id === chat.id);
+    if (index >= 0) {
+      appStore.data.chats.items[index] = chat;
+    } else {
+      appStore.data.chats.items.push(chat);
+    }
+    sortChats();
+  },
+  removeChat(id: number): void {
+    const index = appStore.data.chats.items.findIndex((c) => c.id === id);
+    if (index >= 0) {
+      appStore.data.chats.items.splice(index, 1);
+    }
+  },
+  setChatUnread(chatId: number, unread: number): void {
+    const chat = appStore.data.chats.items.find((c) => c.id === chatId);
+    if (chat) {
+      chat.unread = Math.max(0, unread);
+    }
+  },
+
+  // --- Providers (full cache) ----------------------------------------------------
+  async loadProviders(): Promise<void> {
+    if (appStore.data.providers.loading) return;
+    appStore.data.providers.loading = true;
+    appStore.data.providers.error = null;
+    try {
+      appStore.data.providers.items = await imb.providers.list();
+      appStore.data.providers.loaded = true;
+    } catch (err) {
+      console.error(
+        "[data:providers]",
+        err instanceof Error ? err.message : err,
+      );
+      appStore.data.providers.error =
+        err instanceof Error ? err.message : String(err);
+    } finally {
+      appStore.data.providers.loading = false;
+    }
+  },
+  ensureProviders(): void {
+    if (!appStore.data.providers.loaded && !appStore.data.providers.loading) {
+      void appStore.loadProviders();
+    }
+  },
+  // Providers are file-backed (auth/models), so a re-fetch is the most
+  // robust way to reflect an upsert/remove in the store.
+  async reloadProviders(): Promise<void> {
+    try {
+      appStore.data.providers.items = await imb.providers.list();
+      appStore.data.providers.loaded = true;
+      appStore.data.providers.error = null;
+    } catch (err) {
+      console.error(
+        "[data:providers]",
+        err instanceof Error ? err.message : err,
+      );
+      appStore.data.providers.error =
+        err instanceof Error ? err.message : String(err);
+    }
+  },
+
   async focusChat(chatId: number): Promise<void> {
     appStore.focusChatId = chatId;
     appStore.module = "chat";
     await imb.settings.set(SettingKeys.Module, "chat");
   },
 });
+
+/** Keep the chat cache ordered newest-message-first (recency key, id breaks ties). */
+function sortChats(): void {
+  appStore.data.chats.items.sort(
+    (a, b) => b.lastMessageAt - a.lastMessageAt || b.id - a.id,
+  );
+}
 
 /** One-time app-state bootstrap (theme/locale subscriptions + persisted prefs). */
 let initialized = false;
@@ -241,12 +359,16 @@ export async function initApp(): Promise<void> {
   imb.onLocaleChanged(updateLocale);
   imb.theme.onChanged(updateThemeState);
 
-  // MCP / skills / employees are NOT loaded here. They are lazy-loaded by the
-  // corresponding module on first visit (see ensureMcp/ensureSkills/ensureEmployees),
-  // and kept in sync by the modules after each mutation.
+  // Chats / MCP / skills / employees / providers are NOT loaded here. They are
+  // lazy-loaded by their module on first visit (see ensure*), and kept in sync
+  // by the modules after each mutation.
 
-  // Chat unread mirror: load once, then keep in sync from the main process.
-  await appStore.loadUnreads();
+  // Chats: every message append refreshes that chat's summary (preview,
+  // lastAt, unread) and re-sorts the cached list. A lightweight unread-only
+  // event (imb_notify / addUnread) updates items[].unread directly.
+  imb.messages.onChanged(({ chatId }) => {
+    void appStore.refreshChatSummary(chatId);
+  });
   imb.chats.onUnreadChanged(({ chatId, unread }) => {
     appStore.setChatUnread(chatId, unread);
   });

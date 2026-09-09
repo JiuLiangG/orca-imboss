@@ -17,12 +17,10 @@ export function registerChatHandlers(): void {
     chatsService.listChatSummariesPage(parsePageQuery(page)),
   );
 
-  // All chats' unread counts → renderer app-store init (unread mirror).
-  ipcMain.handle("chats:unreads", (): Record<number, number> => {
-    const record: Record<number, number> = {};
-    for (const chat of chatsService.listChats()) record[chat.id] = chat.unread;
-    return record;
-  });
+  // Single chat summary (live per-chat refresh by the renderer).
+  ipcMain.handle("chats:summary", (_event, id: unknown) =>
+    chatsService.getChatSummary(assertInteger(id, "chat id")),
+  );
 
   // Renderer-initiated unread delta (delegates to notifyUnread).
   ipcMain.handle(

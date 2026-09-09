@@ -1,13 +1,8 @@
 import { CURATED_PROVIDERS_LABELS } from "@shared/constants/providers";
 import { t } from "@shared/l10n";
-import {
-  type PageQuery,
-  type PageResult,
-  type ProviderInfo,
-  type ProviderUpsert,
-} from "@shared/types";
+import { type ProviderInfo, type ProviderUpsert } from "@shared/types";
 import { useCallback, useEffect, useState } from "react";
-import { useInfiniteList } from "../../../../hooks/use-infinite-list";
+import { appStore, useApp } from "../../../../app-store";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
 import { ModuleView } from "../../../app-shell";
 import { Avatar } from "../../../avatar";
@@ -21,42 +16,33 @@ import "../../module-common.css";
 import { ProviderAddModal } from "../provider-add-modal";
 import { ProviderDetail } from "../provider-detail";
 
-const PAGE_SIZE = 50;
-
 /** Models module: provider list + detail (masked key reveal) + add. */
 export function ProvidersModule(): React.JSX.Element {
+  const { data } = useApp();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
 
-  const fetchPage = useCallback(
-    (page: PageQuery): Promise<PageResult<ProviderInfo>> =>
-      imb.providers.listPage(page),
-    [],
-  );
-  const {
-    items: providers,
-    loading,
-    loadingMore,
-    hasMore,
-    error: listError,
-    loadMore,
-    reset,
-    mutate,
-    resetVersion,
-  } = useInfiniteList(fetchPage, { pageSize: PAGE_SIZE });
+  // Centralized in appStore (lazy-loaded on first visit); re-fetched after
+  // every mutation for authoritative state (file-backed providers).
+  const providers = data.providers.items as ProviderInfo[];
+  const loading = data.providers.loading;
+  const listError = data.providers.error;
+
+  useEffect(() => {
+    appStore.ensureProviders();
+  }, []);
 
   const multi = useMultiSelect<ProviderInfo, string>({
     getKey: (provider) => provider.id,
     items: providers,
     onActivate: (provider) => setSelectedId(provider.id),
-    resetVersion,
   });
 
-  // Auto-select the first provider after page 1 loads (and recover when the
-  // selected provider disappears, e.g. bulk delete).
+  // Auto-select the first provider after load (and recover when the selected
+  // provider disappears, e.g. bulk delete).
   useEffect(() => {
     if (loading) return;
     if (providers.length === 0) {
@@ -71,17 +57,14 @@ export function ProvidersModule(): React.JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [providers, loading]);
 
-  const remove = useCallback(
-    async (id: string): Promise<void> => {
-      try {
-        await imb.providers.remove(id);
-        reset();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    },
-    [reset],
-  );
+  const remove = useCallback(async (id: string): Promise<void> => {
+    try {
+      await imb.providers.remove(id);
+      await appStore.reloadProviders();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
 
   const deleteSelected = useCallback(async (): Promise<void> => {
     const ids = [...multi.selectedKeys];
@@ -91,11 +74,11 @@ export function ProvidersModule(): React.JSX.Element {
       for (const id of ids) {
         await imb.providers.remove(id);
       }
-      reset();
+      await appStore.reloadProviders();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [multi.selectedKeys, reset]);
+  }, [multi.selectedKeys]);
 
   const toggleSelectAll = useCallback((): void => {
     if (multi.selectedKeys.size === providers.length && providers.length > 0) {
@@ -108,32 +91,16 @@ export function ProvidersModule(): React.JSX.Element {
   const handleSaved = useCallback(
     async (input: ProviderUpsert): Promise<void> => {
       // Persist the provider first, then re-read the full list to get the
-      // authoritative record (masked key, generated models) and splice it into
-      // the loaded pages in id order.
-      await imb.providers.upsert(input);
-      const all = await imb.providers.list();
-      const saved = all.find((provider) => provider.id === input.id);
-      if (saved) {
-        mutate((current) => {
-          const at = current.findIndex((provider) => provider.id === saved.id);
-          if (at >= 0) {
-            return current.map((provider) =>
-              provider.id === saved.id ? saved : provider,
-            );
-          }
-          const next = [...current];
-          const insertAt = next.findIndex(
-            (provider) => provider.id.localeCompare(saved.id) > 0,
-          );
-          next.splice(insertAt === -1 ? next.length : insertAt, 0, saved);
-          return next;
-        });
-        setSelectedId(saved.id);
-      } else {
-        reset();
+      // authoritative record (masked key, generated models) and select it.
+      try {
+        await imb.providers.upsert(input);
+        await appStore.reloadProviders();
+        setSelectedId(input.id);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
       }
     },
-    [mutate, reset],
+    [],
   );
 
   const selected =
@@ -152,9 +119,6 @@ export function ProvidersModule(): React.JSX.Element {
         items={providers}
         getItemKey={(provider) => provider.id}
         loading={loading}
-        loadingMore={loadingMore}
-        hasMore={hasMore}
-        loadMore={() => void loadMore()}
         loadError={listError}
         selectable
         selectedKeys={multi.selectedKeys}

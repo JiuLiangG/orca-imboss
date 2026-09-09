@@ -7,6 +7,7 @@ import type {
   MessageStep,
   StepStatus,
 } from "@shared/types";
+import { broadcast } from "../notifications";
 import { bumpUnread } from "./chats";
 import { getDB } from "./index";
 import { parseJsonObject } from "./json";
@@ -142,6 +143,16 @@ export function appendMessage(
   if (senderEmployeeId != null) {
     bumpUnread(chatId);
   }
+
+  // Bump the chat's last-message timestamp so the list order reflects the
+  // write, then notify the renderer centrally (the single append path). The
+  // sender is carried so the renderer can gate a beep on non-user sends.
+  db.prepare("UPDATE chats SET last_message_at = ? WHERE id = ?").run(
+    createdAt,
+    chatId,
+  );
+  broadcast("messages:changed", { chatId, senderEmployeeId });
+
   return toMessage({
     id: Number(result.lastInsertRowid),
     chat_id: chatId,

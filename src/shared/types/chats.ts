@@ -16,6 +16,11 @@ export interface ChatSummary extends Chat {
   preview: string | null;
   /** UNIX timestamp in seconds of the last message (null when the chat has no messages). */
   lastAt: number | null;
+  /**
+   * UNIX timestamp in seconds of the chat's last message (the recency sort
+   * key). For a chat with no messages this falls back to its creation time.
+   */
+  lastMessageAt: number;
 }
 
 /** Participant edits applied in one call (additive/removal merge). */
@@ -36,4 +41,5 @@ export interface ChatRow {
 export interface ChatSummaryRow extends ChatRow {
   preview: string | null;
   last_at: number | null;
+  last_message_at: number;
 }

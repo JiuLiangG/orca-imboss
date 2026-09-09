@@ -43,25 +43,35 @@ export function ChatModule(): React.JSX.Element {
   const selectedIdRef = useRef<number | null>(null);
   selectedIdRef.current = selectedId;
   const locale = getLocale();
-  const unreadMap = data.chats.unread;
 
-  // Server-side search (title OR message content — FTS/LIKE handled in main).
+  // Hybrid search: an empty query reads the appStore chat cache (root-only,
+  // recency-ordered); a non-empty query switches to a server-paged FTS/LIKE
+  // search. `useInfiniteList` is always mounted but short-circuits to an empty
+  // page when there is no query so it never shadows the cache.
+  const isSearching = query.trim().length > 0;
   const fetchPage = useCallback(
-    (page: PageQuery): Promise<PageResult<ChatSummary>> =>
-      imb.chats.summariesPage(page),
-    [],
+    (page: PageQuery): Promise<PageResult<ChatSummary>> => {
+      if (!isSearching) {
+        return Promise.resolve({ items: [], nextCursor: null, hasMore: false });
+      }
+      return imb.chats.summariesPage(page);
+    },
+    [isSearching],
   );
-  const {
-    items: chats,
-    loading: listLoading,
-    loadingMore: listLoadingMore,
-    hasMore: listHasMore,
-    error: listError,
-    loadMore,
-    reset,
-    mutate,
-    resetVersion,
-  } = useInfiniteList(fetchPage, { query, pageSize: PAGE_SIZE });
+  const search = useInfiniteList(fetchPage, { query, pageSize: PAGE_SIZE });
+
+  const chats = isSearching
+    ? search.items
+    : (data.chats.items as ChatSummary[]);
+  const listLoading = isSearching ? search.loading : data.chats.loading;
+  const listError = isSearching ? search.error : data.chats.error;
+  const listHasMore = isSearching ? search.hasMore : false;
+  const listLoadingMore = isSearching ? search.loadingMore : false;
+
+  // Lazy-load the chat cache on first visit.
+  useEffect(() => {
+    appStore.ensureChats();
+  }, []);
 
   const loadMessages = useCallback(async (chatId: number): Promise<void> => {
     try {
@@ -82,8 +92,13 @@ export function ChatModule(): React.JSX.Element {
     getKey: (chat) => chat.id,
     items: chats,
     onActivate: (chat) => selectChat(chat.id),
-    resetVersion,
   });
+  const clearSelection = multi.clear;
+
+  // Switching between browse/search (query change) clears the selection.
+  useEffect(() => {
+    clearSelection();
+  }, [clearSelection, query]);
 
   // Open thread + clear unread whenever the selection changes.
   useEffect(() => {
@@ -93,12 +108,8 @@ export function ChatModule(): React.JSX.Element {
     }
     void loadMessages(selectedId);
     void imb.chats.markRead(selectedId);
-    mutate((current) =>
-      current.map((chat) =>
-        chat.id === selectedId ? { ...chat, unread: 0 } : chat,
-      ),
-    );
-  }, [selectedId, loadMessages, mutate]);
+    appStore.setChatUnread(selectedId, 0);
+  }, [selectedId, loadMessages]);
 
   // Auto-select the first chat after page 1 loads (and recover when the
   // selected chat disappears, e.g. bulk delete).
@@ -125,13 +136,16 @@ export function ChatModule(): React.JSX.Element {
   }, [focusChatId, chats, selectChat]);
 
   useEffect(() => {
-    const offMessages = imb.messages.onChanged((chatId) => {
-      // Only the currently-open chat refreshes its thread (and beeps).
-      if (chatId !== selectedIdRef.current) return;
-      void imb.chats.markRead(chatId);
-      void loadMessages(chatId);
-      playNotificationSound();
-    });
+    const offMessages = imb.messages.onChanged(
+      ({ chatId, senderEmployeeId }) => {
+        // Only the currently-open chat refreshes its thread (and beeps — but
+        // not on the user's own message, where senderEmployeeId is null).
+        if (chatId !== selectedIdRef.current) return;
+        void imb.chats.markRead(chatId);
+        void loadMessages(chatId);
+        if (senderEmployeeId !== null) playNotificationSound();
+      },
+    );
     return offMessages;
   }, [loadMessages]);
 
@@ -162,12 +176,16 @@ export function ChatModule(): React.JSX.Element {
         0,
         t("Hello, I'm your assistant. Tell me what you need."),
       );
-      // The new chat is the newest row → page 1 top → auto-selected.
-      reset();
+      // The new chat sorts to the top (last_message_at = creation time). The
+      // auto-select effect only recovers a *missing* selection, so select the
+      // new chat explicitly and clear any stale multi-selection.
+      await appStore.reloadChats();
+      clearSelection();
+      setSelectedId(chat.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [reset]);
+  }, [clearSelection]);
   const deleteSelected = useCallback(async (): Promise<void> => {
     const ids = [...multi.selectedKeys];
     if (ids.length === 0) return;
@@ -176,11 +194,14 @@ export function ChatModule(): React.JSX.Element {
       for (const id of ids) {
         await imb.chats.remove(id);
       }
-      reset();
+      await appStore.reloadChats();
+      // Drop the just-deleted keys so a subsequent bulk action only acts on
+      // the reloaded (and auto-select-recovered) list.
+      clearSelection();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [multi.selectedKeys, reset]);
+  }, [multi.selectedKeys, clearSelection]);
 
   const toggleSelectAll = useCallback((): void => {
     if (multi.selectedKeys.size === chats.length && chats.length > 0) {
@@ -214,7 +235,7 @@ export function ChatModule(): React.JSX.Element {
         loading={listLoading}
         loadingMore={listLoadingMore}
         hasMore={listHasMore}
-        loadMore={() => void loadMore()}
+        loadMore={() => void search.loadMore()}
         loadError={listError}
         selectable
         selectedKeys={multi.selectedKeys}
@@ -231,14 +252,13 @@ export function ChatModule(): React.JSX.Element {
             name={chat.title}
             meta={formatChatTime(chat.lastAt, locale)}
             sub={previewText(chat.preview ?? "")}
-            badge={(() => {
-              const unread = unreadMap[chat.id] ?? chat.unread;
-              return unread > 0 ? (
+            badge={
+              chat.unread > 0 ? (
                 <span className="imb-unread">
-                  {unread > 99 ? "99+" : unread}
+                  {chat.unread > 99 ? "99+" : chat.unread}
                 </span>
-              ) : undefined;
-            })()}
+              ) : undefined
+            }
             onContextMenu={(e) => {
               e.preventDefault();
               setCtxMenu({
