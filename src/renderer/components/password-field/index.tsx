@@ -1,8 +1,6 @@
 import { t } from "@shared/l10n";
 import { useEffect, useRef, useState } from "react";
-import { cls } from "reactutils";
 import { Button } from "../button";
-import { IconKey } from "../icons";
 import "./index.css";
 
 export interface PasswordFieldProps {
@@ -32,13 +30,16 @@ export function PasswordField({
   const [busy, setBusy] = useState(false);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Clear timer on unmount.
   useEffect(() => {
     return () => {
-      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+      if (resetTimerRef.current) {
+        clearTimeout(resetTimerRef.current);
+      }
     };
   }, []);
 
-  const copy = async (): Promise<void> => {
+  async function copy(): Promise<void> {
     setBusy(true);
     try {
       await onCopy();
@@ -48,7 +49,7 @@ export function PasswordField({
     } finally {
       setBusy(false);
     }
-  };
+  }
 
   return (
     <div className="imb-key-readonly">
@@ -65,40 +66,6 @@ export function PasswordField({
       >
         {copied ? t("Copied") : t("Copy")}
       </Button>
-    </div>
-  );
-}
-
-export function PasswordInput(props: {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  invalid?: boolean;
-  id?: string;
-  autoFocus?: boolean;
-  label?: string;
-}): React.JSX.Element {
-  return (
-    <div className="imb-key-input-wrap">
-      <span className="imb-key-input-icon">
-        <IconKey />
-      </span>
-      <input
-        className={cls(
-          "imb-input",
-          "imb-key-input",
-          props.invalid && "imb-is-invalid",
-        )}
-        id={props.id}
-        type="password"
-        value={props.value}
-        placeholder={props.placeholder}
-        autoComplete="off"
-        spellCheck={false}
-        autoFocus={props.autoFocus}
-        aria-label={props.label}
-        onChange={(e) => props.onChange(e.target.value)}
-      />
     </div>
   );
 }

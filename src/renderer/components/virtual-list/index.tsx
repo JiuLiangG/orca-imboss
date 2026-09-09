@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { cls } from "reactutils";
-import { useVirtualList } from "./use-virtual-list";
 import "./index.css";
+import { useVirtualList } from "./use-virtual-list";
 
 const FOOTER_KEY = "__virtual-list-footer__";
 

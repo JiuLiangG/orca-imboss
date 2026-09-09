@@ -1,7 +1,8 @@
 import { t } from "@shared/l10n";
 import { useEffect, useState } from "react";
 import { BrandLogo } from "../../../brand-logo";
-import { DetailBody, DetailHead } from "../../../detail-pane";
+import { DetailBody } from "../../../detail-pane/detail-body";
+import { DetailHead } from "../../../detail-pane/detail-head";
 import "./index.css";
 
 /** Settings → About: brand logo + app name + version. */

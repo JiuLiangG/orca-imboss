@@ -21,7 +21,6 @@ interface NavItem {
   module: AppModule;
   labelKey: string;
   icon: (props: { className?: string }) => React.JSX.Element;
-  /** Sections after the main items (divider separated). */
   section?: "main" | "miniapp" | "chats" | "bottom";
 }
 
@@ -71,46 +70,13 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-function NavButton({
-  item,
-  collapsed,
-}: {
-  item: NavItem;
+export interface NavProps {
   collapsed: boolean;
-}): React.JSX.Element {
-  const { module } = useApp();
-
-  async function setModule(value: AppModule): Promise<void> {
-    appStore.module = value;
-    await imb.settings.set(SettingKeys.Module, value);
-  }
-
-  const Icon = item.icon;
-  const active = module === item.module;
-  return (
-    <Tooltip content={t(item.labelKey)} placement="right" disabled={!collapsed}>
-      <button
-        type="button"
-        className={cls("imb-nav-item", active && "imb-is-active")}
-        aria-current={active ? "page" : undefined}
-        aria-label={collapsed ? t(item.labelKey) : undefined}
-        onClick={() => setModule(item.module)}
-      >
-        <Icon className="imb-icon" />
-        <span>{t(item.labelKey)}</span>
-      </button>
-    </Tooltip>
-  );
+  onToggle: () => void;
 }
 
 /** Nav rail (col 1): brand, module items, collapse toggle + settings. */
-export function Nav({
-  collapsed,
-  onToggle,
-}: {
-  collapsed: boolean;
-  onToggle: () => void;
-}): React.JSX.Element {
+export function Nav({ collapsed, onToggle }: NavProps): React.JSX.Element {
   const main = NAV_ITEMS.filter((i) => i.section === "main");
   const miniapp = NAV_ITEMS.filter((i) => i.section === "miniapp");
   const chats = NAV_ITEMS.filter((i) => i.section === "chats");
@@ -166,5 +132,37 @@ export function Nav({
         ))}
       </div>
     </nav>
+  );
+}
+
+type NavButtonProps = {
+  item: NavItem;
+  collapsed: boolean;
+};
+
+function NavButton({ item, collapsed }: NavButtonProps): React.JSX.Element {
+  const { module } = useApp();
+
+  async function setModule(value: AppModule): Promise<void> {
+    appStore.module = value;
+    await imb.settings.set(SettingKeys.Module, value);
+  }
+
+  const Icon = item.icon;
+  const active = module === item.module;
+
+  return (
+    <Tooltip content={t(item.labelKey)} placement="right" disabled={!collapsed}>
+      <button
+        type="button"
+        className={cls("imb-nav-item", active && "imb-is-active")}
+        aria-current={active ? "page" : undefined}
+        aria-label={collapsed ? t(item.labelKey) : undefined}
+        onClick={() => setModule(item.module)}
+      >
+        <Icon className="imb-icon" />
+        <span>{t(item.labelKey)}</span>
+      </button>
+    </Tooltip>
   );
 }

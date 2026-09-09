@@ -9,7 +9,6 @@ export interface SegmentedControlProps<T extends string> {
   label?: string;
 }
 
-/** Grouped toggle buttons (theme mode paradigm, `.segmented-group`). */
 export function SegmentedControl<T extends string>({
   options,
   value,
@@ -31,13 +30,15 @@ export function SegmentedControl<T extends string>({
   );
 }
 
+interface SegmentedButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  active: boolean;
+}
+
 function SegmentedButton({
   active,
   children,
   ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
-  active: boolean;
-}): React.JSX.Element {
+}: SegmentedButtonProps): React.JSX.Element {
   return (
     <button
       type="button"

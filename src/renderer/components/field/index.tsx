@@ -4,17 +4,13 @@ import "./index.css";
 
 export interface FieldProps {
   label?: ReactNode;
-  /** Muted hint below the control. */
   hint?: ReactNode;
-  /** Validation error below the control (turns the label error-colored). */
   error?: ReactNode;
   children: ReactNode;
-  /** Optional htmlFor when the first control has an id. */
   htmlFor?: string;
   className?: string;
 }
 
-/** Form row: label + control + help/error (prototype `.field`). */
 export function Field({
   label,
   hint,

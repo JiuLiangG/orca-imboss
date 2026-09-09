@@ -1,0 +1,4 @@
+.imb-detail-body {
+  padding: var(--imb-space-6);
+  overflow-y: auto;
+}

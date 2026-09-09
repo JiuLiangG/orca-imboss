@@ -2,18 +2,16 @@ import type { ButtonHTMLAttributes } from "react";
 import { cls } from "reactutils";
 import "./index.css";
 
-/** Square icon button (attach, close, gear, delete…). */
 export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   label: string;
   size?: number;
-  /** Square side length in px (default 32). */
-  box?: number;
+  boxSize?: number;
 }
 
 export function IconButton({
   label,
   size = 18,
-  box = 32,
+  boxSize = 32,
   className,
   children,
   ...rest
@@ -22,7 +20,7 @@ export function IconButton({
     <button
       type="button"
       className={cls("imb-icon-btn", className)}
-      style={{ width: box, height: box }}
+      style={{ width: boxSize, height: boxSize }}
       aria-label={label}
       title={label}
       {...rest}

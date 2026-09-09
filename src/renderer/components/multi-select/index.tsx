@@ -15,7 +15,6 @@ export interface MultiSelectProps {
   options: MultiSelectOption[];
   onChange: (value: string[]) => void;
   placeholder?: string;
-  /** Muted message when there are no options at all. */
   emptyHint?: string;
   disabled?: boolean;
   id?: string;
@@ -42,24 +41,24 @@ export function MultiSelect({
   const selectedSet = new Set(value);
   const selected = options.filter((o) => selectedSet.has(o.value));
 
-  const toggle = (optionValue: string): void => {
+  useClickOutside(rootRef, () => setOpen(false), open);
+  useEscapeKey(() => setOpen(false), open);
+
+  function toggle(optionValue: string): void {
     const next = selectedSet.has(optionValue)
       ? value.filter((v) => v !== optionValue)
       : [...value, optionValue];
     onChange(next);
-  };
+  }
 
-  useClickOutside(rootRef, () => setOpen(false), open);
-  useEscapeKey(() => setOpen(false), open);
-
-  const focusOption = (index: number): void => {
+  function focusOption(index: number): void {
     const el = rootRef.current?.querySelector<HTMLElement>(
       `[data-ms-option="${index}"]`,
     );
     el?.focus();
-  };
+  }
 
-  const onTriggerKeyDown = (event: React.KeyboardEvent): void => {
+  function onTriggerKeyDown(event: React.KeyboardEvent): void {
     if (disabled) return;
     if (!open) {
       if (
@@ -93,7 +92,7 @@ export function MultiSelect({
       setActiveIndex(options.length - 1);
       focusOption(options.length - 1);
     }
-  };
+  }
 
   return (
     <div className="imb-ms" ref={rootRef}>

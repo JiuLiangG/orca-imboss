@@ -14,7 +14,6 @@ export interface AvatarProps {
   className?: string;
 }
 
-/** Circular avatar pill (`.avatar`), 34–72 px per prototype usage. */
 export function Avatar({
   src,
   letter = "?",
@@ -24,15 +23,14 @@ export function Avatar({
   active = false,
   className,
 }: AvatarProps): React.JSX.Element {
-  const classes = cls(
-    "imb-avatar",
-    alt && "imb-alt",
-    active && "imb-is-active",
-    className,
-  );
   return (
     <span
-      className={classes}
+      className={cls(
+        "imb-avatar",
+        alt && "imb-alt",
+        active && "imb-is-active",
+        className,
+      )}
       style={{ width: size, height: size, fontSize: Math.max(11, size * 0.35) }}
       title={name}
     >

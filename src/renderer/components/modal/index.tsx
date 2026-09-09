@@ -11,13 +11,12 @@ export interface ModalProps {
   children: ReactNode;
   /** Footer action buttons (rendered by the caller). */
   actions?: ReactNode;
-  /** Inline validation error shown above the footer. */
   error?: ReactNode;
   size?: "md" | "lg";
 }
 
 /**
- * Overlay + dialog (max-width 480 default, Esc/overlay close, focus
+ * Overlay + dialog (Esc/overlay close, focus
  * management, focus trap). Rendered into `document.body` so it always escapes
  * the module portal trees.
  */

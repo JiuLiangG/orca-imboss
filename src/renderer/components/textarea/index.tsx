@@ -5,13 +5,12 @@ import "./index.css";
 export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   invalid?: boolean;
   mono?: boolean;
-  /** Auto-grow up to `maxHeight` (default 160, prototype chat input). */
+  /** Auto-grow up to `maxHeight`. */
   autosize?: boolean;
   minHeight?: number;
   maxHeight?: number;
 }
 
-/** Multi-line input; `autosize` grows with content (chat input bar). */
 export function Textarea({
   invalid = false,
   mono = false,
@@ -25,33 +24,30 @@ export function Textarea({
 }: TextareaProps): React.JSX.Element {
   const ref = useRef<HTMLTextAreaElement>(null);
 
-  const resize = (): void => {
+  function resize(): void {
     const el = ref.current;
     if (!el) return;
     el.style.height = "auto";
     const next = Math.min(Math.max(el.scrollHeight, minHeight), maxHeight);
     el.style.height = `${next}px`;
     el.style.overflowY = el.scrollHeight > maxHeight ? "auto" : "hidden";
-  };
+  }
 
   useEffect(() => {
     if (autosize) {
       resize();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autosize, rest.value]);
-
-  const classes = cls(
-    "imb-textarea",
-    invalid && "imb-is-invalid",
-    mono && "imb-mono",
-    className,
-  );
 
   return (
     <textarea
       ref={ref}
-      className={classes}
+      className={cls(
+        "imb-textarea",
+        invalid && "imb-is-invalid",
+        mono && "imb-mono",
+        className,
+      )}
       style={{ ...style, minHeight: autosize ? undefined : minHeight }}
       onInput={(e) => {
         onInput?.(e);

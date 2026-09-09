@@ -3,13 +3,11 @@ import "./index.css";
 
 export interface ChipProps {
   children: ReactNode;
-  /** Remove button icon shown on the right (attachment chips). */
   onRemove?: () => void;
   removable?: boolean;
   title?: string;
 }
 
-/** Small pill tag (`ms-chip`, attachment chips inside bubbles). */
 export function Chip({
   children,
   onRemove,

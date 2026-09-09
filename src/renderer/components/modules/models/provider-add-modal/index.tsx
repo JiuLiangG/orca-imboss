@@ -10,7 +10,7 @@ import { Button } from "../../../button";
 import { Field } from "../../../field";
 import { Input } from "../../../input";
 import { Modal } from "../../../modal";
-import { PasswordInput } from "../../../password-field";
+import { PasswordInput } from "../../../password-input";
 import { SegmentedControl } from "../../../segmented-control";
 import { Select } from "../../../select";
 import { Textarea } from "../../../textarea";

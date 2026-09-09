@@ -3,7 +3,8 @@ import type { ThemeMode } from "@shared/types";
 import { cls } from "reactutils";
 import { useApp } from "../../../../app-store";
 import { setTheme, THEME_COLORS } from "../../../../theme";
-import { DetailBody, DetailHead } from "../../../detail-pane";
+import { DetailBody } from "../../../detail-pane/detail-body";
+import { DetailHead } from "../../../detail-pane/detail-head";
 import { SegmentedControl } from "../../../segmented-control";
 import "./index.css";
 

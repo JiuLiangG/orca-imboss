@@ -1,7 +1,8 @@
 import { t } from "@shared/l10n";
 import { useApp, type AppModule } from "../../../../app-store";
 import { ModuleView } from "../../../app-shell";
-import { DetailBody, DetailHead } from "../../../detail-pane";
+import { DetailBody } from "../../../detail-pane/detail-body";
+import { DetailHead } from "../../../detail-pane/detail-head";
 import { EmptyState } from "../../../empty-state";
 import { ListPane } from "../../../list-pane";
 

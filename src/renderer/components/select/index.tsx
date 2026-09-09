@@ -132,7 +132,7 @@ export function Select({
 
   useEscapeKey(closePanel, open);
 
-  const onTriggerKeyDown = (event: React.KeyboardEvent): void => {
+  function onTriggerKeyDown(event: React.KeyboardEvent): void {
     if (disabled) return;
     if (!open) {
       if (
@@ -185,9 +185,11 @@ export function Select({
         }
       }
     }
-  };
+  }
 
-  const optionId = (index: number): string => `${listboxId}-opt-${index}`;
+  function optionId(index: number): string {
+    return `${listboxId}-opt-${index}`;
+  }
 
   return (
     <div

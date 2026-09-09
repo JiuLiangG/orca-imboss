@@ -12,7 +12,6 @@ export interface SearchInputProps extends Omit<
   onValueChange: (value: string) => void;
 }
 
-/** Search box: icon + input + clear (`.searchbox`). */
 export function SearchInput({
   value,
   onValueChange,
@@ -22,6 +21,7 @@ export function SearchInput({
 }: SearchInputProps): React.JSX.Element {
   const inputRef = useRef<HTMLInputElement>(null);
   const [focused, setFocused] = useState(false);
+
   return (
     <div
       className={cls("imb-searchbox", focused && "imb-is-focused", className)}

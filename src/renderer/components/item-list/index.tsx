@@ -18,7 +18,6 @@ export interface ItemListProps<T, K extends React.Key> {
    * `onItemClick`); `renderItem` only renders visuals + `selected` highlight.
    */
   renderItem: (item: T, ctx: ItemListRenderContext) => ReactNode;
-  /** Initial page loading (shows the loading state instead of the list). */
   loading?: boolean;
   loadingMore?: boolean;
   hasMore?: boolean;

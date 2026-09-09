@@ -25,6 +25,11 @@ export interface ContextMenuState {
   items: ContextMenuItem[];
 }
 
+export interface ContextMenuProps {
+  state: ContextMenuState | null;
+  onClose: () => void;
+}
+
 /**
  * Fixed-position context menu with viewport edge clamping, click-outside and
  * Esc close. Rendered into `document.body` once (menu state lifted by caller).
@@ -32,10 +37,7 @@ export interface ContextMenuState {
 export function ContextMenu({
   state,
   onClose,
-}: {
-  state: ContextMenuState | null;
-  onClose: () => void;
-}): React.JSX.Element | null {
+}: ContextMenuProps): React.JSX.Element | null {
   const ref = useRef<HTMLDivElement>(null);
   const [adjusted, setAdjusted] = useState<{
     left: number;

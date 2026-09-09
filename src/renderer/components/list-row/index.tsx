@@ -7,15 +7,10 @@ export interface ListRowProps {
   selected?: boolean;
   onClick?: () => void;
   onContextMenu?: (event: React.MouseEvent) => void;
-  /** Left avatar slot. */
   avatar?: ReactNode;
-  /** Row name (single line, ellipsis). */
   name: ReactNode;
-  /** Right-side meta next to the name (time, transport tag…). */
   meta?: ReactNode;
-  /** Sub line under the name (preview, role, description). */
   sub?: ReactNode;
-  /** Badge on the right of the sub line (unread count…). */
   badge?: ReactNode;
 }
 

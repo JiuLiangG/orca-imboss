@@ -3,34 +3,6 @@ import { cls } from "reactutils";
 import { IS_MAC } from "../../app-store";
 import "./index.css";
 
-function WindowButton({
-  label,
-  onClose,
-  className,
-  onClick,
-  children,
-}: {
-  label: string;
-  /** Marks the close button for the danger hover state. */
-  onClose?: boolean;
-  className?: string;
-  onClick: () => void;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  const winBtnCls = cls("imb-winbtn", className, onClose && "imb-close");
-  return (
-    <button
-      type="button"
-      className={winBtnCls}
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  );
-}
-
 const stroke = { stroke: "currentColor", strokeWidth: 1.4 } as const;
 
 /**
@@ -47,12 +19,12 @@ export function TitleBar(): React.JSX.Element {
     void imb.windowControls.isMaximized().then((m) => {
       if (alive) setMaximized(m);
     });
-    const un = imb.windowControls.onMaximized((m) => {
+    const unsubscribe = imb.windowControls.onMaximized((m) => {
       if (alive) setMaximized(m);
     });
     return () => {
       alive = false;
-      un();
+      unsubscribe();
     };
   }, []);
 
@@ -116,5 +88,34 @@ export function TitleBar(): React.JSX.Element {
         </div>
       )}
     </header>
+  );
+}
+
+interface WindowButtonProps {
+  label: string;
+  /** Marks the close button for the danger hover state. */
+  onClose?: boolean;
+  className?: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}
+
+function WindowButton({
+  label,
+  onClose,
+  className,
+  onClick,
+  children,
+}: WindowButtonProps): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className={cls("imb-winbtn", className, onClose && "imb-close")}
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+    >
+      {children}
+    </button>
   );
 }
