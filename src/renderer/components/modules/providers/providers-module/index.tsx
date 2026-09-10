@@ -88,19 +88,23 @@ export function ProvidersModule(): React.JSX.Element {
     }
   }, [multi, providers.length]);
 
+  const save = useCallback(async (input: ProviderUpsert): Promise<void> => {
+    // Persist first, then re-read the full list for the authoritative record
+    // (masked key, generated models). Throws so the caller can surface errors.
+    await imb.providers.upsert(input);
+    await appStore.reloadProviders();
+  }, []);
+
   const handleSaved = useCallback(
     async (input: ProviderUpsert): Promise<void> => {
-      // Persist the provider first, then re-read the full list to get the
-      // authoritative record (masked key, generated models) and select it.
       try {
-        await imb.providers.upsert(input);
-        await appStore.reloadProviders();
+        await save(input);
         setSelectedId(input.id);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       }
     },
-    [],
+    [save],
   );
 
   const selected =
@@ -166,6 +170,7 @@ export function ProvidersModule(): React.JSX.Element {
     <ProviderDetail
       key={`${selected.kind}:${selected.id}`}
       provider={selected}
+      onSave={save}
       onRemove={() => void remove(selected.id)}
     />
   ) : null;

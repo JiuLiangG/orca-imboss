@@ -16,6 +16,12 @@
   gap: 6px;
 }
 
+.imb-provider-saved {
+  align-self: center;
+  color: var(--imb-muted);
+  font-size: var(--imb-text-sm);
+}
+
 .imb-provider-remove-note {
   color: var(--imb-muted);
   font-size: var(--imb-text-sm);

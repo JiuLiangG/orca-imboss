@@ -1,11 +1,10 @@
 import {
   CURATED_PROVIDERS,
   CURATED_PROVIDERS_LABELS,
-  PROVIDER_API_TYPES,
 } from "@shared/constants/providers";
 import { t } from "@shared/l10n";
-import { type ProviderApiType, type ProviderUpsert } from "@shared/types";
-import { useCallback, useState } from "react";
+import type { ProviderUpsert } from "@shared/types";
+import { useState } from "react";
 import { Button } from "../../../button";
 import { Field } from "../../../field";
 import { Input } from "../../../input";
@@ -13,8 +12,13 @@ import { Modal } from "../../../modal";
 import { PasswordInput } from "../../../password-input";
 import { SegmentedControl } from "../../../segmented-control";
 import { Select } from "../../../select";
-import { Textarea } from "../../../textarea";
-import "./index.css";
+import {
+  EMPTY_PROVIDER_CONFIG,
+  isHttpUrl,
+  parseModelIds,
+  ProviderConfigFields,
+  type ProviderConfigFormValue,
+} from "../provider-config-fields";
 
 export interface ProviderAddModalProps {
   open: boolean;
@@ -33,26 +37,20 @@ export function ProviderAddModal({
   const [mode, setMode] = useState<Mode>("built-in");
   const [builtinId, setBuiltinId] = useState<string>(CURATED_PROVIDERS[0]);
   const [customId, setCustomId] = useState("");
-  const [baseUrl, setBaseUrl] = useState("");
-  const [apiType, setApiType] = useState<ProviderApiType>("openai-completions");
-  const [modelIds, setModelIds] = useState("");
+  const [config, setConfig] = useState<ProviderConfigFormValue>(
+    EMPTY_PROVIDER_CONFIG,
+  );
   const [apiKey, setApiKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [fetching, setFetching] = useState(false);
-  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const reset = (): void => {
     setMode("built-in");
     setBuiltinId(CURATED_PROVIDERS[0]);
     setCustomId("");
-    setBaseUrl("");
-    setApiType("openai-completions");
-    setModelIds("");
+    setConfig(EMPTY_PROVIDER_CONFIG);
     setApiKey("");
     setError(null);
-    setFetching(false);
-    setFetchError(null);
   };
 
   const submit = async (): Promise<void> => {
@@ -66,12 +64,18 @@ export function ProviderAddModal({
       }
       input = { id: builtinId, kind: "built-in", apiKey: key };
     } else {
-      const ids = modelIds
-        .split(/[\n,]/)
-        .map((s) => s.trim())
-        .filter(Boolean);
+      const baseUrl = config.baseUrl.trim();
+      const ids = parseModelIds(config.modelIds);
       if (!customId.trim()) {
         setError(t("Please enter a provider ID."));
+        return;
+      }
+      if (!baseUrl) {
+        setError(t("Please enter a base URL."));
+        return;
+      }
+      if (!isHttpUrl(baseUrl)) {
+        setError(t("Base URL must be a valid http(s) URL."));
         return;
       }
       if (ids.length === 0) {
@@ -85,8 +89,8 @@ export function ProviderAddModal({
       input = {
         id: customId.trim(),
         kind: "custom",
-        baseUrl: baseUrl.trim(),
-        apiType,
+        baseUrl,
+        apiType: config.apiType,
         modelIds: ids,
         apiKey: key,
       };
@@ -103,37 +107,6 @@ export function ProviderAddModal({
       setBusy(false);
     }
   };
-
-  const fetchModels = useCallback(async (): Promise<void> => {
-    if (fetching) return;
-    const key = apiKey.trim();
-    if (!baseUrl.trim()) {
-      setFetchError(t("Enter the base URL first."));
-      return;
-    }
-    if (!key) {
-      setFetchError(t("Enter the API key first."));
-      return;
-    }
-    setFetching(true);
-    setFetchError(null);
-    try {
-      const models = await imb.providers.listModels({
-        baseUrl: baseUrl.trim(),
-        apiType,
-        apiKey: key,
-      });
-      if (models.length === 0) {
-        setFetchError(t("No models returned."));
-        return;
-      }
-      setModelIds(models.join("\n"));
-    } catch (err) {
-      setFetchError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setFetching(false);
-    }
-  }, [apiKey, apiType, baseUrl, fetching]);
 
   return (
     <Modal
@@ -207,23 +180,6 @@ export function ProviderAddModal({
               onChange={(e) => setCustomId(e.target.value)}
             />
           </Field>
-          <Field label={t("API type")}>
-            <Select
-              value={apiType}
-              options={PROVIDER_API_TYPES.map((type) => ({
-                value: type,
-                label: type,
-              }))}
-              onChange={(next) => setApiType(next as ProviderApiType)}
-            />
-          </Field>
-          <Field label={t("Base URL")}>
-            <Input
-              value={baseUrl}
-              placeholder="https://api.example.com/v1"
-              onChange={(e) => setBaseUrl(e.target.value)}
-            />
-          </Field>
           <Field label={t("API key")}>
             <PasswordInput
               value={apiKey}
@@ -232,33 +188,13 @@ export function ProviderAddModal({
               invalid={error !== null}
             />
           </Field>
-          <Field label={t("Model ids (one per line)")}>
-            <Textarea
-              value={modelIds}
-              placeholder="model-a
-model-b"
-              minHeight={72}
-              mono
-              onChange={(e) => {
-                setModelIds(e.target.value);
-                if (fetchError !== null) setFetchError(null);
-              }}
-            />
-            <div className="imb-model-fetch-row">
-              <Button
-                variant="secondary"
-                size="sm"
-                loading={fetching}
-                disabled={fetching}
-                onClick={() => void fetchModels()}
-              >
-                {t("Fetch models")}
-              </Button>
-              {fetchError !== null && (
-                <span className="imb-error-text">{fetchError}</span>
-              )}
-            </div>
-          </Field>
+          <ProviderConfigFields
+            idPrefix="provider-new"
+            value={config}
+            onChange={setConfig}
+            apiKey={apiKey}
+            onFetchModels={(query) => imb.providers.listModels(query)}
+          />
         </>
       )}
     </Modal>
