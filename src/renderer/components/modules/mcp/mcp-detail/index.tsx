@@ -133,9 +133,7 @@ export function McpDetail({
         }
       >
         <p className="imb-mcp-remove-note">
-          {t(
-            "The configuration will be permanently deleted. Linked employees must choose again.",
-          )}
+          {t("Linked employees must choose again after removing.")}
         </p>
       </Modal>
     </>

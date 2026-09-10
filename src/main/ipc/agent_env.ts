@@ -1,3 +1,4 @@
+import { t } from "@shared/l10n";
 import type { ProviderModelsQuery, ProviderUpsert } from "@shared/types";
 import { BrowserWindow, clipboard, dialog, ipcMain } from "electron";
 import { listAvailableModels, refreshModelStore } from "../agent/model-runtime";
@@ -21,7 +22,7 @@ async function pickSkillFolders(): Promise<string[] | null> {
   const win =
     BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
   const options: Electron.OpenDialogOptions = {
-    title: "Select skill folders",
+    title: t("Select skill folders"),
     properties: ["openDirectory", "multiSelections"],
   };
   const result = win

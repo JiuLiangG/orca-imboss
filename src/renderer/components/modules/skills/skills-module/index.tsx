@@ -140,7 +140,7 @@ export function SkillsModule(): React.JSX.Element {
         <SearchInput
           value={query}
           onValueChange={setQuery}
-          placeholder={t("Filter by skill name or description")}
+          placeholder={t("Search skill name or description")}
         />
       }
       footer={
@@ -248,7 +248,7 @@ export function SkillsModule(): React.JSX.Element {
         }
       >
         <p className="imb-module-note">
-          {t("The skill directory will be removed from the local environment.")}
+          {t("Linked employees must choose again after removing.")}
         </p>
       </Modal>
       <Modal
@@ -271,7 +271,7 @@ export function SkillsModule(): React.JSX.Element {
         }
       >
         <p className="imb-module-note">
-          {t("The skill directory will be removed from the local environment.")}
+          {t("Linked employees must choose again after removing.")}
         </p>
       </Modal>
       {error !== null && (

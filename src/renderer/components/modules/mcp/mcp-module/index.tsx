@@ -226,9 +226,7 @@ export function McpModule(): React.JSX.Element {
         }
       >
         <p className="imb-module-note">
-          {t(
-            "The configuration will be permanently deleted. Linked employees must choose again.",
-          )}
+          {t("Linked employees must choose again after removing.")}
         </p>
       </Modal>
       <McpAddModal
