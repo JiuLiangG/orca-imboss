@@ -7,5 +7,3 @@ declare global {
     imb: IMB;
   }
 }
-
-export {};
