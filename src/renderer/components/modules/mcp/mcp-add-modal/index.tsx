@@ -26,7 +26,6 @@ const EMPTY_FORM: McpConfigFormValue = {
   kv: "",
 };
 
-/** Add MCP server modal (same fields as detail, validated on create). */
 export function McpAddModal({
   open,
   onClose,

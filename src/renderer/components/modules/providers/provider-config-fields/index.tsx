@@ -44,7 +44,6 @@ export function providerConfigToForm(provider: {
   };
 }
 
-/** Parse the textarea into a de-duplicated list of non-empty model ids. */
 export function parseModelIds(value: string): string[] {
   const ids = new Set<string>();
   for (const raw of value.split(/[\n,]/)) {

@@ -20,7 +20,6 @@ const ENV_KEY = "env";
 const DEFAULT_MODEL_KEY = "defaultModel";
 const SAVE_DEBOUNCE_MS = 400;
 
-/** Settings → General: language, default model, environment variables. */
 export function SettingsGeneral(): React.JSX.Element {
   const { locale } = useApp();
   const [defaultModel, setDefaultModel] = useState("");

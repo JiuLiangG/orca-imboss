@@ -28,7 +28,6 @@ export interface ProviderAddModalProps {
 
 type Mode = "built-in" | "custom";
 
-/** Add provider modal: built-in (key only) or custom (full config). */
 export function ProviderAddModal({
   open,
   onClose,

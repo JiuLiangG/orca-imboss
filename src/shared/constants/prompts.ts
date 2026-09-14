@@ -1,5 +1,5 @@
 export const READ_CHAT_PROMPT =
-  "You have new messages in this chat. Call imb_read_chat to read the latest messages and respond as appropriate.";
+  "You have new messages in this chat. Call `imb_read_chat` to read the latest messages and respond as appropriate.";
 
 /**
  * The built-in assistant's hardcoded base system prompt. This REPLACES the

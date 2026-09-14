@@ -335,9 +335,7 @@ export function ChatModule(): React.JSX.Element {
           ),
         )}
       </div>
-      <ChatInputBar
-        onSend={(text, attachments) => void handleSend(text, attachments)}
-      />
+      <ChatInputBar onSend={handleSend} />
     </>
   ) : null;
 

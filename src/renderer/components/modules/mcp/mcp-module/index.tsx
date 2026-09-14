@@ -16,7 +16,6 @@ import "../../module-common.css";
 import { McpAddModal } from "../mcp-add-modal";
 import { McpDetail } from "../mcp-detail";
 
-/** MCP servers module: list + transport-aware config detail + add. */
 export function McpModule(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [query, setQuery] = useState("");

@@ -17,7 +17,6 @@ import { SearchInput } from "../../../search-input";
 import "../../module-common.css";
 import "./index.css";
 
-/** Skills module: read-only list/detail + folder import + uninstall. */
 export function SkillsModule(): React.JSX.Element {
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [query, setQuery] = useState("");

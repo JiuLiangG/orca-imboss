@@ -75,7 +75,6 @@ export interface NavProps {
   onToggle: () => void;
 }
 
-/** Nav rail (col 1): brand, module items, collapse toggle + settings. */
 export function Nav({ collapsed, onToggle }: NavProps): React.JSX.Element {
   const main = NAV_ITEMS.filter((i) => i.section === "main");
   const miniapp = NAV_ITEMS.filter((i) => i.section === "miniapp");

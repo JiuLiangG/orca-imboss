@@ -24,7 +24,6 @@ const SECTIONS: Array<{
   { id: "about", labelKey: "About", descKey: "Version info" },
 ];
 
-/** Settings module: list (通用/主题/关于) → section detail. */
 export function SettingsModule(): React.JSX.Element {
   const [section, setSection] = useState<SettingsSection>("general");
 

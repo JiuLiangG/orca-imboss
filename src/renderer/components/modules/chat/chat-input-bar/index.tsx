@@ -11,11 +11,6 @@ export interface ChatInputBarProps {
   onSend: (text: string, attachments: MessageAttachment[]) => void;
 }
 
-/**
- * Chat composer (`.chat-input-card`): attachment chips row, autosize
- * textarea (72→160), attach popup (图片 / 文件) + circular send button.
- * Enter sends, Shift+Enter inserts a newline.
- */
 export function ChatInputBar({
   disabled = false,
   onSend,
@@ -89,7 +84,7 @@ export function ChatInputBar({
           className="imb-chat-input-textarea"
           rows={1}
           value={text}
-          placeholder={t("Describe what you want…")}
+          placeholder={t("What are your instructions?")}
           disabled={disabled}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}

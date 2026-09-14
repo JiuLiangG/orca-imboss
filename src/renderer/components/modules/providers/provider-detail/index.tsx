@@ -27,17 +27,6 @@ export interface ProviderDetailProps {
 /** Transient "Saved" feedback duration. */
 const SAVED_FLASH_MS = 1500;
 
-/**
- * Provider detail: kind badge, masked key + copy, and inline editing.
- *
- * - built-in → only the API key can be replaced.
- * - custom   → base URL / API type / model ids are editable; the provider id
- *   is immutable (it is the auth/models key and is referenced by model ids).
- *
- * The plaintext key is never readable, so editing means entering a new key;
- * leaving the "New API key" field blank keeps the stored key (the backend
- * treats an omitted `apiKey` as "keep").
- */
 export function ProviderDetail({
   provider,
   onSave,

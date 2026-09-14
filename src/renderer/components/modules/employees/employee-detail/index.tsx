@@ -28,7 +28,6 @@ export interface EmployeeDetailProps {
 
 const SAVE_DEBOUNCE_MS = 400;
 
-/** Employee detail: avatar upload + editable profile (live-apply, debounced). */
 export function EmployeeDetail({
   employee,
   mcpOptions,

@@ -50,8 +50,8 @@ export class AgentSession {
   private _disposed = false;
 
   constructor(
-    private readonly _env: AgentEnvironment,
-    private readonly _context?: AgentSessionContext,
+    private readonly env: AgentEnvironment,
+    private readonly context?: AgentSessionContext,
   ) {}
 
   /**
@@ -68,9 +68,7 @@ export class AgentSession {
     }
     const pi = await loadPiSdk();
 
-    const employee = this._context
-      ? getEmployee(this._context.employeeId)
-      : null;
+    const employee = this.context ? getEmployee(this.context.employeeId) : null;
     // The app's shared model store — a single ModelRuntime for the whole
     // process. Its default create-time availability check populates
     // `hasConfiguredAuth` from stored credentials; the network refresh runs
@@ -92,7 +90,7 @@ export class AgentSession {
       modelRuntime,
       employeeSystemPrompt: employee?.systemPrompt ?? "",
       mcpServerNames: employee?.mcp ?? [],
-      employeeId: employee?.id ?? this._context?.employeeId ?? -1,
+      employeeId: employee?.id ?? this.context?.employeeId ?? -1,
       isAssistant: employee?.id === ASSISTANT_ID,
     });
   }
@@ -172,11 +170,11 @@ export class AgentSession {
       const shellTools = await createShellToolDefinitions({ cwd });
       // Role-based team tools: the assistant orchestrates; participants just
       // work inside chats. Skipped when the session has no employee/chat context.
-      const teamTools = this._context
+      const teamTools = this.context
         ? createTeamToolDefinitions({
-            env: this._env,
-            employeeId: this._context.employeeId,
-            chatId: this._context.chatId,
+            env: this.env,
+            employeeId: this.context.employeeId,
+            chatId: this.context.chatId,
             // Includes built-in opt-in markers (e.g. `builtin:imb_set_cronjob`)
             // alongside any MCP server names.
             mcp: args.mcpServerNames,
@@ -200,8 +198,8 @@ export class AgentSession {
       // otherwise start ephemeral. A stored-but-unreadable session file falls
       // back to in-memory rather than failing the turn.
       let sessionManager;
-      const sessionRecord = this._context
-        ? getSession(this._context.employeeId, this._context.chatId)
+      const sessionRecord = this.context
+        ? getSession(this.context.employeeId, this.context.chatId)
         : null;
       if (sessionRecord) {
         try {
@@ -263,7 +261,7 @@ export class AgentSession {
 
       const resourceLoader = new pi.DefaultResourceLoader({
         cwd,
-        agentDir: this._env.rootDir,
+        agentDir: this.env.rootDir,
         settingsManager,
         systemPromptOverride,
         agentsFilesOverride,
@@ -272,7 +270,7 @@ export class AgentSession {
 
       const { session } = await pi.createAgentSession({
         cwd,
-        agentDir: this._env.rootDir,
+        agentDir: this.env.rootDir,
         modelRuntime,
         model,
         tools: activeToolNames,

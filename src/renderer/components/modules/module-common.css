@@ -24,7 +24,6 @@
   font-size: var(--imb-text-sm);
 }
 
-/* Muted note paragraph used inside confirmation dialogs. */
 .imb-module-note {
   color: var(--imb-muted);
   font-size: var(--imb-text-sm);

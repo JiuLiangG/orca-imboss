@@ -8,7 +8,6 @@ import { DetailHead } from "../../../detail-pane/detail-head";
 import { SegmentedControl } from "../../../segmented-control";
 import "./index.css";
 
-/** Settings → Theme: 18 accent swatches + light/dark/system mode. */
 export function SettingsTheme(): React.JSX.Element {
   const { theme } = useApp();
 

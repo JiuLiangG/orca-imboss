@@ -12,7 +12,6 @@ export interface MessageBubbleProps {
   avatar: React.ReactNode;
 }
 
-/** Chat message bubble (`.msg` + `.bubble`) with optional attachment chips. */
 export function MessageBubble({
   self,
   content,

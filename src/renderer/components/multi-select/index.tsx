@@ -23,7 +23,7 @@ export interface MultiSelectProps {
 /**
  * Multi-select with chips (accent-soft) or muted placeholder, checkbox popup,
  * keyboard navigation (arrows / Home / End, Space toggles) and click-outside
- * close. Panel scrolls at max-height 210 per prototype `.ms`.
+ * close.
  */
 export function MultiSelect({
   value,

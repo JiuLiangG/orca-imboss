@@ -23,7 +23,6 @@ export interface McpDetailProps {
 
 const SAVE_DEBOUNCE_MS = 400;
 
-/** MCP detail: name/desc/transport + transport-specific config fields. */
 export function McpDetail({
   server,
   onPatch,

@@ -1,6 +1,6 @@
 .imb-chat-input-wrap {
   flex: none;
-  padding: var(--imb-space-2);
+  padding: var(--imb-space-1);
   background: var(--imb-surface);
   border-top: 1px solid var(--imb-border);
 }

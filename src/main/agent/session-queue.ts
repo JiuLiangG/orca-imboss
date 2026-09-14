@@ -1,4 +1,4 @@
-import { DeliverOptions, type AgentEnvironment } from "@shared/types";
+import { DeliverOptions } from "@shared/types";
 import * as dbMessages from "../db/messages";
 import { getAgentEnvironment } from "./environment";
 
@@ -62,7 +62,7 @@ async function drain(state: QueueState): Promise<void> {
   try {
     // Lazy import avoids a module-load cycle (session.ts imports builtin-tools).
     const { AgentSession } = await import("./session");
-    const env: AgentEnvironment = getAgentEnvironment();
+    const env = getAgentEnvironment();
 
     while (state.queue.length > 0) {
       const item = state.queue.shift() as QueueItem;

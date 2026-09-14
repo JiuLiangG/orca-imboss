@@ -18,7 +18,6 @@ export interface EmployeeRecruitModalProps {
   onCreate: (input: EmployeeInput) => Promise<Employee | null>;
 }
 
-/** Recruit modal: create a new employee (same fields as the detail). */
 export function EmployeeRecruitModal({
   open,
   onClose,

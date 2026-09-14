@@ -16,7 +16,6 @@ import "../../module-common.css";
 import { ProviderAddModal } from "../provider-add-modal";
 import { ProviderDetail } from "../provider-detail";
 
-/** Models module: provider list + detail (masked key reveal) + add. */
 export function ProvidersModule(): React.JSX.Element {
   const { data } = useApp();
   const [selectedId, setSelectedId] = useState<string | null>(null);

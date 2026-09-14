@@ -5,7 +5,6 @@ import { DetailBody } from "../../../detail-pane/detail-body";
 import { DetailHead } from "../../../detail-pane/detail-head";
 import "./index.css";
 
-/** Settings → About: brand logo + app name + version. */
 export function SettingsAbout(): React.JSX.Element {
   const [version, setVersion] = useState("");
 

@@ -77,9 +77,7 @@ export function registerChatHandlers(): void {
 
   /**
    * Chat pipeline: append the user message → run the assistant's agent turn
-   * (serialized per session queue) → persist the final reply (or the canned
-   * placeholder when no reply is produced). When no model is configured yet,
-   * the canned placeholder reply is used instead.
+   * (serialized per session queue).
    */
   ipcMain.handle(
     "chat:send",
@@ -103,7 +101,7 @@ export function registerChatHandlers(): void {
       return userMessage;
     },
   );
-} /** Canned placeholder reply (no model configured / agent run failed). */ /** Validate the optional attachments payload before touching the DB. */
+}
 
 function validateAttachmentsPayload(
   value: unknown,

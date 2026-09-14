@@ -8,7 +8,6 @@ export interface ProgressCardProps {
   steps: MessageStep[];
 }
 
-/** Task progress card (`.progress-card`): title + name·role + status tag. */
 export function ProgressCard({
   title,
   steps,

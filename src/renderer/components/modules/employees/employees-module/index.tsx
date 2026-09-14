@@ -25,7 +25,6 @@ import { SearchInput } from "../../../search-input";
 import { EmployeeDetail } from "../employee-detail";
 import { EmployeeRecruitModal } from "../employee-recruit-modal";
 
-/** Employees module: list (assistant pinned atop, non-removable) + detail + recruit. */
 export function EmployeesModule(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
