@@ -1,6 +1,5 @@
 import type { MessageAttachment } from "@shared/types";
 import { cls } from "reactutils";
-import userAvatarUrl from "../../../../assets/boss.avif";
 import { IconFile } from "../../../icons";
 import "./index.css";
 
@@ -23,7 +22,7 @@ export function MessageBubble({
   const hasAttachments = attachments !== null && attachments.length > 0;
   return (
     <div className={cls("imb-msg", self ? "imb-self" : "imb-other")}>
-      <span className="imb-avatar">{avatar}</span>
+      {avatar}
       <div className="imb-bubble">
         {hasAttachments && (
           <div className="imb-bubble-attachments">
@@ -49,46 +48,8 @@ export function MessageBubble({
   );
 }
 
-/** Assistant avatar mark (green circle face, prototype `assistantAvatar`). */
-export function AssistantMark({
-  size = 34,
-}: {
-  size?: number;
-}): React.JSX.Element {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 36 36"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
-      <circle cx="18" cy="18" r="18" fill="#07C160" />
-      <circle cx="13" cy="16" r="2.5" fill="white" />
-      <circle cx="23" cy="16" r="2.5" fill="white" />
-      <circle cx="13" cy="15.5" r="1" fill="#07C160" />
-      <circle cx="23" cy="15.5" r="1" fill="#07C160" />
-      <path
-        d="M13 22.5C13 22.5 15.5 25 18 25C20.5 25 23 22.5 23 22.5"
-        stroke="white"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        fill="none"
-      />
-      <circle cx="29" cy="8" r="2.5" fill="white" opacity="0.7" />
-      <circle cx="7" cy="9" r="1.5" fill="white" opacity="0.5" />
-    </svg>
-  );
-}
-
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-/** Human/user avatar (bundled `boss.avif` image). */
-export function UserAvatar(): React.JSX.Element {
-  return <img src={userAvatarUrl} alt="User" aria-hidden="true" />;
 }

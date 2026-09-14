@@ -330,16 +330,9 @@ export const appStore = proxy({
   },
 });
 
-/** Keep the chat cache ordered newest-message-first (recency key, id breaks ties). */
-function sortChats(): void {
-  appStore.data.chats.items.sort(
-    (a, b) => b.lastMessageAt - a.lastMessageAt || b.id - a.id,
-  );
-}
-
 /** One-time app-state bootstrap (theme/locale subscriptions + persisted prefs). */
 let initialized = false;
-export async function initApp(): Promise<void> {
+export async function initAppStore(): Promise<void> {
   if (initialized) return;
   initialized = true;
 
@@ -382,4 +375,11 @@ export async function initApp(): Promise<void> {
 /** Reactive app-state hook (valtio snapshot). */
 export function useApp() {
   return useSnapshot(appStore);
+}
+
+/** Keep the chat cache ordered newest-message-first (recency key, id breaks ties). */
+function sortChats(): void {
+  appStore.data.chats.items.sort(
+    (a, b) => b.lastMessageAt - a.lastMessageAt || b.id - a.id,
+  );
 }

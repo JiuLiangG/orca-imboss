@@ -1,7 +1,8 @@
-import assistantAvatar from "../../../assets/assistant.avif";
+import assistantAvatar from "../../assets/assistant.avif";
+import userAvatar from "../../assets/boss.avif";
 
-/** Bundled fallback avatar for the built-in assistant when it has no avatar set. */
-export const ASSISTANT_AVATAR = assistantAvatar;
+/** Bundled avatar for the current user (boss), who is not an employee. */
+export const USER_AVATAR = userAvatar;
 
 /**
  * Effective avatar image for an employee: their stored avatar data URL, or the
@@ -12,5 +13,5 @@ export function employeeAvatarSrc(employee: {
   avatarUrl: string | null;
 }): string | null {
   if (employee.avatarUrl) return employee.avatarUrl;
-  return employee.id === 0 ? ASSISTANT_AVATAR : null;
+  return employee.id === 0 ? assistantAvatar : null;
 }

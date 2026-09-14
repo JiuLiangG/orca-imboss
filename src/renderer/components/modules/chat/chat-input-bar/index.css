@@ -75,8 +75,8 @@
 .imb-chat-input-textarea {
   display: block;
   width: 100%;
-  min-height: 72px;
-  max-height: 160px;
+  field-sizing: content;
+  max-height: 50cqh;
   padding: 10px 12px 6px;
   background: transparent;
   border: none;

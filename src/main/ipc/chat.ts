@@ -2,24 +2,24 @@ import { ASSISTANT_ID } from "@shared/constants/employees";
 import type { ChatParticipantUpdate, MessageAttachment } from "@shared/types";
 import { ipcMain } from "electron";
 import { deliver } from "../agent/session-queue";
-import * as chatsService from "../db/chats";
-import * as messagesService from "../db/messages";
+import * as dbChats from "../db/chats";
+import * as dbMessages from "../db/messages";
 import { listByChat, unlinkSessionFile } from "../db/sessions";
 import { broadcast, notifyUnread } from "../notifications";
 import { assertInteger, assertString, parsePageQuery } from "./helpers";
 
 export function registerChatHandlers(): void {
-  ipcMain.handle("chats:list", () => chatsService.listChats());
+  ipcMain.handle("chats:list", () => dbChats.listChats());
 
-  ipcMain.handle("chats:summaries", () => chatsService.listChatSummaries());
+  ipcMain.handle("chats:summaries", () => dbChats.listChatSummaries());
 
   ipcMain.handle("chats:summariesPage", (_event, page: unknown) =>
-    chatsService.listChatSummariesPage(parsePageQuery(page)),
+    dbChats.listChatSummariesPage(parsePageQuery(page)),
   );
 
   // Single chat summary (live per-chat refresh by the renderer).
   ipcMain.handle("chats:summary", (_event, id: unknown) =>
-    chatsService.getChatSummary(assertInteger(id, "chat id")),
+    dbChats.getChatSummary(assertInteger(id, "chat id")),
   );
 
   // Renderer-initiated unread delta (delegates to notifyUnread).
@@ -34,7 +34,7 @@ export function registerChatHandlers(): void {
 
   ipcMain.handle("chats:markRead", (_event, id: unknown) => {
     const safeId = assertInteger(id, "chat id");
-    chatsService.markRead(safeId);
+    dbChats.markRead(safeId);
     // Keep the renderer unread mirror in sync (cleared on open).
     broadcast("chats:unreadChanged", { chatId: safeId, unread: 0 });
   });
@@ -45,7 +45,7 @@ export function registerChatHandlers(): void {
       if (!Array.isArray(participants)) {
         throw new Error("participants must be an array.");
       }
-      return chatsService.createChat(
+      return dbChats.createChat(
         assertString(title, "title"),
         participants.map((p) => assertInteger(p, "participant id")),
       );
@@ -54,21 +54,21 @@ export function registerChatHandlers(): void {
 
   ipcMain.handle("chats:update", (_event, id: unknown, title: unknown) => {
     const safeId = assertInteger(id, "chat id");
-    return chatsService.updateChatTitle(safeId, assertString(title, "title"));
+    return dbChats.updateChatTitle(safeId, assertString(title, "title"));
   });
 
   ipcMain.handle(
     "chats:updateParticipants",
     (_event, id: unknown, changes: ChatParticipantUpdate) => {
       const safeId = assertInteger(id, "chat id");
-      return chatsService.updateChatParticipants(safeId, changes);
+      return dbChats.updateChatParticipants(safeId, changes);
     },
   );
 
   ipcMain.handle("chats:delete", async (_event, id: unknown) => {
     const safeId = assertInteger(id, "chat id");
     const records = listByChat(safeId);
-    const removed = chatsService.deleteChat(safeId);
+    const removed = dbChats.deleteChat(safeId);
     if (removed) {
       await Promise.all(records.map((r) => unlinkSessionFile(r.session)));
     }
@@ -88,7 +88,7 @@ export function registerChatHandlers(): void {
       const safeContent = assertString(content, "content");
       const safeAttachments = validateAttachmentsPayload(attachments);
 
-      const userMessage = messagesService.appendMessage(
+      const userMessage = dbMessages.appendMessage(
         safeChatId,
         null,
         safeContent.length > 0 ? safeContent : "[附件]",

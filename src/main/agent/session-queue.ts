@@ -1,5 +1,5 @@
 import { DeliverOptions, type AgentEnvironment } from "@shared/types";
-import * as messagesService from "../db/messages";
+import * as dbMessages from "../db/messages";
 import { getAgentEnvironment } from "./environment";
 
 /**
@@ -114,7 +114,7 @@ function persistReply(
   reply: string,
 ): void {
   try {
-    messagesService.appendMessage(chatId, senderEmployeeId, reply);
+    dbMessages.appendMessage(chatId, senderEmployeeId, reply);
   } catch (err) {
     console.error(
       `[session-queue] failed to persist reply in chat ${chatId}:`,

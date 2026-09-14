@@ -1,5 +1,5 @@
 import { BrowserWindow, Notification } from "electron";
-import * as chatsService from "./db/chats";
+import * as dbChats from "./db/chats";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -30,7 +30,7 @@ export function notifyUnread(
   delta: number,
   text: string,
 ): number {
-  const newUnread = chatsService.addUnread(chatId, delta);
+  const newUnread = dbChats.addUnread(chatId, delta);
   broadcast("chats:unreadChanged", { chatId, unread: newUnread });
 
   const target = resolveTargetWindow();
@@ -62,7 +62,7 @@ function resolveTargetWindow(): BrowserWindow | null {
 
 /** Notification title — the chat title when resolvable, otherwise the app name. */
 function chatTitle(chatId: number): string {
-  const chat = chatsService.getChat(chatId);
+  const chat = dbChats.getChat(chatId);
   const name = chat?.title?.trim();
   return name && name.length > 0 ? name : "Imboss";
 }

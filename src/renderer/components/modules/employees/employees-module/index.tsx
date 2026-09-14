@@ -8,13 +8,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { appStore, useApp } from "../../../../app-store";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
 import { ModuleView } from "../../../app-shell";
-import { Avatar } from "../../../avatar";
 import { Button } from "../../../button";
 import {
   ContextMenu,
   type ContextMenuItem,
   type ContextMenuState,
 } from "../../../context-menu";
+import { EmployeeAvatar } from "../../../employee-avatar";
 import { ItemList } from "../../../item-list";
 import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
@@ -22,7 +22,6 @@ import { Modal } from "../../../modal";
 import "../../../modules/module-common.css";
 import type { MultiSelectOption } from "../../../multi-select";
 import { SearchInput } from "../../../search-input";
-import { employeeAvatarSrc } from "../employee-avatar";
 import { EmployeeDetail } from "../employee-detail";
 import { EmployeeRecruitModal } from "../employee-recruit-modal";
 
@@ -220,14 +219,7 @@ export function EmployeesModule(): React.JSX.Element {
           <ListRow
             active={employee.id === selectedId}
             selected={isSelectedRow}
-            avatar={
-              <Avatar
-                src={employeeAvatarSrc(employee)}
-                letter={employee.name.slice(0, 1)}
-                name={employee.name}
-                alt
-              />
-            }
+            avatar={<EmployeeAvatar employeeId={employee.id} alt />}
             name={employee.name || t("Unnamed")}
             sub={employee.role || "—"}
             badge={

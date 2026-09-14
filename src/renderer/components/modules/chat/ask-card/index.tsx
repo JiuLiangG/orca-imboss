@@ -2,7 +2,8 @@ import { t } from "@shared/l10n";
 import type { Message } from "@shared/types";
 import { useState } from "react";
 import { cls } from "reactutils";
-import { AssistantMark, MessageBubble, UserAvatar } from "../message-bubble";
+import { EmployeeAvatar } from "../../../employee-avatar";
+import { MessageBubble } from "../message-bubble";
 import "./index.css";
 
 export interface AskCardProps {
@@ -56,7 +57,9 @@ export function AskCard({
         self={self}
         content={message.content}
         attachments={message.attachments}
-        avatar={self ? <UserAvatar /> : <AssistantMark size={34} />}
+        avatar={
+          <EmployeeAvatar employeeId={message.senderEmployeeId} size={34} />
+        }
       />
     );
   }
@@ -87,9 +90,7 @@ export function AskCard({
 
   return (
     <div className={cls("imb-msg", self ? "imb-self" : "imb-other")}>
-      <span className="imb-avatar">
-        {self ? <UserAvatar /> : <AssistantMark size={34} />}
-      </span>
+      <EmployeeAvatar employeeId={message.senderEmployeeId} size={34} />
       <div className="imb-ask-card">
         <div className="imb-ask-card-title">{t("Question")}</div>
         {payload.questions.map((q) => (

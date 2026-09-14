@@ -5,6 +5,7 @@ import { cls } from "reactutils";
 import { Button } from "../../../button";
 import { DetailBody } from "../../../detail-pane/detail-body";
 import { DetailHead } from "../../../detail-pane/detail-head";
+import { employeeAvatarSrc } from "../../../employee-avatar/avatar-src";
 import { Field } from "../../../field";
 import { IconCamera } from "../../../icons";
 import { Input } from "../../../input";
@@ -12,7 +13,6 @@ import { Modal } from "../../../modal";
 import { MultiSelect, type MultiSelectOption } from "../../../multi-select";
 import { Select, type SelectOption } from "../../../select";
 import { Textarea } from "../../../textarea";
-import { employeeAvatarSrc } from "../employee-avatar";
 import "./index.css";
 
 export interface EmployeeDetailProps {

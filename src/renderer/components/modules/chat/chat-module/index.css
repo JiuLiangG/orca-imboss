@@ -16,10 +16,6 @@
   display: flex;
 }
 
-.imb-chat-header-avatar svg {
-  border-radius: var(--imb-radius-pill);
-}
-
 .imb-chat-title {
   font-size: var(--imb-text-xl);
   font-weight: 600;

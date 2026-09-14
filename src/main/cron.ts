@@ -1,7 +1,7 @@
 import type { CronJob, CronJobInput } from "@shared/types";
 import { Cron } from "croner";
 import { deliver } from "./agent/session-queue";
-import * as cronService from "./db/cron";
+import * as dbCron from "./db/cron";
 
 /**
  * In-process cron scheduler.
@@ -17,7 +17,7 @@ const jobs = new Map<string, Cron>();
 /** Re-register persisted enabled jobs at startup (best-effort). */
 export function initCron(): void {
   try {
-    for (const job of cronService.listEnabledJobs()) {
+    for (const job of dbCron.listEnabledJobs()) {
       registerJob(job);
     }
   } catch (err) {
@@ -33,7 +33,7 @@ export function initCron(): void {
  * handle. Validation (bad schedule, unknown chat/employee) throws.
  */
 export function setJob(input: CronJobInput): CronJob {
-  const job = cronService.upsertJob(input); // validates schedule + id.
+  const job = dbCron.upsertJob(input); // validates schedule + id.
   registerJob(job);
   return job;
 }
@@ -41,7 +41,7 @@ export function setJob(input: CronJobInput): CronJob {
 /** Delete a job (DB + Cron handle). Returns false when the job does not exist. */
 export function removeJob(id: string): boolean {
   stopJob(id);
-  return cronService.deleteJob(id);
+  return dbCron.deleteJob(id);
 }
 
 /** Stop every live Cron handle (best-effort on app quit). */
@@ -60,7 +60,7 @@ function registerJob(job: CronJob): void {
   stopJob(job.id);
   const cron = new Cron(job.schedule, {}, () => {
     try {
-      cronService.markRun(job.id, Math.floor(Date.now() / 1000));
+      dbCron.markRun(job.id, Math.floor(Date.now() / 1000));
     } catch (err) {
       console.error(
         `[cron] markRun for ${job.id} failed:`,
@@ -77,10 +77,7 @@ function registerJob(job: CronJob): void {
   // the persisted value may be stale).
   try {
     const next = cron.nextRun();
-    cronService.setNextRun(
-      job.id,
-      next ? Math.floor(next.getTime() / 1000) : null,
-    );
+    dbCron.setNextRun(job.id, next ? Math.floor(next.getTime() / 1000) : null);
   } catch {
     // next_run_at is informational; never block re-registration on it.
   }

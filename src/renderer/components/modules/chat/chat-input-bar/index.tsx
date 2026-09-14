@@ -87,7 +87,7 @@ export function ChatInputBar({
         )}
         <textarea
           className="imb-chat-input-textarea"
-          rows={2}
+          rows={1}
           value={text}
           placeholder={t("Describe what you want…")}
           disabled={disabled}

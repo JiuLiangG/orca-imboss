@@ -20,11 +20,11 @@ import { Type } from "typebox";
 import * as cron from "../cron";
 import { getAgentSessionsDir } from "../data-dir";
 import { getDB } from "../db";
-import * as chatsService from "../db/chats";
+import * as dbChats from "../db/chats";
 import { parseCronJobId } from "../db/cron";
-import * as employeesService from "../db/employees";
-import * as messagesService from "../db/messages";
-import * as sessionsService from "../db/sessions";
+import * as dbEmployees from "../db/employees";
+import * as dbMessages from "../db/messages";
+import * as dbSessions from "../db/sessions";
 import { notifyUnread } from "../notifications";
 import { loadPiSdk } from "./pi-sdk";
 import { deliver } from "./session-queue";
@@ -49,7 +49,7 @@ import { deliver } from "./session-queue";
  * know who is sending.
  */
 
-const getEmployee = employeesService.getEmployee;
+const getEmployee = dbEmployees.getEmployee;
 
 const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
 const MIME_BY_EXT: Record<string, string> = {
@@ -124,7 +124,7 @@ async function ensureSession(
   employeeId: number,
   chatId: number,
 ): Promise<void> {
-  if (sessionsService.getSession(employeeId, chatId)) return;
+  if (dbSessions.getSession(employeeId, chatId)) return;
   const path = sessionPathFor(chatId, employeeId);
   try {
     await materializeSessionFile(path);
@@ -136,7 +136,7 @@ async function ensureSession(
   }
   // Record the row even when the file write failed: a later resume re-opens
   // (and re-creates the header) from the empty file.
-  sessionsService.setSession(employeeId, chatId, path);
+  dbSessions.setSession(employeeId, chatId, path);
 }
 
 /**
@@ -209,7 +209,7 @@ async function performSendMessage(
     skipSenderCheck?: boolean;
   },
 ): Promise<Message> {
-  const chat = chatsService.getChat(input.chatId);
+  const chat = dbChats.getChat(input.chatId);
   if (!chat) throw new Error("Chat does not exist.");
   if (
     !input.skipSenderCheck &&
@@ -217,12 +217,12 @@ async function performSendMessage(
   ) {
     throw new Error("Sender is not a participant of this chat.");
   }
-  const sender = employeesService.getEmployee(input.senderEmployeeId);
+  const sender = dbEmployees.getEmployee(input.senderEmployeeId);
   if (!sender || sender.disabled) {
     throw new Error("Sender is not an active employee.");
   }
   const attachments = await resolveAttachments(input.attachments);
-  const message = messagesService.appendMessage(
+  const message = dbMessages.appendMessage(
     input.chatId,
     input.senderEmployeeId,
     input.content,
@@ -234,7 +234,7 @@ async function performSendMessage(
 
   for (const pid of input.notify ?? []) {
     if (!chat.participants.includes(pid)) continue;
-    const target = employeesService.getEmployee(pid);
+    const target = dbEmployees.getEmployee(pid);
     if (!target || target.disabled) continue;
     await ensureSession(pid, input.chatId);
     fireAndForgetPrompt(
@@ -306,7 +306,7 @@ const setEmployeesTool: AnyPiTool = {
         modelId?: string | null;
       }[];
     };
-    const ids = employeesService.upsertEmployees(
+    const ids = dbEmployees.upsertEmployees(
       input.employees.map((item) => ({ ...item })),
     );
     return toolResult({ ids });
@@ -349,7 +349,7 @@ function createChatTool(env: AgentEnvironment): AnyPiTool {
       const db = getDB();
       // Atomic: chat row + one session row per participant commit together.
       const { chat, sessionRecords } = db.transaction(() => {
-        const chat = chatsService.createChat(
+        const chat = dbChats.createChat(
           input.title,
           input.participants,
           cardChatId,
@@ -357,7 +357,7 @@ function createChatTool(env: AgentEnvironment): AnyPiTool {
         const records: EmployeeSession[] = [];
         for (const pid of chat.participants) {
           const path = sessionPathFor(chat.id, pid);
-          sessionsService.setSession(pid, chat.id, path);
+          dbSessions.setSession(pid, chat.id, path);
           records.push({
             employeeId: pid,
             chatId: chat.id,
@@ -452,17 +452,17 @@ function readChatTool(employeeId: number): AnyPiTool {
     }),
     execute: async (_toolCallId, params) => {
       const input = params as { chatId: number };
-      const chat = chatsService.getChat(input.chatId);
+      const chat = dbChats.getChat(input.chatId);
       if (!chat) throw new Error("Chat does not exist.");
       await ensureSession(employeeId, input.chatId);
-      const cursor = sessionsService.getReadCursor(employeeId, input.chatId);
-      const messages = messagesService.listMessagesAfter(input.chatId, cursor);
+      const cursor = dbSessions.getReadCursor(employeeId, input.chatId);
+      const messages = dbMessages.listMessagesAfter(input.chatId, cursor);
       const nextCursor =
         messages.length > 0
           ? Math.max(...messages.map((message) => message.id))
           : cursor;
       if (nextCursor !== cursor) {
-        sessionsService.setReadCursor(employeeId, input.chatId, nextCursor);
+        dbSessions.setReadCursor(employeeId, input.chatId, nextCursor);
       }
       return toolResult({
         chatId: input.chatId,
@@ -483,7 +483,7 @@ const listEmployeesTool: AnyPiTool = {
   promptSnippet: "imb_list_employees (active team members)",
   parameters: Type.Object({}),
   execute: async () => {
-    const employees = employeesService
+    const employees = dbEmployees
       .listEmployees()
       .filter((employee) => employee.id !== ASSISTANT_ID);
     return toolResult(employees);
@@ -505,7 +505,7 @@ const notifyTool: AnyPiTool = {
   }),
   execute: async (_toolCallId, params) => {
     const input = params as { chatId: number; unread: number; text: string };
-    const chat = chatsService.getChat(input.chatId);
+    const chat = dbChats.getChat(input.chatId);
     if (!chat) throw new Error("Chat does not exist.");
     const newUnread = notifyUnread(input.chatId, input.unread, input.text);
     return toolResult({ chatId: input.chatId, unread: newUnread });
@@ -543,7 +543,7 @@ function setCronjobTool(employeeId: number): AnyPiTool {
         if (parsed.employeeId !== employeeId) {
           throw new Error("An employee can only schedule their own cron job.");
         }
-        const chat = chatsService.getChat(parsed.chatId);
+        const chat = dbChats.getChat(parsed.chatId);
         if (!chat || !chat.participants.includes(employeeId)) {
           throw new Error(
             "An employee can only schedule cron jobs for chats they participate in.",
@@ -613,7 +613,7 @@ function addParticipantTool(env: AgentEnvironment): AnyPiTool {
         chatId: number;
         participants: { employeeID: number; prompt: string }[];
       };
-      const chat = chatsService.getChat(input.chatId);
+      const chat = dbChats.getChat(input.chatId);
       if (!chat) throw new Error("Chat does not exist.");
 
       // Only genuinely-new, active employees are added.
@@ -624,9 +624,9 @@ function addParticipantTool(env: AgentEnvironment): AnyPiTool {
       for (const p of newParticipants) assertActiveEmployee(p.employeeID);
       if (add.length > 0) {
         const names = add.map(
-          (id) => employeesService.getEmployee(id)?.name || `#${id}`,
+          (id) => dbEmployees.getEmployee(id)?.name || `#${id}`,
         );
-        const updated = chatsService.updateChatParticipants(input.chatId, {
+        const updated = dbChats.updateChatParticipants(input.chatId, {
           add,
         });
         if (!updated) throw new Error("Chat does not exist.");
@@ -643,7 +643,7 @@ function addParticipantTool(env: AgentEnvironment): AnyPiTool {
         const sessions: EmployeeSession[] = [];
         for (const participant of newParticipants) {
           await ensureSession(participant.employeeID, input.chatId);
-          const record = sessionsService.getSession(
+          const record = dbSessions.getSession(
             participant.employeeID,
             input.chatId,
           );

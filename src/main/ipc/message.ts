@@ -1,16 +1,16 @@
 import { READ_CHAT_PROMPT } from "@shared/constants/prompts";
 import { ipcMain } from "electron";
 import { deliver } from "../agent/session-queue";
-import * as messagesService from "../db/messages";
+import * as dbMessages from "../db/messages";
 import { assertInteger, assertObject, assertString } from "./helpers";
 
 export function registerMessageHandlers(): void {
   ipcMain.handle("messages:list", (_event, chatId: unknown) =>
-    messagesService.listMessages(assertInteger(chatId, "chat id")),
+    dbMessages.listMessages(assertInteger(chatId, "chat id")),
   );
 
   ipcMain.handle("messages:search", (_event, query: unknown) =>
-    messagesService.searchMessages(assertString(query, "query")),
+    dbMessages.searchMessages(assertString(query, "query")),
   );
 
   ipcMain.handle(
@@ -21,7 +21,7 @@ export function registerMessageHandlers(): void {
         senderEmployeeId === null
           ? null
           : assertInteger(senderEmployeeId, "sender id");
-      return messagesService.appendMessage(
+      return dbMessages.appendMessage(
         safeChatId,
         safeSender,
         assertString(content, "content"),
@@ -37,13 +37,10 @@ export function registerMessageHandlers(): void {
       const safeChatId = assertInteger(chatId, "chat id");
       const safeAskId = assertInteger(askMessageId, "ask message id");
       const safeAnswers = JSON.stringify(assertObject(answers, "answers"));
-      const message = messagesService.appendMessage(
-        safeChatId,
-        null,
-        safeAnswers,
-        { kind: "answer" },
-      );
-      const ask = messagesService.getMessageById(safeAskId);
+      const message = dbMessages.appendMessage(safeChatId, null, safeAnswers, {
+        kind: "answer",
+      });
+      const ask = dbMessages.getMessageById(safeAskId);
       if (ask && ask.senderEmployeeId != null) {
         void deliver(ask.senderEmployeeId, safeChatId, READ_CHAT_PROMPT);
       }

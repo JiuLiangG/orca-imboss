@@ -80,7 +80,7 @@ export function EmployeeRecruitModal({
         }
       }}
       title={t("Recruit")}
-      sub={t("Create a subagent to handle specific tasks.")}
+      sub={t("Create an employee to handle specific tasks.")}
       error={error ?? undefined}
       actions={
         <>

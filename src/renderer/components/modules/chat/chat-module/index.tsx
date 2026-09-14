@@ -15,6 +15,7 @@ import { ModuleView } from "../../../app-shell";
 import { Avatar } from "../../../avatar";
 import { Button } from "../../../button";
 import { ContextMenu, type ContextMenuState } from "../../../context-menu";
+import { EmployeeAvatar } from "../../../employee-avatar";
 import { ItemList } from "../../../item-list";
 import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
@@ -23,14 +24,13 @@ import { SearchInput } from "../../../search-input";
 import { AnswerCard } from "../answer-card";
 import { AskCard } from "../ask-card";
 import { ChatInputBar } from "../chat-input-bar";
-import { AssistantMark, MessageBubble, UserAvatar } from "../message-bubble";
+import { MessageBubble } from "../message-bubble";
 import { ProgressCard } from "../progress-card";
 import { formatChatTime, previewText } from "../relative-time";
 import "./index.css";
 
 const PAGE_SIZE = 50;
 
-/** Chat module: list + thread + composer (placeholder pipeline). */
 export function ChatModule(): React.JSX.Element {
   const { data, focusChatId } = useApp();
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -171,11 +171,6 @@ export function ChatModule(): React.JSX.Element {
   const newChat = useCallback(async (): Promise<void> => {
     try {
       const chat = await imb.chats.create(t("New Chat"), []);
-      await imb.messages.append(
-        chat.id,
-        0,
-        t("Hello, I'm your assistant. Tell me what you need."),
-      );
       // The new chat sorts to the top (last_message_at = creation time). The
       // auto-select effect only recovers a *missing* selection, so select the
       // new chat explicitly and clear any stale multi-selection.
@@ -186,6 +181,7 @@ export function ChatModule(): React.JSX.Element {
       setError(err instanceof Error ? err.message : String(err));
     }
   }, [clearSelection]);
+
   const deleteSelected = useCallback(async (): Promise<void> => {
     const ids = [...multi.selectedKeys];
     if (ids.length === 0) return;
@@ -292,7 +288,7 @@ export function ChatModule(): React.JSX.Element {
     <>
       <div className="imb-chat-header">
         <div className="imb-chat-header-avatar">
-          <AssistantMark size={36} />
+          <EmployeeAvatar employeeId={0} size={36} />
         </div>
         <div className="imb-chat-title">{selected.title}</div>
       </div>
@@ -314,9 +310,10 @@ export function ChatModule(): React.JSX.Element {
               className="imb-msg imb-other"
               key={`${message.chatId}-${message.id}`}
             >
-              <span className="imb-avatar">
-                <AssistantMark size={34} />
-              </span>
+              <EmployeeAvatar
+                employeeId={message.senderEmployeeId ?? 0}
+                size={34}
+              />
               <ProgressCard
                 title={message.content}
                 steps={message.steps ?? []}
@@ -329,11 +326,10 @@ export function ChatModule(): React.JSX.Element {
               content={message.content}
               attachments={message.attachments}
               avatar={
-                message.senderEmployeeId === null ? (
-                  <UserAvatar />
-                ) : (
-                  <AssistantMark size={34} />
-                )
+                <EmployeeAvatar
+                  employeeId={message.senderEmployeeId}
+                  size={34}
+                />
               }
             />
           ),

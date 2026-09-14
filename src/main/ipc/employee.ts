@@ -1,26 +1,26 @@
 import type { Employee, EmployeeInput } from "@shared/types";
 import { ipcMain } from "electron";
 import { deleteAvatarFiles, saveAvatar } from "../avatars";
-import * as employeesService from "../db/employees";
+import * as dbEmployees from "../db/employees";
 import { listByEmployee, unlinkSessionFile } from "../db/sessions";
 import { assertInteger, assertString, parsePageQuery } from "./helpers";
 
 export function registerEmployeeHandlers(): void {
-  ipcMain.handle("employees:list", () => employeesService.listEmployees());
+  ipcMain.handle("employees:list", () => dbEmployees.listEmployees());
 
   ipcMain.handle("employees:listPage", (_event, page: unknown) =>
-    employeesService.listEmployeesPage(parsePageQuery(page)),
+    dbEmployees.listEmployeesPage(parsePageQuery(page)),
   );
 
   ipcMain.handle("employees:create", (_event, input: EmployeeInput): Employee =>
-    employeesService.createEmployee(input),
+    dbEmployees.createEmployee(input),
   );
 
   ipcMain.handle(
     "employees:update",
     (_event, id: unknown, input: EmployeeInput) => {
       const safeId = assertInteger(id, "employee id");
-      return employeesService.updateEmployee(safeId, input);
+      return dbEmployees.updateEmployee(safeId, input);
     },
   );
 
@@ -28,7 +28,7 @@ export function registerEmployeeHandlers(): void {
     const safeId = assertInteger(id, "employee id");
     // Capture disk session file paths BEFORE the FK cascade wipes the rows.
     const records = listByEmployee(safeId);
-    const result = employeesService.deleteEmployee(safeId);
+    const result = dbEmployees.deleteEmployee(safeId);
     // Only a hard delete removes disk artifacts; a soft delete (employee still
     // a chat participant) keeps the session/avatar state intact.
     if (result === "deleted") {
@@ -47,7 +47,7 @@ export function registerEmployeeHandlers(): void {
         throw new Error("Avatar data must be bytes.");
       }
       const path = saveAvatar(safeId, safeExt, Buffer.from(data));
-      return employeesService.updateEmployeeAvatar(safeId, path);
+      return dbEmployees.updateEmployeeAvatar(safeId, path);
     },
   );
 }
