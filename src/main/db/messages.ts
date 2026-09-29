@@ -7,7 +7,7 @@ import type {
   MessageStep,
   StepStatus,
 } from "@shared/types";
-import { broadcast } from "../notifications";
+import { sendToRenderer } from "../notifications";
 import { bumpUnread } from "./chats";
 import { getDB } from "./index";
 import { parseJsonObject } from "./json";
@@ -117,7 +117,7 @@ export function appendMessage(
     throw new Error("Message kind is invalid.");
   }
   const steps = validateSteps(options.steps);
-  if (kind === "task_progress" && steps !== undefined && steps.length === 0) {
+  if (kind === "progress" && (steps === undefined || steps.length === 0)) {
     throw new Error("Progress messages need at least one step.");
   }
   const attachments = validateAttachments(options.attachments);
@@ -151,7 +151,7 @@ export function appendMessage(
     createdAt,
     chatId,
   );
-  broadcast("messages:changed", { chatId, senderEmployeeId });
+  sendToRenderer("messages:changed", { chatId, senderEmployeeId });
 
   return toMessage({
     id: Number(result.lastInsertRowid),

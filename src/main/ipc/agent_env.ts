@@ -1,6 +1,6 @@
 import { t } from "@shared/l10n";
 import type { ProviderModelsQuery, ProviderUpsert } from "@shared/types";
-import { BrowserWindow, clipboard, dialog, ipcMain } from "electron";
+import { clipboard, ipcMain } from "electron";
 import { listAvailableModels, refreshModelStore } from "../agent/model-runtime";
 import {
   listModels,
@@ -16,20 +16,14 @@ import {
   listSkillsPage,
   uninstallSkill,
 } from "../agent/skills";
+import { showOpenDialog } from "./dialog";
 import { assertString, parsePageQuery } from "./helpers";
 
 async function pickSkillFolders(): Promise<string[] | null> {
-  const win =
-    BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-  const options: Electron.OpenDialogOptions = {
+  return showOpenDialog({
     title: t("Select skill folders"),
     properties: ["openDirectory", "multiSelections"],
-  };
-  const result = win
-    ? await dialog.showOpenDialog(win, options)
-    : await dialog.showOpenDialog(options);
-  if (result.canceled || result.filePaths.length === 0) return null;
-  return result.filePaths;
+  });
 }
 
 // --- providers / skills ---

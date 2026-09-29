@@ -1,5 +1,6 @@
 import { DEFAULT_LOCALE } from "@shared/constants/locales";
 import type {
+  AgentStreamPayload,
   Chat,
   ChatParticipantUpdate,
   ChatSummary,
@@ -20,6 +21,7 @@ import type {
   ProviderModelsQuery,
   ProviderUpsert,
   ThemeState,
+  WorkDirState,
 } from "@shared/types";
 import { contextBridge, ipcRenderer } from "electron";
 
@@ -36,6 +38,12 @@ const api = {
       ipcRenderer.invoke("settings:get", key) as Promise<string | null>,
     set: (key: string, value: string) =>
       ipcRenderer.invoke("settings:set", key, value) as Promise<void>,
+  },
+
+  workdir: {
+    get: () => ipcRenderer.invoke("workdir:get") as Promise<WorkDirState>,
+    choose: () =>
+      ipcRenderer.invoke("workdir:choose") as Promise<WorkDirState | null>,
   },
 
   getVersion: () => ipcRenderer.invoke("app:getVersion") as Promise<string>,
@@ -103,6 +111,8 @@ const api = {
       cb: (payload: { chatId: number; unread: number }) => void,
     ) => on<{ chatId: number; unread: number }>("chats:unreadChanged", cb),
     onFocus: (cb: (chatId: number) => void) => on<number>("chat:focus", cb),
+    onChanged: (cb: (payload: { chatId: number }) => void) =>
+      on<{ chatId: number }>("chats:changed", cb),
     create: (title: string, participants: number[]) =>
       ipcRenderer.invoke("chats:create", title, participants) as Promise<Chat>,
     update: (id: number, title: string) =>
@@ -166,6 +176,23 @@ const api = {
         content,
         attachments,
       ) as Promise<Message>,
+  },
+
+  agentSession: {
+    bind: (employeeId: number, chatId: number) =>
+      ipcRenderer.invoke(
+        "agentSession:bind",
+        employeeId,
+        chatId,
+      ) as Promise<void>,
+    unbind: (employeeId: number, chatId: number) =>
+      ipcRenderer.invoke(
+        "agentSession:unbind",
+        employeeId,
+        chatId,
+      ) as Promise<void>,
+    onEvent: (cb: (payload: AgentStreamPayload) => void) =>
+      on<AgentStreamPayload>("agentSession:event", cb),
   },
 
   sessions: {

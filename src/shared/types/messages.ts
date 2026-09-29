@@ -1,12 +1,14 @@
 /**
- * Free-form message kind. The UI only special-cases `task_progress`; other
- * kinds (e.g. `chat`, `join_notice`) are routed through the generic bubble.
+ * Free-form message kind. The UI only special-cases `progress`; other kinds
+ * (e.g. `text`, `report`, `chat`, `join_notice`) are routed through the generic
+ * bubble. `report` is a free-form result summary (employee → assigner, or
+ * assistant → boss for the final summary).
  */
 export type MessageKind = string;
 
 export type StepStatus = "done" | "busy";
 
-/** One row of a progress card payload (kind = `task_progress`). */
+/** One row of a progress card payload (kind = `progress`). */
 export interface MessageStep {
   name: string;
   role: string;
@@ -29,7 +31,7 @@ export interface Message {
   senderEmployeeId: number | null;
   kind: MessageKind;
   content: string;
-  /** Present when `kind` is `task_progress`. */
+  /** Present when `kind` is `progress`. */
   steps: MessageStep[] | null;
   /** Present when the message carries attachments. */
   attachments: MessageAttachment[] | null;

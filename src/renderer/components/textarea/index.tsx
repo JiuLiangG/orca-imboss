@@ -1,5 +1,6 @@
 import { useEffect, useRef, type TextareaHTMLAttributes } from "react";
 import { cls } from "reactutils";
+import { useComposition } from "../../hooks/use-composition";
 import "./index.css";
 
 export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
@@ -9,6 +10,8 @@ export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElemen
   autosize?: boolean;
   minHeight?: number;
   maxHeight?: number;
+  /** Fires when the value is committed — never mid-IME composition. */
+  onValueCommit?: (value: string) => void;
 }
 
 export function Textarea({
@@ -20,9 +23,15 @@ export function Textarea({
   className,
   style,
   onInput,
+  onValueCommit,
+  onKeyDown,
+  onChange,
+  onCompositionStart,
+  onCompositionEnd,
   ...rest
 }: TextareaProps): React.JSX.Element {
   const ref = useRef<HTMLTextAreaElement>(null);
+  const composition = useComposition();
 
   function resize(): void {
     const el = ref.current;
@@ -49,6 +58,27 @@ export function Textarea({
         className,
       )}
       style={{ ...style, minHeight: autosize ? undefined : minHeight }}
+      onKeyDown={(event) => {
+        if (composition.isComposing()) return;
+        onKeyDown?.(event);
+      }}
+      onChange={(event) => {
+        onChange?.(event);
+        const commit = composition.shouldCommit(event.target.value);
+        if (onValueCommit && commit) {
+          onValueCommit(event.target.value);
+        }
+      }}
+      onCompositionStart={(event) => {
+        composition.onCompositionStart();
+        onCompositionStart?.(event);
+      }}
+      onCompositionEnd={(event) => {
+        const value = event.currentTarget.value;
+        composition.onCompositionEnd(value);
+        onValueCommit?.(value);
+        onCompositionEnd?.(event);
+      }}
       onInput={(e) => {
         onInput?.(e);
         if (autosize) resize();

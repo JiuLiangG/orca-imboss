@@ -1,5 +1,7 @@
+import { ASSISTANT_ID } from "@shared/constants/employees";
 import { getLocale, t } from "@shared/l10n";
 import type {
+  AgentStreamEvent,
   ChatSummary,
   Message,
   MessageAttachment,
@@ -21,15 +23,28 @@ import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
 import { Modal } from "../../../modal";
 import { SearchInput } from "../../../search-input";
-import { AnswerCard } from "../answer-card";
-import { AskCard } from "../ask-card";
 import { ChatInputBar } from "../chat-input-bar";
-import { MessageBubble } from "../message-bubble";
-import { ProgressCard } from "../progress-card";
+import { MessageItem } from "../message-item";
 import { formatChatTime, previewText } from "../relative-time";
+import "../thread.css";
 import "./index.css";
 
 const PAGE_SIZE = 50;
+
+/**
+ * Chat title for display: untitled chats fall back to the localized default
+ * at render time (the DB stores `""` for a new chat, so the fallback follows
+ * locale switches — unlike a title baked in at creation time).
+ */
+function displayTitle(title: string): string {
+  return title.trim().length > 0 ? title : t("New Chat");
+}
+
+/** Transient per-chat run status driven by bound agent events. */
+interface ChatRunStatus {
+  toolName?: string;
+  compacting: boolean;
+}
 
 export function ChatModule(): React.JSX.Element {
   const { data, focusChatId } = useApp();
@@ -39,6 +54,9 @@ export function ChatModule(): React.JSX.Element {
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [runStatus, setRunStatus] = useState<Map<number, ChatRunStatus>>(
+    () => new Map(),
+  );
   const threadRef = useRef<HTMLDivElement>(null);
   const selectedIdRef = useRef<number | null>(null);
   selectedIdRef.current = selectedId;
@@ -82,6 +100,50 @@ export function ChatModule(): React.JSX.Element {
     }
   }, []);
 
+  // Fold a bound agent stream event into the per-chat run status. Events that
+  // do not affect the indicator (message/turn deltas) are ignored without a
+  // state update so streaming stays cheap.
+  const applyAgentEvent = useCallback(
+    (chatId: number, event: AgentStreamEvent): void => {
+      if (event.type === "error") {
+        setError(event.message);
+      }
+      setRunStatus((prev) => {
+        const current = prev.get(chatId) ?? { compacting: false };
+        const next: ChatRunStatus = { ...current };
+        switch (event.type) {
+          case "agent_end":
+          case "error":
+            next.toolName = undefined;
+            next.compacting = false;
+            break;
+          case "tool_execution_start":
+            next.toolName = event.toolName;
+            break;
+          case "tool_execution_end":
+            next.toolName = undefined;
+            break;
+          case "compaction_start":
+            next.compacting = true;
+            break;
+          case "compaction_end":
+            next.compacting = false;
+            break;
+          default:
+            return prev;
+        }
+        const map = new Map(prev);
+        if (!next.toolName && !next.compacting) {
+          map.delete(chatId);
+        } else {
+          map.set(chatId, next);
+        }
+        return map;
+      });
+    },
+    [],
+  );
+
   // Plain click / auto-select target: the rest (thread, unread) is an effect
   // on `selectedId` so every selection path stays consistent.
   const selectChat = useCallback((chatId: number): void => {
@@ -110,6 +172,35 @@ export function ChatModule(): React.JSX.Element {
     void imb.chats.markRead(selectedId);
     appStore.setChatUnread(selectedId, 0);
   }, [selectedId, loadMessages]);
+
+  // Subscribe this window to the selected chat's agent events. The session
+  // itself is created lazily main-side on the first `chat:send` (via the
+  // session queue), so merely selecting a chat does not build a Pi session.
+  useEffect(() => {
+    if (selectedId === null) return;
+    const chatId = selectedId;
+    void imb.agentSession.bind(ASSISTANT_ID, chatId);
+    return () => {
+      void imb.agentSession.unbind(ASSISTANT_ID, chatId);
+      // Drop any stale run indicator for the chat we are leaving (its events
+      // stop arriving once unbound).
+      setRunStatus((prev) => {
+        if (!prev.has(chatId)) return prev;
+        const map = new Map(prev);
+        map.delete(chatId);
+        return map;
+      });
+    };
+  }, [selectedId]);
+
+  // Subscribe once to bound session events; route by (employee, chat).
+  useEffect(() => {
+    const off = imb.agentSession.onEvent(({ employeeId, chatId, event }) => {
+      if (employeeId !== ASSISTANT_ID) return;
+      applyAgentEvent(chatId, event);
+    });
+    return off;
+  }, [applyAgentEvent]);
 
   // Auto-select the first chat after page 1 loads (and recover when the
   // selected chat disappears, e.g. bulk delete).
@@ -149,18 +240,22 @@ export function ChatModule(): React.JSX.Element {
     return offMessages;
   }, [loadMessages]);
 
-  // Scroll to bottom when messages change.
+  const selectedRunStatus =
+    selectedId !== null ? runStatus.get(selectedId) : undefined;
+
+  // Scroll to bottom when messages change or the run indicator appears.
   useEffect(() => {
     const el = threadRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages]);
+  }, [messages, selectedRunStatus]);
 
   const handleSend = useCallback(
     async (text: string, attachments: MessageAttachment[]): Promise<void> => {
       if (selectedId === null) return;
+      const chatId = selectedId;
       try {
-        await imb.chat.send(selectedId, text, attachments);
-        void loadMessages(selectedId);
+        await imb.chat.send(chatId, text, attachments);
+        void loadMessages(chatId);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       }
@@ -170,7 +265,10 @@ export function ChatModule(): React.JSX.Element {
 
   const newChat = useCallback(async (): Promise<void> => {
     try {
-      const chat = await imb.chats.create(t("New Chat"), []);
+      // No title at creation: the first user message generates one (main-side
+      // `maybeGenerateChatTitle`); until then the list/header render the
+      // localized `displayTitle` fallback.
+      const chat = await imb.chats.create("", []);
       // The new chat sorts to the top (last_message_at = creation time). The
       // auto-select effect only recovers a *missing* selection, so select the
       // new chat explicitly and clear any stale multi-selection.
@@ -243,9 +341,12 @@ export function ChatModule(): React.JSX.Element {
             active={chat.id === selectedId}
             selected={isSelectedRow}
             avatar={
-              <Avatar letter={chat.title.slice(0, 1)} name={chat.title} />
+              <Avatar
+                letter={displayTitle(chat.title).slice(0, 1)}
+                name={displayTitle(chat.title)}
+              />
             }
-            name={chat.title}
+            name={displayTitle(chat.title)}
             meta={formatChatTime(chat.lastAt, locale)}
             sub={previewText(chat.preview ?? "")}
             badge={
@@ -290,49 +391,22 @@ export function ChatModule(): React.JSX.Element {
         <div className="imb-chat-header-avatar">
           <EmployeeAvatar employeeId={0} size={36} />
         </div>
-        <div className="imb-chat-title">{selected.title}</div>
+        <div className="imb-chat-title">{displayTitle(selected.title)}</div>
       </div>
       <div className="imb-thread" ref={threadRef}>
-        {messages.map((message) =>
-          message.kind === "ask" ? (
-            <AskCard
-              key={`${message.chatId}-${message.id}`}
-              message={message}
-              onAnswered={() => void loadMessages(message.chatId)}
-            />
-          ) : message.kind === "answer" ? (
-            <AnswerCard
-              key={`${message.chatId}-${message.id}`}
-              message={message}
-            />
-          ) : message.kind === "task_progress" ? (
-            <div
-              className="imb-msg imb-other"
-              key={`${message.chatId}-${message.id}`}
-            >
-              <EmployeeAvatar
-                employeeId={message.senderEmployeeId ?? 0}
-                size={34}
-              />
-              <ProgressCard
-                title={message.content}
-                steps={message.steps ?? []}
-              />
-            </div>
-          ) : (
-            <MessageBubble
-              key={`${message.chatId}-${message.id}`}
-              self={message.senderEmployeeId === null}
-              content={message.content}
-              attachments={message.attachments}
-              avatar={
-                <EmployeeAvatar
-                  employeeId={message.senderEmployeeId}
-                  size={34}
-                />
-              }
-            />
-          ),
+        {messages.map((message) => (
+          <MessageItem
+            key={`${message.chatId}-${message.id}`}
+            message={message}
+            onAnswered={() => void loadMessages(message.chatId)}
+          />
+        ))}
+        {selectedRunStatus !== undefined && (
+          <div className="imb-run-status" role="status">
+            {selectedRunStatus.compacting
+              ? t("Compacting…")
+              : (selectedRunStatus.toolName ?? "")}
+          </div>
         )}
       </div>
       <ChatInputBar onSend={handleSend} />

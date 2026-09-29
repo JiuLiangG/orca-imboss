@@ -20,7 +20,14 @@ export type AppModule =
   | "skills"
   | "settings"
   | "miniapp-worldmap"
-  | "chat-product";
+  | "group-chat";
+
+/** A group chat opened from a `chat`-kind card and shown in the Nav. */
+export interface OpenedChat {
+  id: number;
+  title: string;
+  participants: number[];
+}
 
 /** True when running on macOS (native traffic lights stay, no custom buttons). */
 export const IS_MAC = imb.platform === "darwin";
@@ -41,7 +48,6 @@ const VALID_MODULES: AppModule[] = [
   "skills",
   "settings",
   "miniapp-worldmap",
-  "chat-product",
 ];
 
 /** Global renderer app state (valtio proxy — replaces the former context). */
@@ -50,6 +56,12 @@ export const appStore = proxy({
   theme: { mode: "system", color: "#07C160" } as ThemeState,
   navCollapsed: false,
   module: "chat" as AppModule,
+
+  // Group chats opened from `chat`-kind link cards, rendered in the Nav
+  // "chats" section. Session-only: deliberately not persisted, so a restart
+  // starts with none and the app falls back to the chat module.
+  openedChats: [] as OpenedChat[],
+  activeChatId: null as number | null,
 
   // Pending chat to select when the chat module is mounted (set by an OS
   // notification click). Cleared once consumed.
@@ -328,6 +340,48 @@ export const appStore = proxy({
     appStore.module = "chat";
     await imb.settings.set(SettingKeys.Module, "chat");
   },
+
+  // --- Opened group chats (Nav "chats" section) -------------------------------
+  /** Open (or focus) a group chat linked by a `chat`-kind card. */
+  openChat(chat: ChatSummary): void {
+    const existing = appStore.openedChats.find((c) => c.id === chat.id);
+    if (existing) {
+      existing.title = chat.title;
+      existing.participants = chat.participants;
+    } else {
+      appStore.openedChats.push({
+        id: chat.id,
+        title: chat.title,
+        participants: chat.participants,
+      });
+    }
+    appStore.activeChatId = chat.id;
+    // Deliberately not persisted: opened chats are session-only.
+    appStore.module = "group-chat";
+  },
+
+  /** Focus an already-opened group chat (Nav item click). */
+  activateChat(id: number): void {
+    if (!appStore.openedChats.some((c) => c.id === id)) return;
+    appStore.activeChatId = id;
+    appStore.module = "group-chat";
+  },
+
+  /** Close an opened group chat; fall back to a neighbour or the chat module. */
+  closeChat(id: number): void {
+    const index = appStore.openedChats.findIndex((c) => c.id === id);
+    if (index < 0) return;
+    appStore.openedChats.splice(index, 1);
+    if (appStore.activeChatId !== id) return;
+    const next =
+      appStore.openedChats[index] ?? appStore.openedChats[index - 1] ?? null;
+    if (next) {
+      appStore.activeChatId = next.id;
+    } else {
+      appStore.activeChatId = null;
+      appStore.module = "chat";
+    }
+  },
 });
 
 /** One-time app-state bootstrap (theme/locale subscriptions + persisted prefs). */
@@ -360,6 +414,11 @@ export async function initAppStore(): Promise<void> {
   // lastAt, unread) and re-sorts the cached list. A lightweight unread-only
   // event (imb_notify / addUnread) updates items[].unread directly.
   imb.messages.onChanged(({ chatId }) => {
+    void appStore.refreshChatSummary(chatId);
+  });
+  // Title-only updates (auto title generation lands asynchronously, after the
+  // messages:changed refresh) — same summary refresh keeps list + header in sync.
+  imb.chats.onChanged(({ chatId }) => {
     void appStore.refreshChatSummary(chatId);
   });
   imb.chats.onUnreadChanged(({ chatId, unread }) => {

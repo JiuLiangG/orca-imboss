@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cls } from "reactutils";
+import { useDropdownPosition } from "../../hooks/use-dropdown-position";
 import { useEscapeKey } from "../../hooks/use-escape-key";
 import { IconChevronDown } from "../icons";
 import "./index.css";
@@ -20,17 +21,6 @@ export interface SelectProps {
   id?: string;
   label?: string;
 }
-
-interface PanelStyle {
-  top: number;
-  left: number;
-  width: number;
-  maxHeight: number;
-  openUp: boolean;
-}
-
-const PANEL_GAP = 6;
-const PANEL_MAX_HEIGHT = 210;
 
 /**
  * Custom combobox (prototype used a native select; upgraded to a custom one
@@ -57,7 +47,7 @@ export function Select({
   const panelRef = useRef<HTMLUListElement>(null);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
-  const [panelStyle, setPanelStyle] = useState<PanelStyle | null>(null);
+  const { panelStyle, positionPanel } = useDropdownPosition(rootRef);
 
   // Type-ahead buffer.
   const bufferRef = useRef("");
@@ -65,24 +55,6 @@ export function Select({
 
   const selectedIndex = options.findIndex((o) => o.value === value);
   const selected = selectedIndex >= 0 ? options[selectedIndex] : null;
-
-  const positionPanel = useCallback((): void => {
-    const el = rootRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const below = window.innerHeight - rect.bottom - PANEL_GAP;
-    const above = rect.top - PANEL_GAP;
-    // Flip upward when there's more room above than below (and below is tight).
-    const openUp = below < Math.min(PANEL_MAX_HEIGHT, 220) && above > below;
-    const avail = Math.max(80, openUp ? above : below);
-    setPanelStyle({
-      top: openUp ? rect.top - PANEL_GAP : rect.bottom + PANEL_GAP,
-      left: rect.left,
-      width: rect.width,
-      maxHeight: Math.min(PANEL_MAX_HEIGHT, avail),
-      openUp,
-    });
-  }, []);
 
   const openPanel = useCallback((): void => {
     if (disabled) return;
@@ -232,15 +204,13 @@ export function Select({
         createPortal(
           <ul
             ref={panelRef}
-            className={cls(
-              "imb-select-panel",
-              panelStyle.openUp && "imb-select-panel-up",
-            )}
+            className="imb-select-panel"
             id={listboxId}
             role="listbox"
             style={{
               position: "fixed",
               top: panelStyle.top,
+              bottom: panelStyle.bottom,
               left: panelStyle.left,
               width: panelStyle.width,
               maxHeight: panelStyle.maxHeight,

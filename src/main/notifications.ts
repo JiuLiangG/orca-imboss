@@ -11,10 +11,10 @@ export function setMainWindow(win: BrowserWindow | null): void {
   mainWindow = win;
 }
 
-/** Send a payload to every live renderer window. */
-export function broadcast(channel: string, payload: unknown): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send(channel, payload);
+/** Send a payload to the registered main window (no-op before creation). */
+export function sendToRenderer(channel: string, payload: unknown): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, payload);
   }
 }
 
@@ -31,7 +31,7 @@ export function notifyUnread(
   text: string,
 ): number {
   const newUnread = dbChats.addUnread(chatId, delta);
-  broadcast("chats:unreadChanged", { chatId, unread: newUnread });
+  sendToRenderer("chats:unreadChanged", { chatId, unread: newUnread });
 
   const target = resolveTargetWindow();
   const focused = BrowserWindow.getFocusedWindow();

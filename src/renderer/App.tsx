@@ -3,6 +3,7 @@ import { useApp, type AppModule } from "./app-store";
 import { AppShell } from "./components/app-shell";
 import { ChatModule } from "./components/modules/chat/chat-module";
 import { EmployeesModule } from "./components/modules/employees/employees-module";
+import { GroupChatModule } from "./components/modules/group-chat/group-chat-module";
 import { McpModule } from "./components/modules/mcp/mcp-module";
 import {
   isPlaceholderModule,
@@ -41,9 +42,15 @@ export default function App(): React.JSX.Element {
 }
 
 function ActiveModule(): React.JSX.Element {
-  const { module } = useApp();
-  const View = MODULE_VIEWS[module];
+  const { module, activeChatId } = useApp();
 
+  // Group chats opened from `chat`-kind cards render in a dedicated
+  // single-pane view; the key resets the view when switching chats.
+  if (module === "group-chat" && activeChatId !== null) {
+    return <GroupChatModule key={activeChatId} chatId={activeChatId} />;
+  }
+
+  const View = MODULE_VIEWS[module];
   if (View) return <View />;
   if (isPlaceholderModule(module)) return <PlaceholderModule />;
   return <ChatModule />;

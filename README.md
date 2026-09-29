@@ -140,7 +140,7 @@ Packaging is configured in `electron-builder.yml`.
 These areas are scoped for upcoming iterations and are intentionally left as stubs or extension points:
 
 - **Progress messages** — `task_progress` kind is renderable from DB rows; nothing generates `steps` yet (placeholder pipeline only).
-- **Mini Apps (世界地图) and 产品网站改版** — nav entries exist as "暂未开放" placeholder pages.
+- **Mini Apps (世界地图)** — the nav entry exists as a "暂未开放" placeholder page.
 - **Notification rules** — which events trigger OS notifications in the background.
 - **Auto-update UI feedback** — progress + install prompts over IPC.
 

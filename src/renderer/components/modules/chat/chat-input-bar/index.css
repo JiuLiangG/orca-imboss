@@ -72,20 +72,27 @@
   background: var(--imb-danger);
 }
 
-.imb-chat-input-textarea {
+.imb-textarea.imb-chat-input-textarea {
   display: block;
   width: 100%;
   field-sizing: content;
   max-height: 50cqh;
+  min-height: 0;
   padding: 10px 12px 6px;
   background: transparent;
   border: none;
+  border-radius: 0;
   font: inherit;
   font-size: var(--imb-text-base);
   line-height: 1.5;
   resize: none;
   outline: none;
   color: var(--imb-fg);
+}
+
+.imb-textarea.imb-chat-input-textarea:focus {
+  border: none;
+  box-shadow: none;
 }
 
 .imb-chat-input-textarea::placeholder {

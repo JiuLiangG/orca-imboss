@@ -1,11 +1,13 @@
 import { SettingKeys } from "@shared/constants/settings";
 import { t } from "@shared/l10n";
+import { useState } from "react";
 import { cls } from "reactutils";
 import { appStore, useApp, type AppModule } from "../../app-store";
 import { BrandLogo } from "../brand-logo";
+import { ContextMenu, type ContextMenuState } from "../context-menu";
+import { GroupAvatar } from "../group-avatar";
 import {
   IconChat,
-  IconChatProduct,
   IconCollapse,
   IconEmployees,
   IconGear,
@@ -21,7 +23,7 @@ interface NavItem {
   module: AppModule;
   labelKey: string;
   icon: (props: { className?: string }) => React.JSX.Element;
-  section?: "main" | "miniapp" | "chats" | "bottom";
+  section?: "main" | "miniapp" | "bottom";
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -57,12 +59,6 @@ const NAV_ITEMS: NavItem[] = [
     section: "miniapp",
   },
   {
-    module: "chat-product",
-    labelKey: "Website Redesign",
-    icon: IconChatProduct,
-    section: "chats",
-  },
-  {
     module: "settings",
     labelKey: "Settings",
     icon: IconGear,
@@ -75,62 +71,104 @@ export interface NavProps {
   onToggle: () => void;
 }
 
+/** Read-only shape of an opened chat (valtio snapshots are deeply readonly). */
+interface NavChat {
+  readonly id: number;
+  readonly title: string;
+  readonly participants: readonly number[];
+}
+
 export function Nav({ collapsed, onToggle }: NavProps): React.JSX.Element {
+  const { openedChats, module, activeChatId } = useApp();
+  const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
+
   const main = NAV_ITEMS.filter((i) => i.section === "main");
   const miniapp = NAV_ITEMS.filter((i) => i.section === "miniapp");
-  const chats = NAV_ITEMS.filter((i) => i.section === "chats");
   const bottom = NAV_ITEMS.filter((i) => i.section === "bottom");
 
   return (
-    <nav
-      className={cls("imb-nav", collapsed && "imb-is-collapsed")}
-      aria-label="Modules"
-    >
-      <div className="imb-nav-brand">
-        <BrandLogo style={{ maxWidth: "41px" }} />
-        <span className="imb-nav-brandname">imboss</span>
-      </div>
-      <div className="imb-nav-items">
-        {main.map((item) => (
-          <NavButton key={item.module} item={item} collapsed={collapsed} />
-        ))}
-      </div>
-      <div className="imb-nav-divider" />
-      <div className="imb-scroll">
+    <>
+      <nav
+        className={cls("imb-nav", collapsed && "imb-is-collapsed")}
+        aria-label="Modules"
+      >
+        <div className="imb-nav-brand">
+          <BrandLogo style={{ maxWidth: "41px" }} />
+          <span className="imb-nav-brandname">imboss</span>
+        </div>
         <div className="imb-nav-items">
-          {miniapp.map((item) => (
+          {main.map((item) => (
             <NavButton key={item.module} item={item} collapsed={collapsed} />
           ))}
         </div>
         <div className="imb-nav-divider" />
-        <div className="imb-nav-items">
-          {chats.map((item) => (
+        <div className="imb-scroll">
+          {miniapp.length > 0 && (
+            <div className="imb-nav-items">
+              {miniapp.map((item) => (
+                <NavButton
+                  key={item.module}
+                  item={item}
+                  collapsed={collapsed}
+                />
+              ))}
+            </div>
+          )}
+          {openedChats.length > 0 && (
+            <>
+              {miniapp.length > 0 && <div className="imb-nav-divider" />}
+              <div className="imb-nav-items">
+                {openedChats.map((chat) => (
+                  <NavChatButton
+                    key={chat.id}
+                    chat={chat}
+                    collapsed={collapsed}
+                    active={module === "group-chat" && activeChatId === chat.id}
+                    onClick={() => appStore.activateChat(chat.id)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setCtxMenu({
+                        x: e.clientX,
+                        y: e.clientY,
+                        items: [
+                          {
+                            key: "close",
+                            label: t("Close"),
+                            onSelect: () => appStore.closeChat(chat.id),
+                          },
+                        ],
+                      });
+                    }}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+        <div className="imb-nav-spacer" />
+        <div className="imb-nav-items imb-nav-bottom">
+          <Tooltip
+            content={collapsed ? t("Expand") : t("Collapse")}
+            placement="right"
+            disabled={!collapsed}
+          >
+            <button
+              type="button"
+              className="imb-nav-toggle"
+              aria-label={collapsed ? t("Expand") : t("Collapse")}
+              onClick={onToggle}
+            >
+              <IconCollapse className="imb-icon" />
+              <span>{t("Collapse")}</span>
+            </button>
+          </Tooltip>
+          {bottom.map((item) => (
             <NavButton key={item.module} item={item} collapsed={collapsed} />
           ))}
         </div>
-      </div>
-      <div className="imb-nav-spacer" />
-      <div className="imb-nav-items imb-nav-bottom">
-        <Tooltip
-          content={collapsed ? t("Expand") : t("Collapse")}
-          placement="right"
-          disabled={!collapsed}
-        >
-          <button
-            type="button"
-            className="imb-nav-toggle"
-            aria-label={collapsed ? t("Expand") : t("Collapse")}
-            onClick={onToggle}
-          >
-            <IconCollapse className="imb-icon" />
-            <span>{t("Collapse")}</span>
-          </button>
-        </Tooltip>
-        {bottom.map((item) => (
-          <NavButton key={item.module} item={item} collapsed={collapsed} />
-        ))}
-      </div>
-    </nav>
+      </nav>
+      <ContextMenu state={ctxMenu} onClose={() => setCtxMenu(null)} />
+    </>
   );
 }
 
@@ -161,6 +199,39 @@ function NavButton({ item, collapsed }: NavButtonProps): React.JSX.Element {
       >
         <Icon className="imb-icon" />
         <span>{t(item.labelKey)}</span>
+      </button>
+    </Tooltip>
+  );
+}
+
+type NavChatButtonProps = {
+  chat: NavChat;
+  collapsed: boolean;
+  active: boolean;
+  onClick: () => void;
+  onContextMenu: (event: React.MouseEvent) => void;
+};
+
+/** Nav entry for a group chat opened from a `chat`-kind card. */
+function NavChatButton({
+  chat,
+  collapsed,
+  active,
+  onClick,
+  onContextMenu,
+}: NavChatButtonProps): React.JSX.Element {
+  return (
+    <Tooltip content={chat.title} placement="right" disabled={!collapsed}>
+      <button
+        type="button"
+        className={cls("imb-nav-item", active && "imb-is-active")}
+        aria-current={active ? "page" : undefined}
+        aria-label={collapsed ? chat.title : undefined}
+        onClick={onClick}
+        onContextMenu={onContextMenu}
+      >
+        <GroupAvatar participants={chat.participants} size={20} />
+        <span>{chat.title}</span>
       </button>
     </Tooltip>
   );

@@ -1,0 +1,41 @@
+.imb-group-avatar {
+  display: grid;
+  gap: 2px;
+  overflow: hidden;
+  background: var(--imb-border);
+  flex: none;
+}
+
+/* 1 member fills the square; 2 sit side by side; 3 use one tall left tile plus
+   two stacked right tiles; 4 use a 2x2 grid (WeChat convention). */
+.imb-group-avatar.imb-count-0,
+.imb-group-avatar.imb-count-1 {
+  grid-template: 1fr / 1fr;
+}
+
+.imb-group-avatar.imb-count-2 {
+  grid-template: 1fr / 1fr 1fr;
+}
+
+.imb-group-avatar.imb-count-3,
+.imb-group-avatar.imb-count-4 {
+  grid-template: 1fr 1fr / 1fr 1fr;
+}
+
+.imb-group-avatar.imb-count-3 > :first-child {
+  grid-row: 1 / span 2;
+}
+
+/* Stretch every tile to its grid cell and square it off (individual avatars
+   are circular elsewhere). */
+.imb-group-avatar .imb-avatar {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.imb-group-avatar .imb-avatar img {
+  border-radius: 0;
+}

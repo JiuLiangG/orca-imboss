@@ -1,5 +1,7 @@
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "@shared/constants/locales";
+import { SettingKeys } from "@shared/constants/settings";
 import { t } from "@shared/l10n";
+import type { WorkDirState } from "@shared/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useApp } from "../../../../app-store";
 import { setLocale } from "../../../../locale";
@@ -16,8 +18,6 @@ interface EnvVar {
   value: string;
 }
 
-const ENV_KEY = "env";
-const DEFAULT_MODEL_KEY = "defaultModel";
 const SAVE_DEBOUNCE_MS = 400;
 
 export function SettingsGeneral(): React.JSX.Element {
@@ -25,27 +25,32 @@ export function SettingsGeneral(): React.JSX.Element {
   const [defaultModel, setDefaultModel] = useState("");
   const [envVars, setEnvVars] = useState<EnvVar[]>([]);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const [workdir, setWorkdir] = useState<WorkDirState | null>(null);
+  const [workdirError, setWorkdirError] = useState<string | null>(null);
   const envTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const persistEnv = useCallback((next: EnvVar[]): void => {
     if (envTimerRef.current) clearTimeout(envTimerRef.current);
     envTimerRef.current = setTimeout(() => {
-      void imb.settings.set(ENV_KEY, JSON.stringify(next));
+      void imb.settings.set(SettingKeys.UserEnv, JSON.stringify(next));
     }, SAVE_DEBOUNCE_MS);
   }, []);
 
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const [defaultModelStored, envStored, models] = await Promise.all([
-        imb.settings.get(DEFAULT_MODEL_KEY),
-        imb.settings.get(ENV_KEY),
-        imb.models.list(),
-      ]);
+      const [defaultModelStored, envStored, models, workDir] =
+        await Promise.all([
+          imb.settings.get(SettingKeys.DefaultModel),
+          imb.settings.get(SettingKeys.UserEnv),
+          imb.models.list(),
+          imb.workdir.get(),
+        ]);
       if (!alive) return;
       setDefaultModel(defaultModelStored ?? "");
       setEnvVars(parseEnv(envStored));
       setModelOptions(models.map((m) => `${m.provider}/${m.id}`));
+      setWorkdir(workDir);
     })();
     return () => {
       alive = false;
@@ -55,7 +60,17 @@ export function SettingsGeneral(): React.JSX.Element {
 
   function changeDefaultModel(value: string): void {
     setDefaultModel(value);
-    void imb.settings.set(DEFAULT_MODEL_KEY, value);
+    void imb.settings.set(SettingKeys.DefaultModel, value);
+  }
+
+  async function chooseWorkdir(): Promise<void> {
+    setWorkdirError(null);
+    try {
+      const next = await imb.workdir.choose();
+      if (next) setWorkdir(next);
+    } catch (err) {
+      setWorkdirError(err instanceof Error ? err.message : String(err));
+    }
   }
 
   function updateEnv(next: EnvVar[]): void {
@@ -115,6 +130,34 @@ export function SettingsGeneral(): React.JSX.Element {
             ]}
             onChange={changeDefaultModel}
           />
+        </Field>
+
+        <Field
+          label={t("Working directory")}
+          hint={t(
+            "The working directory (cwd) for agent sessions — used by shell commands and project context files. Defaults to the app's own workdir.",
+          )}
+          error={workdirError ?? undefined}
+        >
+          <div className="imb-settings-workdir-row">
+            <Input
+              className="imb-workdir-path"
+              value={workdir?.effective ?? ""}
+              readOnly
+              mono
+              aria-label={t("Working directory")}
+            />
+            {workdir?.isDefault && (
+              <span className="imb-workdir-badge">{t("Default")}</span>
+            )}
+            <button
+              type="button"
+              className="imb-env-add-btn"
+              onClick={() => void chooseWorkdir()}
+            >
+              {t("Browse…")}
+            </button>
+          </div>
         </Field>
 
         <div className="imb-settings-env-section">

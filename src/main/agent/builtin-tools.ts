@@ -11,14 +11,13 @@ import type {
   EmployeeSession,
   Message,
   MessageAttachment,
+  MessageStep,
   TeamToolOptions,
 } from "@shared/types";
-import { mkdir, stat, writeFile } from "fs/promises";
-import { homedir } from "os";
-import { basename, dirname, extname, join } from "path";
+import { stat } from "fs/promises";
+import { basename, extname } from "path";
 import { Type } from "typebox";
 import * as cron from "../cron";
-import { getAgentSessionsDir } from "../data-dir";
 import { getDB } from "../db";
 import * as dbChats from "../db/chats";
 import { parseCronJobId } from "../db/cron";
@@ -26,7 +25,11 @@ import * as dbEmployees from "../db/employees";
 import * as dbMessages from "../db/messages";
 import * as dbSessions from "../db/sessions";
 import { notifyUnread } from "../notifications";
-import { loadPiSdk } from "./pi-sdk";
+import {
+  ensureSessionFile,
+  materializeSessionFile,
+  sessionPathFor,
+} from "./session-files";
 import { deliver } from "./session-queue";
 
 /**
@@ -37,16 +40,16 @@ import { deliver } from "./session-queue";
  * participant agents work inside chats. Backed by a persistent per-(employee,
  * chat) Pi session with a read cursor.
  *
- * The tool set is role-based: the assistant (employee id 0) gets every
- * orchestration tool (`imb_set_employees`, `imb_create_chat`,
- * `imb_send_message`, `imb_read_chat`, `imb_list_employees`, `imb_notify`,
- * `imb_set_cronjob`, `imb_remove_cronjob`); a participant employee gets
- * `imb_send_message`, `imb_read_chat`, `imb_ask` and `imb_answer`, plus
- * `imb_set_cronjob` and/or `imb_remove_cronjob` when the employee opted in via
- * their "Linked MCP" list. All agent runs are serialized per (employee, chat)
- * via the session queue. `createTeamToolDefinitions` captures the calling
- * agent's identity so `imb_read_chat` knows who is reading and internal sends
- * know who is sending.
+ * The tool set is role-based: the assistant (employee id 0) gets the
+ * orchestration tools (`imb_set_employees`, `imb_create_chat`,
+ * `imb_send_message`, `imb_read_chat`, `imb_list_employees`, `imb_notify`);
+ * a participant employee gets `imb_send_message`, `imb_read_chat`, `imb_ask`
+ * and `imb_answer`, plus `imb_set_cronjob` and/or `imb_remove_cronjob` when
+ * the employee opted in via their "Linked MCP" list. The two cron tools are
+ * deliberately NOT part of the assistant's tool set. All agent runs are
+ * serialized per (employee, chat) via the session queue.
+ * `createTeamToolDefinitions` captures the calling agent's identity so
+ * `imb_read_chat` knows who is reading and internal sends know who is sending.
  */
 
 const getEmployee = dbEmployees.getEmployee;
@@ -81,63 +84,9 @@ const MIME_BY_EXT: Record<string, string> = {
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 };
 
-/** Path of a persistent per-(employee, chat) Pi session file. */
-function sessionPathFor(chatId: number, employeeId: number): string {
-  return join(
-    getAgentSessionsDir(),
-    "chats",
-    String(chatId),
-    `${employeeId}.jsonl`,
-  );
-}
-
-/**
- * Materialize an empty Pi session file at `path` so it can be resumed later.
- *
- * `SessionManager.open` on a zero-byte file immediately writes a valid session
- * header, which is exactly the deterministic file we want on disk from the
- * start. Best-effort: a materialization failure is logged and never thrown, so
- * a file problem can never roll back a committed DB transaction.
- */
-async function materializeSessionFile(path: string): Promise<void> {
-  const pi = await loadPiSdk();
-  const dir = dirname(path);
-  await mkdir(dir, { recursive: true });
-  try {
-    await writeFile(path, "", { flag: "wx" });
-  } catch {
-    // File already exists (valid or empty) — opening below handles it.
-  }
-  try {
-    // Empty file => open writes a valid header; existing session => loads.
-    pi.SessionManager.open(path, dir, homedir());
-  } catch (err) {
-    console.error(
-      `[builtin-tools] Failed to materialize session ${path}:`,
-      err instanceof Error ? err.message : err,
-    );
-  }
-}
-
-/** Ensure a session row exists for (employee, chat), creating row + file if not. */
-async function ensureSession(
-  employeeId: number,
-  chatId: number,
-): Promise<void> {
-  if (dbSessions.getSession(employeeId, chatId)) return;
-  const path = sessionPathFor(chatId, employeeId);
-  try {
-    await materializeSessionFile(path);
-  } catch (err) {
-    console.error(
-      `[builtin-tools] Failed to materialize session for ${employeeId} in chat ${chatId}:`,
-      err instanceof Error ? err.message : err,
-    );
-  }
-  // Record the row even when the file write failed: a later resume re-opens
-  // (and re-creates the header) from the empty file.
-  dbSessions.setSession(employeeId, chatId, path);
-}
+// Session file materialization (`sessionPathFor` / `materializeSessionFile` /
+// `ensureSessionFile`) lives in `./session-files`, shared with the session
+// queue so every run — including the assistant's root chat — is persisted.
 
 /**
  * Fire-and-forget a participant's agent turn, serialized per (employee, chat)
@@ -190,7 +139,7 @@ async function resolveAttachments(
 
 /**
  * Shared send pipeline used by the `send_message` tool and by internal sends
- * (`create_chat.card`, `add_participant.join_notice`).
+ * (`create_chat`, `add_participant.join_notice`).
  *
  * The tool enforces that the sender is an active non-disabled participant of
  * the chat; internal sends pass `skipSenderCheck` so the orchestrating
@@ -203,6 +152,7 @@ async function performSendMessage(
     chatId: number;
     kind?: string;
     content: string;
+    steps?: MessageStep[];
     attachments?: string[];
     notify?: number[];
     notifyPrompt?: string;
@@ -228,6 +178,7 @@ async function performSendMessage(
     input.content,
     {
       kind: input.kind ?? "text",
+      steps: input.steps,
       attachments,
     },
   );
@@ -236,7 +187,7 @@ async function performSendMessage(
     if (!chat.participants.includes(pid)) continue;
     const target = dbEmployees.getEmployee(pid);
     if (!target || target.disabled) continue;
-    await ensureSession(pid, input.chatId);
+    await ensureSessionFile(pid, input.chatId);
     fireAndForgetPrompt(
       env,
       pid,
@@ -255,6 +206,31 @@ function toolResult(value: unknown): AgentToolResult<unknown> {
   };
 }
 
+/**
+ * Log one `imb_*` tool invocation (name + caller + args). Entry-only by design:
+ * no outcome/duration is recorded. Best-effort — a circular/unserializable
+ * payload must never break a tool. Args are capped so huge prompts never flood
+ * the console.
+ */
+function logToolCall(
+  toolName: string,
+  employeeId: number,
+  chatId: number,
+  params: unknown,
+): void {
+  let args: string;
+  try {
+    args = JSON.stringify(params) ?? String(params);
+  } catch {
+    args = "[unserializable]";
+  }
+  const max = 2000;
+  const capped = args.length > max ? `${args.slice(0, max)}…` : args;
+  console.log(
+    `[imb-tool] ${toolName} caller=${employeeId}/${chatId} args=${capped}`,
+  );
+}
+
 /** Validate an employee id is an active (non-disabled) employee. */
 function assertActiveEmployee(employeeId: number): void {
   const employee = getEmployee(employeeId);
@@ -268,91 +244,99 @@ function assertActiveEmployee(employeeId: number): void {
 // ---------------------------------------------------------------------------
 
 /** `imb_set_employees` — batch create (omit `id`) or update (pass `id`) employees. */
-const setEmployeesTool: AnyPiTool = {
-  name: "imb_set_employees",
-  label: "Set employees",
-  description:
-    "Batch create or update employees (name, role, system prompt, linked MCP servers, skills, model). " +
-    "Each item omits `id` to create a new employee or passes `id` to update an existing one. " +
-    "Returns the array of employee ids created or updated.",
-  promptSnippet: "imb_set_employees (batch create/edit employees)",
-  parameters: Type.Object({
-    employees: Type.Array(
-      Type.Object({
-        id: Type.Optional(Type.Integer({ minimum: 1 })),
-        name: Type.Optional(Type.String({ maxLength: 200 })),
-        role: Type.Optional(Type.String({ maxLength: 200 })),
-        systemPrompt: Type.Optional(Type.String({ maxLength: 100000 })),
-        mcp: Type.Optional(
-          Type.Array(Type.String({ maxLength: 256 }), { maxItems: 256 }),
-        ),
-        skills: Type.Optional(
-          Type.Array(Type.String({ maxLength: 256 }), { maxItems: 256 }),
-        ),
-        modelId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
-      }),
-      { minItems: 1, maxItems: 50 },
-    ),
-  }),
-  execute: async (_toolCallId, params) => {
-    const input = params as {
-      employees: {
-        id?: number;
-        name?: string;
-        role?: string;
-        systemPrompt?: string;
-        mcp?: string[];
-        skills?: string[];
-        modelId?: string | null;
-      }[];
-    };
-    const ids = dbEmployees.upsertEmployees(
-      input.employees.map((item) => ({ ...item })),
-    );
-    return toolResult({ ids });
-  },
-};
+function setEmployeesTool(employeeId: number, chatId: number): AnyPiTool {
+  return {
+    name: "imb_set_employees",
+    label: "Set employees",
+    description:
+      "Batch create or update employees (name, role, system prompt, linked MCP servers, skills, model). " +
+      "Each item omits `id` to create a new employee or passes `id` to update an existing one. " +
+      "Returns the array of employee ids created or updated.",
+    promptSnippet: "batch create/edit employees",
+    parameters: Type.Object({
+      employees: Type.Array(
+        Type.Object({
+          id: Type.Optional(Type.Integer({ minimum: 1 })),
+          name: Type.Optional(Type.String({ maxLength: 200 })),
+          role: Type.Optional(Type.String({ maxLength: 200 })),
+          systemPrompt: Type.Optional(Type.String({ maxLength: 100000 })),
+          mcp: Type.Optional(
+            Type.Array(Type.String({ maxLength: 256 }), { maxItems: 256 }),
+          ),
+          skills: Type.Optional(
+            Type.Array(Type.String({ maxLength: 256 }), { maxItems: 256 }),
+          ),
+          modelId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+        }),
+        { minItems: 1, maxItems: 50 },
+      ),
+    }),
+    execute: async (_toolCallId, params) => {
+      logToolCall("imb_set_employees", employeeId, chatId, params);
+      const input = params as {
+        employees: {
+          id?: number;
+          name?: string;
+          role?: string;
+          systemPrompt?: string;
+          mcp?: string[];
+          skills?: string[];
+          modelId?: string | null;
+        }[];
+      };
+      const ids = dbEmployees.upsertEmployees(
+        input.employees.map((item) => ({ ...item })),
+      );
+      return toolResult({ ids });
+    },
+  };
+}
 
 /** `imb_create_chat` — new chat + one persistent session per participant. */
-function createChatTool(env: AgentEnvironment): AnyPiTool {
+function createChatTool(
+  env: AgentEnvironment,
+  employeeId: number,
+  callingChatId: number,
+): AnyPiTool {
   return {
     name: "imb_create_chat",
     label: "Create chat",
     description:
       "Create a new chat with the given employee participants, initializing one persistent agent session per participant. " +
-      "Optionally notify an existing chat via `card`.",
-    promptSnippet: "imb_create_chat (new team chat)",
+      "The assistant always joins, and the chat that spawned this one is linked as `from_chat_id`. " +
+      "Participants are NOT notified or started automatically — assign their work afterwards with `imb_send_message`, " +
+      "passing their ids in `notify` to wake them.",
+    promptSnippet: "new team chat",
     parameters: Type.Object({
       title: Type.String({ minLength: 1, maxLength: 200 }),
       participants: Type.Array(Type.Integer({ minimum: 1 }), { minItems: 1 }),
-      card: Type.Optional(Type.Object({ chatID: Type.String() })),
     }),
     execute: async (_toolCallId, params) => {
+      logToolCall("imb_create_chat", employeeId, callingChatId, params);
       const input = params as {
         title: string;
         participants: number[];
-        card?: { chatID: string };
       };
       for (const pid of input.participants) assertActiveEmployee(pid);
 
-      // An optional `card.chatID` links the new group chat back to the user
-      // chat that spawned it (`from`). Validate it before committing anything
-      // so an invalid id never leaves a half-created chat behind.
-      let cardChatId: number | undefined;
-      if (input.card !== undefined) {
-        cardChatId = Number(input.card.chatID);
-        if (!Number.isSafeInteger(cardChatId) || cardChatId <= 0) {
-          throw new Error("card.chatID must be a valid chat id.");
-        }
+      // The spawning chat must exist so the new chat can link back to it.
+      // Validate before committing anything so a bad id never half-creates a
+      // chat.
+      if (!dbChats.getChat(callingChatId)) {
+        throw new Error("Spawning chat does not exist.");
       }
+
+      // The assistant joins every task chat it creates so participants can
+      // notify it and it can post through the normal `imb_send_message` path.
+      const participants = [...new Set([ASSISTANT_ID, ...input.participants])];
 
       const db = getDB();
       // Atomic: chat row + one session row per participant commit together.
       const { chat, sessionRecords } = db.transaction(() => {
         const chat = dbChats.createChat(
           input.title,
-          input.participants,
-          cardChatId,
+          participants,
+          callingChatId,
         );
         const records: EmployeeSession[] = [];
         for (const pid of chat.participants) {
@@ -375,23 +359,17 @@ function createChatTool(env: AgentEnvironment): AnyPiTool {
         ),
       );
 
-      if (cardChatId !== undefined) {
-        await performSendMessage(env, {
-          senderEmployeeId: ASSISTANT_ID,
-          chatId: cardChatId,
-          kind: "chat",
-          content: String(chat.id),
-          skipSenderCheck: true,
-        });
-        for (const record of sessionRecords) {
-          fireAndForgetPrompt(
-            env,
-            record.employeeId,
-            chat.id,
-            READ_CHAT_PROMPT,
-          );
-        }
-      }
+      // Link the new chat back to its spawning chat with a `chat`-kind card.
+      // No `notify` on purpose: creating a chat must NOT start any participant's
+      // agent. They are woken only when an assignment reaches them through
+      // `imb_send_message` with a `notify` list.
+      await performSendMessage(env, {
+        senderEmployeeId: ASSISTANT_ID,
+        chatId: callingChatId,
+        kind: "chat",
+        content: String(chat.id),
+        skipSenderCheck: true,
+      });
 
       return toolResult({ chat, sessions: sessionRecords });
     },
@@ -399,38 +377,66 @@ function createChatTool(env: AgentEnvironment): AnyPiTool {
 }
 
 /** `imb_send_message` — post as an active participant, optionally notifying others. */
-function sendMessageTool(env: AgentEnvironment): AnyPiTool {
+function sendMessageTool(
+  env: AgentEnvironment,
+  employeeId: number,
+  chatId: number,
+): AnyPiTool {
   return {
     name: "imb_send_message",
     label: "Send message",
     description:
       "Send a message into a chat as one of the active participants, with optional file-path attachments " +
-      "and notifications to other participants.",
-    promptSnippet: "imb_send_message (post to a chat)",
+      "and notifications to other participants. Use `kind` `report` to report a finished task's result; " +
+      "the assistant may post `kind` `progress` with `steps` to publish a progress card.",
+    promptSnippet: "post to a chat",
     parameters: Type.Object({
       senderEmployeeId: Type.Integer({ minimum: 0 }),
       chatId: Type.Integer({ minimum: 1 }),
       kind: Type.Optional(Type.String({ maxLength: 64 })),
       content: Type.String({ minLength: 1, maxLength: 100000 }),
+      steps: Type.Optional(
+        Type.Array(
+          Type.Object({
+            name: Type.String({ minLength: 1, maxLength: 256 }),
+            role: Type.String({ maxLength: 256 }),
+            status: Type.Union([Type.Literal("done"), Type.Literal("busy")]),
+          }),
+          { maxItems: 64 },
+        ),
+      ),
       attachments: Type.Optional(Type.Array(Type.String(), { maxItems: 16 })),
       notify: Type.Optional(
         Type.Array(Type.Integer({ minimum: 1 }), { maxItems: 64 }),
       ),
     }),
     execute: async (_toolCallId, params) => {
+      logToolCall("imb_send_message", employeeId, chatId, params);
       const input = params as {
         senderEmployeeId: number;
         chatId: number;
         kind?: string;
         content: string;
+        steps?: MessageStep[];
         attachments?: string[];
         notify?: number[];
       };
+      // `steps` only make sense for a progress card, which is assistant-only.
+      if (input.steps !== undefined && input.kind !== "progress") {
+        throw new Error("`steps` is only valid with kind `progress`.");
+      }
+      if (
+        (input.kind === "progress" || input.steps !== undefined) &&
+        employeeId !== ASSISTANT_ID
+      ) {
+        throw new Error("Only the assistant can post task progress.");
+      }
       const message = await performSendMessage(env, {
         senderEmployeeId: input.senderEmployeeId,
         chatId: input.chatId,
         kind: input.kind,
         content: input.content,
+        steps: input.steps,
         attachments: input.attachments,
         notify: input.notify,
       });
@@ -440,21 +446,22 @@ function sendMessageTool(env: AgentEnvironment): AnyPiTool {
 }
 
 /** `imb_read_chat` — advance the calling agent's cursor and return new messages. */
-function readChatTool(employeeId: number): AnyPiTool {
+function readChatTool(employeeId: number, chatId: number): AnyPiTool {
   return {
     name: "imb_read_chat",
     label: "Read chat",
     description:
       "Read the latest messages in a chat (after your read cursor) and advance that cursor.",
-    promptSnippet: "imb_read_chat (consume new messages)",
+    promptSnippet: "consume new messages",
     parameters: Type.Object({
       chatId: Type.Integer({ minimum: 1 }),
     }),
     execute: async (_toolCallId, params) => {
+      logToolCall("imb_read_chat", employeeId, chatId, params);
       const input = params as { chatId: number };
       const chat = dbChats.getChat(input.chatId);
       if (!chat) throw new Error("Chat does not exist.");
-      await ensureSession(employeeId, input.chatId);
+      await ensureSessionFile(employeeId, input.chatId);
       const cursor = dbSessions.getReadCursor(employeeId, input.chatId);
       const messages = dbMessages.listMessagesAfter(input.chatId, cursor);
       const nextCursor =
@@ -475,42 +482,48 @@ function readChatTool(employeeId: number): AnyPiTool {
 }
 
 /** `imb_list_employees` — active employees, excluding the built-in assistant. */
-const listEmployeesTool: AnyPiTool = {
-  name: "imb_list_employees",
-  label: "List employees",
-  description:
-    "List all active employees (excluding the built-in assistant), ordered by id.",
-  promptSnippet: "imb_list_employees (active team members)",
-  parameters: Type.Object({}),
-  execute: async () => {
-    const employees = dbEmployees
-      .listEmployees()
-      .filter((employee) => employee.id !== ASSISTANT_ID);
-    return toolResult(employees);
-  },
-};
+function listEmployeesTool(employeeId: number, chatId: number): AnyPiTool {
+  return {
+    name: "imb_list_employees",
+    label: "List employees",
+    description:
+      "List all active employees (excluding the built-in assistant), ordered by id.",
+    promptSnippet: "active team members",
+    parameters: Type.Object({}),
+    execute: async (_toolCallId, params) => {
+      logToolCall("imb_list_employees", employeeId, chatId, params);
+      const employees = dbEmployees
+        .listEmployees()
+        .filter((employee) => employee.id !== ASSISTANT_ID);
+      return toolResult(employees);
+    },
+  };
+}
 
 /** `imb_notify` — bump a chat's unread and optionally raise an OS notification. */
-const notifyTool: AnyPiTool = {
-  name: "imb_notify",
-  label: "Notify",
-  description:
-    "Add a non-negative delta to a chat's unread counter and, when the app window " +
-    "is not focused, show an OS notification that focuses the app and jumps to that chat.",
-  promptSnippet: "imb_notify (bump unread / OS notification)",
-  parameters: Type.Object({
-    chatId: Type.Integer({ minimum: 1 }),
-    unread: Type.Integer({ minimum: 0 }),
-    text: Type.String({ minLength: 1, maxLength: 1000 }),
-  }),
-  execute: async (_toolCallId, params) => {
-    const input = params as { chatId: number; unread: number; text: string };
-    const chat = dbChats.getChat(input.chatId);
-    if (!chat) throw new Error("Chat does not exist.");
-    const newUnread = notifyUnread(input.chatId, input.unread, input.text);
-    return toolResult({ chatId: input.chatId, unread: newUnread });
-  },
-};
+function notifyTool(employeeId: number, chatId: number): AnyPiTool {
+  return {
+    name: "imb_notify",
+    label: "Notify",
+    description:
+      "Add a non-negative delta to a chat's unread counter and, when the app window " +
+      "is not focused, show an OS notification that focuses the app and jumps to that chat.",
+    promptSnippet: "bump unread / OS notification",
+    parameters: Type.Object({
+      chatId: Type.Integer({ minimum: 1 }),
+      unread: Type.Integer({ minimum: 0 }),
+      text: Type.String({ minLength: 1, maxLength: 1000 }),
+    }),
+    execute: async (_toolCallId, params) => {
+      logToolCall("imb_notify", employeeId, chatId, params);
+      const input = params as { chatId: number; unread: number; text: string };
+      const chat = dbChats.getChat(input.chatId);
+      if (!chat) throw new Error("Chat does not exist.");
+      const newUnread = notifyUnread(input.chatId, input.unread, input.text);
+      return toolResult({ chatId: input.chatId, unread: newUnread });
+    },
+  };
+}
 
 /**
  * `imb_set_cronjob` — create/update a scheduled task.
@@ -518,21 +531,22 @@ const notifyTool: AnyPiTool = {
  * A participant (non-assistant) may only schedule for themselves, within a
  * chat they participate in; the assistant (id 0) remains unrestricted.
  */
-function setCronjobTool(employeeId: number): AnyPiTool {
+function setCronjobTool(employeeId: number, chatId: number): AnyPiTool {
   return {
     name: "imb_set_cronjob",
     label: "Set cron job",
     description:
       "Create or update a scheduled task. The id is a composite `chatId/employeeId/jobId`. " +
-      "On each trigger the (employee, chat) agent session is loaded, the content is delivered, " +
-      "and the reply is persisted as the employee's message.",
-    promptSnippet: "imb_set_cronjob (schedule a task)",
+      "On each trigger the content is delivered to the (employee, chat) agent session; " +
+      "the agent must post its result with `imb_send_message`.",
+    promptSnippet: "schedule a task",
     parameters: Type.Object({
       id: Type.String({ minLength: 1, maxLength: 256 }),
       schedule: Type.String({ minLength: 1, maxLength: 128 }),
       content: Type.String({ minLength: 1, maxLength: 100000 }),
     }),
     execute: async (_toolCallId, params) => {
+      logToolCall("imb_set_cronjob", employeeId, chatId, params);
       const input = params as {
         id: string;
         schedule: string;
@@ -568,16 +582,17 @@ function setCronjobTool(employeeId: number): AnyPiTool {
  *
  * A participant may only remove their own cron jobs; the assistant can remove any.
  */
-function removeCronjobTool(employeeId: number): AnyPiTool {
+function removeCronjobTool(employeeId: number, chatId: number): AnyPiTool {
   return {
     name: "imb_remove_cronjob",
     label: "Remove cron job",
     description: "Delete a scheduled task by its id.",
-    promptSnippet: "imb_remove_cronjob (delete a scheduled task)",
+    promptSnippet: "delete a scheduled task",
     parameters: Type.Object({
       id: Type.String({ minLength: 1, maxLength: 256 }),
     }),
     execute: async (_toolCallId, params) => {
+      logToolCall("imb_remove_cronjob", employeeId, chatId, params);
       const input = params as { id: string };
       if (employeeId !== ASSISTANT_ID) {
         const parsed = parseCronJobId(input.id);
@@ -591,13 +606,17 @@ function removeCronjobTool(employeeId: number): AnyPiTool {
 }
 
 /** `imb_add_participant` — add members to a chat, notify, and prompt their agents. */
-function addParticipantTool(env: AgentEnvironment): AnyPiTool {
+function addParticipantTool(
+  env: AgentEnvironment,
+  employeeId: number,
+  chatId: number,
+): AnyPiTool {
   return {
     name: "imb_add_participant",
     label: "Add participant",
     description:
       "Add participants to an existing chat, send a join notice, and prompt each new participant's agent session.",
-    promptSnippet: "imb_add_participant (add members to a chat)",
+    promptSnippet: "add members to a chat",
     parameters: Type.Object({
       chatId: Type.Integer({ minimum: 1 }),
       participants: Type.Array(
@@ -609,6 +628,7 @@ function addParticipantTool(env: AgentEnvironment): AnyPiTool {
       ),
     }),
     execute: async (_toolCallId, params) => {
+      logToolCall("imb_add_participant", employeeId, chatId, params);
       const input = params as {
         chatId: number;
         participants: { employeeID: number; prompt: string }[];
@@ -642,7 +662,7 @@ function addParticipantTool(env: AgentEnvironment): AnyPiTool {
 
         const sessions: EmployeeSession[] = [];
         for (const participant of newParticipants) {
-          await ensureSession(participant.employeeID, input.chatId);
+          await ensureSessionFile(participant.employeeID, input.chatId);
           const record = dbSessions.getSession(
             participant.employeeID,
             input.chatId,
@@ -668,7 +688,11 @@ function addParticipantTool(env: AgentEnvironment): AnyPiTool {
 }
 
 /** `imb_ask` — post a structured question set into a chat, notifying respondents. */
-function imbAskTool(env: AgentEnvironment): AnyPiTool {
+function imbAskTool(
+  env: AgentEnvironment,
+  employeeId: number,
+  chatId: number,
+): AnyPiTool {
   return {
     name: "imb_ask",
     label: "Ask a question",
@@ -676,7 +700,7 @@ function imbAskTool(env: AgentEnvironment): AnyPiTool {
       "Post a question set into a chat as one of the active participants and notify the specified " +
       "employees to answer. Each question offers candidate options (single or multiple) and/or a " +
       "free-form answer; the message body is the JSON serialization of the question set.",
-    promptSnippet: "imb_ask (post a question set)",
+    promptSnippet: "post a question set",
     parameters: Type.Object({
       senderEmployeeId: Type.Integer({ minimum: 0 }),
       chatId: Type.Integer({ minimum: 1 }),
@@ -704,6 +728,7 @@ function imbAskTool(env: AgentEnvironment): AnyPiTool {
       attachments: Type.Optional(Type.Array(Type.String(), { maxItems: 16 })),
     }),
     execute: async (_toolCallId, params) => {
+      logToolCall("imb_ask", employeeId, chatId, params);
       const input = params as {
         senderEmployeeId: number;
         chatId: number;
@@ -732,14 +757,18 @@ function imbAskTool(env: AgentEnvironment): AnyPiTool {
 }
 
 /** `imb_answer` — post an answer to a question set into a chat, notifying others. */
-function imbAnswerTool(env: AgentEnvironment): AnyPiTool {
+function imbAnswerTool(
+  env: AgentEnvironment,
+  employeeId: number,
+  chatId: number,
+): AnyPiTool {
   return {
     name: "imb_answer",
     label: "Answer a question",
     description:
       "Post an answer to a previous question set into a chat as one of the active participants and " +
       "notify the specified employees. The message body is the JSON serialization of the answers.",
-    promptSnippet: "imb_answer (post an answer)",
+    promptSnippet: "post an answer",
     parameters: Type.Object({
       senderEmployeeId: Type.Integer({ minimum: 0 }),
       chatId: Type.Integer({ minimum: 1 }),
@@ -762,6 +791,7 @@ function imbAnswerTool(env: AgentEnvironment): AnyPiTool {
       attachments: Type.Optional(Type.Array(Type.String(), { maxItems: 16 })),
     }),
     execute: async (_toolCallId, params) => {
+      logToolCall("imb_answer", employeeId, chatId, params);
       const input = params as {
         senderEmployeeId: number;
         chatId: number;
@@ -798,9 +828,8 @@ void addParticipantTool;
  * Build the role-based tool set for the calling agent.
  *
  * - Assistant (id 0): orchestration tools — `imb_set_employees`,
- *   `imb_create_chat`, `imb_read_chat`, `imb_list_employees`, `imb_notify`,
- *   `imb_set_cronjob`, `imb_remove_cronjob`; plus `imb_send_message`,
- *   `imb_ask` and `imb_answer`.
+ *   `imb_create_chat`, `imb_read_chat`, `imb_list_employees`, `imb_notify`;
+ *   plus `imb_send_message`, `imb_ask` and `imb_answer`. No cron tools.
  * - Participant employee: `imb_send_message`, `imb_read_chat`, `imb_ask`,
  *   `imb_answer`; plus `imb_set_cronjob` / `imb_remove_cronjob` when the
  *   corresponding opt-in marker is present in `mcp`.
@@ -808,33 +837,33 @@ void addParticipantTool;
 export function createTeamToolDefinitions(
   options: TeamToolOptions,
 ): AnyPiTool[] {
-  const { env, employeeId } = options;
+  const { env, employeeId, chatId } = options;
   const isAssistant = employeeId === ASSISTANT_ID;
   const mcp = options.mcp ?? [];
   const tools: AnyPiTool[] = [];
   if (isAssistant) {
-    tools.push(setEmployeesTool);
-    tools.push(createChatTool(env));
-    tools.push(listEmployeesTool);
-    tools.push(notifyTool);
-    tools.push(setCronjobTool(employeeId));
-    tools.push(removeCronjobTool(employeeId));
+    tools.push(setEmployeesTool(employeeId, chatId));
+    tools.push(createChatTool(env, employeeId, chatId));
+    tools.push(listEmployeesTool(employeeId, chatId));
+    tools.push(notifyTool(employeeId, chatId));
+    // `imb_set_cronjob` / `imb_remove_cronjob` are intentionally NOT given to
+    // the assistant; they remain opt-in for participant employees only.
   } else {
     // Cron tools are opt-in: registered only when the employee selected the
     // corresponding marker in their "Linked MCP" list.
     if (mcp.includes(BUILTIN_SET_CRON_MARKER)) {
-      tools.push(setCronjobTool(employeeId));
+      tools.push(setCronjobTool(employeeId, chatId));
     }
     if (mcp.includes(BUILTIN_REMOVE_CRON_MARKER)) {
-      tools.push(removeCronjobTool(employeeId));
+      tools.push(removeCronjobTool(employeeId, chatId));
     }
   }
-  tools.push(sendMessageTool(env));
-  tools.push(readChatTool(employeeId));
-  tools.push(imbAskTool(env));
-  tools.push(imbAnswerTool(env));
+  tools.push(sendMessageTool(env, employeeId, chatId));
+  tools.push(readChatTool(employeeId, chatId));
+  tools.push(imbAskTool(env, employeeId, chatId));
+  tools.push(imbAnswerTool(env, employeeId, chatId));
   // add_participant is intentionally disabled for all roles (see plan §10.1);
   // kept in the file for reference and updated if re-enabled.
-  // tools.push(addParticipantTool(env));
+  // tools.push(addParticipantTool(env, employeeId, chatId));
   return tools;
 }

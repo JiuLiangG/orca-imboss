@@ -1,5 +1,6 @@
 import type { Employee, EmployeeInput } from "@shared/types";
 import { ipcMain } from "electron";
+import { disposeForEmployee } from "../agent/session-queue";
 import { deleteAvatarFiles, saveAvatar } from "../avatars";
 import * as dbEmployees from "../db/employees";
 import { listByEmployee, unlinkSessionFile } from "../db/sessions";
@@ -28,6 +29,8 @@ export function registerEmployeeHandlers(): void {
     const safeId = assertInteger(id, "employee id");
     // Capture disk session file paths BEFORE the FK cascade wipes the rows.
     const records = listByEmployee(safeId);
+    // Tear down any warm agent sessions for this employee first.
+    await disposeForEmployee(safeId);
     const result = dbEmployees.deleteEmployee(safeId);
     // Only a hard delete removes disk artifacts; a soft delete (employee still
     // a chat participant) keeps the session/avatar state intact.

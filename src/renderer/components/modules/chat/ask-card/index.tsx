@@ -8,6 +8,8 @@ import "./index.css";
 
 export interface AskCardProps {
   message: Message;
+  /** Read-only rendering: inputs are disabled and the submit button is hidden. */
+  readonly?: boolean;
   /** Called after a successful answer so the chat thread can reload. */
   onAnswered: () => void;
 }
@@ -37,6 +39,7 @@ interface AnswerDraft {
  */
 export function AskCard({
   message,
+  readonly = false,
   onAnswered,
 }: AskCardProps): React.JSX.Element {
   const self = message.senderEmployeeId === null;
@@ -100,7 +103,7 @@ export function AskCard({
               <textarea
                 className="imb-ask-free"
                 value={textByQuestion[q.id] ?? ""}
-                disabled={submitted}
+                disabled={submitted || readonly}
                 onChange={(e) =>
                   setTextByQuestion((p) => ({ ...p, [q.id]: e.target.value }))
                 }
@@ -114,7 +117,7 @@ export function AskCard({
                       type="radio"
                       name={`imb-q-${q.id}`}
                       checked={selectedByQuestion[q.id]?.includes(opt) ?? false}
-                      disabled={submitted}
+                      disabled={submitted || readonly}
                       onChange={() => {
                         setSelectedByQuestion((p) => ({ ...p, [q.id]: [opt] }));
                         setTextByQuestion((p) => ({ ...p, [q.id]: "" }));
@@ -126,7 +129,7 @@ export function AskCard({
                 <input
                   className="imb-ask-other"
                   value={textByQuestion[q.id] ?? ""}
-                  disabled={submitted}
+                  disabled={submitted || readonly}
                   onChange={(e) => {
                     setTextByQuestion((p) => ({
                       ...p,
@@ -144,7 +147,7 @@ export function AskCard({
                     <input
                       type="checkbox"
                       checked={selectedByQuestion[q.id]?.includes(opt) ?? false}
-                      disabled={submitted}
+                      disabled={submitted || readonly}
                       onChange={() =>
                         setSelectedByQuestion((p) => {
                           const cur = p[q.id] ?? [];
@@ -161,7 +164,7 @@ export function AskCard({
                 <input
                   className="imb-ask-other"
                   value={textByQuestion[q.id] ?? ""}
-                  disabled={submitted}
+                  disabled={submitted || readonly}
                   onChange={(e) =>
                     setTextByQuestion((p) => ({ ...p, [q.id]: e.target.value }))
                   }
@@ -171,19 +174,22 @@ export function AskCard({
             )}
           </div>
         ))}
-        {submitted ? (
-          <div className="imb-ask-submitted">{t("Answered")}</div>
-        ) : (
-          <button
-            type="button"
-            className="imb-ask-submit"
-            disabled={submitting}
-            onClick={() => void handleSubmit()}
-          >
-            {t("Submit answer")}
-          </button>
+        {!readonly &&
+          (submitted ? (
+            <div className="imb-ask-submitted">{t("Answered")}</div>
+          ) : (
+            <button
+              type="button"
+              className="imb-ask-submit"
+              disabled={submitting}
+              onClick={() => void handleSubmit()}
+            >
+              {t("Submit answer")}
+            </button>
+          ))}
+        {!readonly && error !== null && (
+          <div className="imb-ask-error">{error}</div>
         )}
-        {error !== null && <div className="imb-ask-error">{error}</div>}
       </div>
     </div>
   );

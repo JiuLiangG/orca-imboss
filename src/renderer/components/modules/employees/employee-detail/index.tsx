@@ -190,7 +190,8 @@ export function EmployeeDetail({
               id={`emp-name-${employee.id}`}
               value={form.name ?? ""}
               placeholder={t("Unnamed")}
-              onChange={(e) => scheduleSave({ ...form, name: e.target.value })}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              onValueCommit={(name) => scheduleSave({ ...form, name })}
             />
           </Field>
           {!isAssistant && (
@@ -199,9 +200,8 @@ export function EmployeeDetail({
                 id={`emp-role-${employee.id}`}
                 value={form.role ?? ""}
                 placeholder={t("e.g. Researcher")}
-                onChange={(e) =>
-                  scheduleSave({ ...form, role: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, role: e.target.value })}
+                onValueCommit={(role) => scheduleSave({ ...form, role })}
               />
             </Field>
           )}
@@ -225,8 +225,9 @@ export function EmployeeDetail({
               "Define this employee's responsibilities and output standards…",
             )}
             minHeight={120}
-            onChange={(e) =>
-              scheduleSave({ ...form, systemPrompt: e.target.value })
+            onChange={(e) => setForm({ ...form, systemPrompt: e.target.value })}
+            onValueCommit={(systemPrompt) =>
+              scheduleSave({ ...form, systemPrompt })
             }
           />
         </Field>

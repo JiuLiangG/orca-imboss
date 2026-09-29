@@ -1,30 +1,43 @@
-import { DeliverOptions } from "@shared/types";
-import * as dbMessages from "../db/messages";
+import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import type { WebContents } from "electron";
+import { errorEvent, sendEventTo, toStreamEvent } from "./agent-events";
 import { getAgentEnvironment } from "./environment";
+import type { AgentSession as AppAgentSession } from "./session";
+import { ensureSessionFile } from "./session-files";
 
 /**
  * App-level serialized queue per `{employeeId}/{chatId}`.
  *
- * This is the single serialization point for ALL agent runs: a session that is
- * already processing a previous message queues the new one instead of running
- * concurrently (which would race on the same per-(employee, chat) Pi session
- * file). Each queued run builds a *fresh* resumed `AgentSession`, so config
- * edits (model / MCP / system prompt) apply on the next run.
+ * This is the single serialization point for ALL agent runs. Unlike the old
+ * per-message session, the app `AgentSession` wrapper is **persistent per
+ * key**: one live Pi session is reused for every message in the queue and is
+ * only rebuilt when its composition signature changes (the wrapper checks
+ * that on every `prepare()`). It is disposed after a 5-minute idle period.
  *
- * A failed run is logged and swallowed — it never loses the user's message
- * (the caller's own persistence already happened before `deliver` was called).
+ * Messages are plain text — no reply is captured or persisted; the agent
+ * posts its own output through `imb_*` tools. A failed run is reported to the
+ * windows bound to the key as an `error` event and never loses the caller's
+ * already-persisted message.
+ *
+ * This module also owns the session bindings: a renderer window "binds" a
+ * `(employee, chat)` key to receive that session's streamed events.
  */
 
-interface QueueItem {
-  text: string;
-  opts: DeliverOptions;
-}
+const IDLE_MS = 5 * 60 * 1000;
 
 interface QueueState {
   employeeId: number;
   chatId: number;
+  /** App wrapper, persistent across queued messages until idle disposal. */
+  session?: AppAgentSession;
   busy: boolean;
-  queue: QueueItem[];
+  /** Pending message texts, in arrival order. */
+  queue: string[];
+  idleTimer?: NodeJS.Timeout;
+  /** Windows that bound this key (receive its streamed events). */
+  boundSenders: Set<WebContents>;
+  /** Set by lifecycle teardown so an in-flight drain stops cleanly. */
+  disposed: boolean;
 }
 
 const states = new Map<string, QueueState>();
@@ -40,85 +53,232 @@ export async function deliver(
   employeeId: number,
   chatId: number,
   text: string,
-  opts: DeliverOptions = {},
 ): Promise<void> {
-  const key = keyFor(employeeId, chatId);
-  let state = states.get(key);
-  if (!state) {
-    state = { employeeId, chatId, busy: false, queue: [] };
-    states.set(key, state);
-  }
-  state.queue.push({ text, opts });
+  const state = getOrCreateState(employeeId, chatId);
+  clearIdleTimer(state);
+  state.queue.push(text);
   if (state.busy) return;
   state.busy = true;
   void drain(state);
+}
+
+/**
+ * Register a renderer window to receive a key's streamed events.
+ *
+ * The agent session is NOT built here: it is created lazily by `deliver()`
+ * (via `ensureSession`) on the first message. Selecting a chat is therefore
+ * cheap, and a run already in flight (cron / other entries) is still observed
+ * because events are forwarded to `boundSenders`, independent of whether this
+ * call created the session.
+ */
+export function bind(
+  employeeId: number,
+  chatId: number,
+  sender: WebContents,
+): void {
+  const state = getOrCreateState(employeeId, chatId);
+  clearIdleTimer(state);
+  if (state.boundSenders.has(sender)) return;
+  state.boundSenders.add(sender);
+  const onDestroyed = (): void => {
+    sender.removeListener("destroyed", onDestroyed);
+    unbind(employeeId, chatId, sender);
+  };
+  sender.once("destroyed", onDestroyed);
+}
+
+/** Remove a window's binding; drop the entry once fully idle. */
+export function unbind(
+  employeeId: number,
+  chatId: number,
+  sender: WebContents,
+): void {
+  const key = keyFor(employeeId, chatId);
+  const state = states.get(key);
+  if (!state) return;
+  state.boundSenders.delete(sender);
+  if (state.boundSenders.size > 0 || state.busy || state.disposed) return;
+  if (state.session) {
+    scheduleIdleDispose(state);
+  } else if (state.queue.length === 0) {
+    states.delete(key);
+  }
+}
+
+/** Dispose every session for one chat (chat deleted). */
+export async function disposeForChat(chatId: number): Promise<void> {
+  await disposeMatching((state) => state.chatId === chatId);
+}
+
+/** Dispose every session for one employee (employee deleted). */
+export async function disposeForEmployee(employeeId: number): Promise<void> {
+  await disposeMatching((state) => state.employeeId === employeeId);
+}
+
+/** Dispose every session (app quit). */
+export async function disposeAll(): Promise<void> {
+  await disposeMatching(() => true);
+}
+
+async function drain(state: QueueState): Promise<void> {
+  try {
+    while (!state.disposed) {
+      const text = state.queue.shift();
+      if (text === undefined) break;
+      try {
+        await ensureSession(state);
+        if (state.disposed) {
+          await disposeSessionOf(state);
+          break;
+        }
+        await state.session?.prompt(text);
+      } catch (err) {
+        emitError(state, err);
+      }
+    }
+  } finally {
+    state.busy = false;
+    if (state.disposed) return;
+    if (state.queue.length > 0) {
+      state.busy = true;
+      void drain(state);
+    } else {
+      scheduleIdleDispose(state);
+    }
+  }
+}
+
+/**
+ * Ensure the wrapper exists and is prepared. The wrapper itself compares the
+ * composition signature and rebuilds only when needed.
+ */
+async function ensureSession(state: QueueState): Promise<void> {
+  if (state.disposed) {
+    throw new Error("Agent session state has been disposed.");
+  }
+  // Persist the (employee, chat) session file before building the Pi session,
+  // so even a root chat (assistant ↔ user) resumes from disk instead of
+  // starting in-memory. Idempotent: a recorded row is a no-op.
+  await ensureSessionFile(state.employeeId, state.chatId);
+  if (!state.session) {
+    // Lazy import avoids a module-load cycle (session.ts imports builtin-tools,
+    // which imports this module).
+    const { AgentSession } = await import("./session");
+    const env = getAgentEnvironment();
+    state.session = new AgentSession(
+      env,
+      { employeeId: state.employeeId, chatId: state.chatId },
+      (event) => forwardEvent(state, event),
+    );
+  }
+  await state.session.prepare();
+}
+
+async function disposeMatching(
+  predicate: (state: QueueState) => boolean,
+): Promise<void> {
+  const matching = [...states.values()].filter(predicate);
+  await Promise.all(matching.map((state) => disposeState(state, true)));
+}
+
+function getOrCreateState(employeeId: number, chatId: number): QueueState {
+  const key = keyFor(employeeId, chatId);
+  let state = states.get(key);
+  if (!state) {
+    state = {
+      employeeId,
+      chatId,
+      busy: false,
+      queue: [],
+      boundSenders: new Set(),
+      disposed: false,
+    };
+    states.set(key, state);
+  }
+  return state;
 }
 
 function keyFor(employeeId: number, chatId: number): string {
   return `${employeeId}/${chatId}`;
 }
 
-async function drain(state: QueueState): Promise<void> {
-  try {
-    // Lazy import avoids a module-load cycle (session.ts imports builtin-tools).
-    const { AgentSession } = await import("./session");
-    const env = getAgentEnvironment();
-
-    while (state.queue.length > 0) {
-      const item = state.queue.shift() as QueueItem;
-      const session = new AgentSession(env, {
-        employeeId: state.employeeId,
-        chatId: state.chatId,
-      });
-      try {
-        const result = await session.prompt(item.text);
-        if (item.opts.persistReplyAs != null) {
-          const reply =
-            result.replied && result.replyText && result.replyText.length > 0
-              ? result.replyText
-              : (item.opts.fallbackReply ?? null);
-          if (reply)
-            persistReply(state.chatId, item.opts.persistReplyAs, reply);
-        }
-      } catch (err) {
-        console.error(
-          `[session-queue] run for ${state.employeeId} in chat ${state.chatId} failed:`,
-          err instanceof Error ? err.message : err,
-        );
-        if (item.opts.persistReplyAs != null && item.opts.fallbackReply) {
-          persistReply(
-            state.chatId,
-            item.opts.persistReplyAs,
-            item.opts.fallbackReply,
-          );
-        }
-      } finally {
-        // Dispose must never throw: an exception here would otherwise leave
-        // `busy` set permanently and stall the queue for this (employee, chat).
-        try {
-          await session.dispose();
-        } catch {
-          // Ignore a dispose failure; the queue must keep draining.
-        }
-      }
-    }
-  } finally {
-    state.busy = false;
+function clearIdleTimer(state: QueueState): void {
+  if (state.idleTimer !== undefined) {
+    clearTimeout(state.idleTimer);
+    state.idleTimer = undefined;
   }
 }
 
-/** Best-effort reply persistence; a failure must never stall the queue. */
-function persistReply(
-  chatId: number,
-  senderEmployeeId: number,
-  reply: string,
-): void {
+function scheduleIdleDispose(state: QueueState): void {
+  if (state.disposed) return;
+  clearIdleTimer(state);
+  state.idleTimer = setTimeout(() => {
+    state.idleTimer = undefined;
+    void disposeState(state, false);
+  }, IDLE_MS);
+}
+
+/**
+ * Tear down the state's session. `forceRemove` marks the state disposed and
+ * drops it from the registry (lifecycle teardown); otherwise the entry is
+ * removed only when nothing is bound and the queue is empty.
+ */
+async function disposeState(
+  state: QueueState,
+  forceRemove: boolean,
+): Promise<void> {
+  clearIdleTimer(state);
+  if (forceRemove) {
+    state.disposed = true;
+    states.delete(keyFor(state.employeeId, state.chatId));
+  }
+
+  await disposeSessionOf(state);
+
+  if (state.disposed || state.busy) return;
+  if (state.queue.length > 0) {
+    state.busy = true;
+    void drain(state);
+    return;
+  }
+  if (state.boundSenders.size === 0) {
+    states.delete(keyFor(state.employeeId, state.chatId));
+  }
+}
+
+/** Dispose the wrapper (if any) and clear the reference; never throws. */
+async function disposeSessionOf(state: QueueState): Promise<void> {
+  const session = state.session;
+  state.session = undefined;
+  if (!session) return;
   try {
-    dbMessages.appendMessage(chatId, senderEmployeeId, reply);
+    await session.dispose();
   } catch (err) {
     console.error(
-      `[session-queue] failed to persist reply in chat ${chatId}:`,
+      `[session-queue] failed to dispose session for ${state.employeeId} in chat ${state.chatId}:`,
       err instanceof Error ? err.message : err,
     );
   }
+}
+
+/** Forward a raw Pi event to this key's bound windows (whitelisted DTOs). */
+function forwardEvent(state: QueueState, event: AgentSessionEvent): void {
+  const dto = toStreamEvent(event);
+  if (dto) {
+    sendEventTo(state.boundSenders, state.employeeId, state.chatId, dto);
+  }
+}
+
+/** Report a failed run to the bound windows and the log. */
+function emitError(state: QueueState, err: unknown): void {
+  console.error(
+    `[session-queue] run for ${state.employeeId} in chat ${state.chatId} failed:`,
+    err instanceof Error ? err.message : err,
+  );
+  sendEventTo(
+    state.boundSenders,
+    state.employeeId,
+    state.chatId,
+    errorEvent(err),
+  );
 }

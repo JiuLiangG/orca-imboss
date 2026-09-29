@@ -10,12 +10,11 @@ const PLACEHOLDER_TITLES: Partial<
   Record<AppModule, { name: string; titleKey: string }>
 > = {
   "miniapp-worldmap": { name: "World Map", titleKey: "World Map" },
-  "chat-product": { name: "Website Redesign", titleKey: "Website Redesign" },
 };
 
-const PLACEHOLDER_MODULES: AppModule[] = ["miniapp-worldmap", "chat-product"];
+const PLACEHOLDER_MODULES: AppModule[] = ["miniapp-worldmap"];
 
-/** Placeholder module view for not-yet-open modules (世界地图 / 产品网站改版). */
+/** Placeholder module view for not-yet-open modules (世界地图). */
 export function PlaceholderModule(): React.JSX.Element {
   const { module } = useApp();
   const info = PLACEHOLDER_TITLES[module];

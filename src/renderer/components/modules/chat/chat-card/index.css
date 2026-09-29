@@ -1,0 +1,53 @@
+.imb-chat-card {
+  display: flex;
+  align-items: center;
+  gap: var(--imb-space-3);
+  flex: 1;
+  min-width: 0;
+  padding: var(--imb-space-3) var(--imb-space-4);
+  background: var(--imb-surface);
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-lg);
+  box-shadow: var(--imb-elev-raised);
+  color: var(--imb-fg);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--imb-motion-fast) var(--imb-ease-standard),
+    border-color var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-chat-card:hover {
+  background: var(--imb-fg-soft);
+  border-color: var(--imb-accent-soft);
+}
+
+.imb-chat-card:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+}
+
+.imb-chat-card.imb-is-disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.imb-chat-card-title {
+  font-size: var(--imb-text-base);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imb-chat-card-placeholder {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: var(--imb-radius-md);
+  background: color-mix(in oklch, var(--imb-muted) 16%, var(--imb-surface));
+  color: var(--imb-muted);
+  font-weight: 600;
+}

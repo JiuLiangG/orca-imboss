@@ -1,6 +1,8 @@
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { cls } from "reactutils";
 import { useClickOutside } from "../../hooks/use-click-outside";
+import { useDropdownPosition } from "../../hooks/use-dropdown-position";
 import { useEscapeKey } from "../../hooks/use-escape-key";
 import { IconChevronDown } from "../icons";
 import "./index.css";
@@ -35,14 +37,37 @@ export function MultiSelect({
   id,
 }: MultiSelectProps): React.JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const { panelStyle, positionPanel } = useDropdownPosition(rootRef);
 
   const selectedSet = new Set(value);
   const selected = options.filter((o) => selectedSet.has(o.value));
 
-  useClickOutside(rootRef, () => setOpen(false), open);
+  // The panel is portaled to `document.body`, so it lives outside `rootRef`;
+  // both count as "inside" for click-outside purposes.
+  const outsideRefs = useMemo(() => [rootRef, panelRef], []);
+  useClickOutside(outsideRefs, () => setOpen(false), open);
   useEscapeKey(() => setOpen(false), open);
+
+  // Reposition the portaled panel if the viewport scrolls/resizes while open.
+  useEffect(() => {
+    if (!open) return;
+    const reposition = (): void => positionPanel();
+    window.addEventListener("resize", reposition);
+    document.addEventListener("scroll", reposition, true);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      document.removeEventListener("scroll", reposition, true);
+    };
+  }, [open, positionPanel]);
+
+  function openPanel(): void {
+    positionPanel();
+    setOpen(true);
+    setActiveIndex(0);
+  }
 
   function toggle(optionValue: string): void {
     const next = selectedSet.has(optionValue)
@@ -52,7 +77,7 @@ export function MultiSelect({
   }
 
   function focusOption(index: number): void {
-    const el = rootRef.current?.querySelector<HTMLElement>(
+    const el = panelRef.current?.querySelector<HTMLElement>(
       `[data-ms-option="${index}"]`,
     );
     el?.focus();
@@ -67,8 +92,7 @@ export function MultiSelect({
         event.key === " "
       ) {
         event.preventDefault();
-        setOpen(true);
-        setActiveIndex(0);
+        openPanel();
       }
       return;
     }
@@ -105,7 +129,7 @@ export function MultiSelect({
         aria-expanded={open}
         aria-disabled={disabled || undefined}
         disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => (open ? setOpen(false) : openPanel())}
         onKeyDown={onTriggerKeyDown}
       >
         <span className="imb-ms-value">
@@ -128,45 +152,59 @@ export function MultiSelect({
           )}
         />
       </button>
-      {open && (
-        <div
-          className="imb-ms-panel"
-          role="listbox"
-          aria-multiselectable="true"
-        >
-          {options.length === 0 && (
-            <div className="imb-ms-empty">{emptyHint}</div>
-          )}
-          {options.map((option, index) => {
-            const checked = selectedSet.has(option.value);
-            return (
-              <label
-                key={option.value}
-                role="option"
-                aria-selected={checked}
-                className={cls("imb-ms-option", checked && "imb-is-checked")}
-                data-ms-option={index}
-                tabIndex={-1}
-                onKeyDown={(e) => {
-                  if (e.key === " " || e.key === "Enter") {
-                    e.preventDefault();
-                    toggle(option.value);
-                    setActiveIndex(index);
-                  }
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggle(option.value)}
-                  tabIndex={index === activeIndex ? 0 : -1}
-                />
-                <span>{option.label}</span>
-              </label>
-            );
-          })}
-        </div>
-      )}
+      {open &&
+        panelStyle &&
+        createPortal(
+          <div
+            ref={panelRef}
+            className="imb-ms-panel"
+            role="listbox"
+            aria-multiselectable="true"
+            style={{
+              position: "fixed",
+              top: panelStyle.top,
+              bottom: panelStyle.bottom,
+              left: panelStyle.left,
+              width: panelStyle.width,
+              maxHeight: panelStyle.maxHeight,
+              right: "auto",
+              zIndex: 50,
+            }}
+          >
+            {options.length === 0 && (
+              <div className="imb-ms-empty">{emptyHint}</div>
+            )}
+            {options.map((option, index) => {
+              const checked = selectedSet.has(option.value);
+              return (
+                <label
+                  key={option.value}
+                  role="option"
+                  aria-selected={checked}
+                  className={cls("imb-ms-option", checked && "imb-is-checked")}
+                  data-ms-option={index}
+                  tabIndex={-1}
+                  onKeyDown={(e) => {
+                    if (e.key === " " || e.key === "Enter") {
+                      e.preventDefault();
+                      toggle(option.value);
+                      setActiveIndex(index);
+                    }
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggle(option.value)}
+                    tabIndex={index === activeIndex ? 0 : -1}
+                  />
+                  <span>{option.label}</span>
+                </label>
+              );
+            })}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

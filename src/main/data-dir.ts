@@ -46,6 +46,15 @@ export function getModelsPath(): string {
   return join(getAgentRoot(), "models.json");
 }
 
+/**
+ * Path of the Pi dynamic-catalog cache (`models-store.json`), written by the
+ * SDK's `FileModelsStore` next to `models.json`. The app only reads it (the
+ * SDK owns writes); see `listAvailableModels`.
+ */
+export function getModelsStorePath(): string {
+  return join(getAgentRoot(), "models-store.json");
+}
+
 /** Path of the cmd for agent sessions. */
 export function getWorkDir(): string {
   return join(getDataRoot(), "workdir");

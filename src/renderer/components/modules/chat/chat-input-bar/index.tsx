@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useClickOutside } from "../../../../hooks/use-click-outside";
 import { useEscapeKey } from "../../../../hooks/use-escape-key";
 import { IconAttach, IconFile, IconImage, IconSend } from "../../../icons";
+import { Textarea } from "../../../textarea";
 import "./index.css";
 
 export interface ChatInputBarProps {
@@ -80,12 +81,13 @@ export function ChatInputBar({
             ))}
           </div>
         )}
-        <textarea
+        <Textarea
           className="imb-chat-input-textarea"
           rows={1}
           value={text}
           placeholder={t("What are your instructions?")}
           disabled={disabled}
+          minHeight={0}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
         />

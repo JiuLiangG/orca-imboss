@@ -1,11 +1,12 @@
 import { ASSISTANT_ID } from "@shared/constants/employees";
 import type { ChatParticipantUpdate, MessageAttachment } from "@shared/types";
 import { ipcMain } from "electron";
-import { deliver } from "../agent/session-queue";
+import { deliver, disposeForChat } from "../agent/session-queue";
+import { maybeGenerateChatTitle } from "../agent/title-gen";
 import * as dbChats from "../db/chats";
 import * as dbMessages from "../db/messages";
 import { listByChat, unlinkSessionFile } from "../db/sessions";
-import { broadcast, notifyUnread } from "../notifications";
+import { notifyUnread, sendToRenderer } from "../notifications";
 import { assertInteger, assertString, parsePageQuery } from "./helpers";
 
 export function registerChatHandlers(): void {
@@ -36,7 +37,7 @@ export function registerChatHandlers(): void {
     const safeId = assertInteger(id, "chat id");
     dbChats.markRead(safeId);
     // Keep the renderer unread mirror in sync (cleared on open).
-    broadcast("chats:unreadChanged", { chatId: safeId, unread: 0 });
+    sendToRenderer("chats:unreadChanged", { chatId: safeId, unread: 0 });
   });
 
   ipcMain.handle(
@@ -45,10 +46,11 @@ export function registerChatHandlers(): void {
       if (!Array.isArray(participants)) {
         throw new Error("participants must be an array.");
       }
-      return dbChats.createChat(
-        assertString(title, "title"),
-        participants.map((p) => assertInteger(p, "participant id")),
-      );
+      const ids = participants.map((p) => assertInteger(p, "participant id"));
+      // The assistant is always a participant of a root (assistant ↔ user)
+      // chat so it can post replies with `imb_send_message`.
+      const withAssistant = [...new Set([ASSISTANT_ID, ...ids])];
+      return dbChats.createChat(assertString(title, "title"), withAssistant);
     },
   );
 
@@ -68,6 +70,8 @@ export function registerChatHandlers(): void {
   ipcMain.handle("chats:delete", async (_event, id: unknown) => {
     const safeId = assertInteger(id, "chat id");
     const records = listByChat(safeId);
+    // Tear down any warm agent session for this chat before its files go away.
+    await disposeForChat(safeId);
     const removed = dbChats.deleteChat(safeId);
     if (removed) {
       await Promise.all(records.map((r) => unlinkSessionFile(r.session)));
@@ -90,13 +94,15 @@ export function registerChatHandlers(): void {
         safeChatId,
         null,
         safeContent.length > 0 ? safeContent : "[附件]",
-        safeAttachments ? { attachments: safeAttachments } : {},
+        !!safeAttachments?.length ? { attachments: safeAttachments } : {},
       );
 
-      // Serialized run; the reply is auto-persisted as the assistant message.
-      void deliver(ASSISTANT_ID, safeChatId, safeContent, {
-        persistReplyAs: ASSISTANT_ID,
-      });
+      // Serialized run; the agent posts its own reply via `imb_send_message`.
+      void deliver(ASSISTANT_ID, safeChatId, safeContent);
+
+      // First message of an untitled chat → generate a title from it
+      // (fire-and-forget; retries on the next message when it fails).
+      maybeGenerateChatTitle(safeChatId, safeContent);
 
       return userMessage;
     },

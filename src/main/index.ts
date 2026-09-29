@@ -2,6 +2,7 @@ import { app, BrowserWindow, shell } from "electron";
 import { join } from "path";
 import icon from "../../resources/icon.png?asset";
 import { refreshModelStore } from "./agent/model-runtime";
+import { disposeAll } from "./agent/session-queue";
 import { deleteAvatarFiles } from "./avatars";
 import * as cron from "./cron";
 import { initDatabase } from "./db";
@@ -44,6 +45,7 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   cron.stopAll();
+  void disposeAll();
 });
 
 app.on("activate", () => {

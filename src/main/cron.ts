@@ -67,11 +67,9 @@ function registerJob(job: CronJob): void {
         err instanceof Error ? err.message : err,
       );
     }
-    // Serialized via the session queue; the reply is auto-persisted as the
-    // job's employee (which also bumps the chat's unread counter).
-    void deliver(job.employeeId, job.chatId, job.content, {
-      persistReplyAs: job.employeeId,
-    });
+    // Serialized via the session queue. The agent posts its own output via
+    // `imb_send_message` (no reply is auto-persisted).
+    void deliver(job.employeeId, job.chatId, job.content);
   });
   // Keep the stored `next_run_at` fresh (valuable after an app restart when
   // the persisted value may be stale).

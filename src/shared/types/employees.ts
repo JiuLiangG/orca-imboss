@@ -69,6 +69,14 @@ export interface BuildEmployeeSystemPromptArgs {
    *  Assistant: `[ASSISTANT_SYSTEM_PROMPT, employee.systemPrompt]`.
    *  Regular:   `[employee.systemPrompt]`. */
   personaParts: string[];
+  /** `true` for the built-in assistant (id 0). The assistant's role text is
+   *  baked into `ASSISTANT_SYSTEM_PROMPT`, so no generated role block is emitted
+   *  for it. */
+  isAssistant: boolean;
+  /** Employee display name; used in the generated non-assistant role block. */
+  name: string;
+  /** Employee role; used in the generated non-assistant role block. */
+  role: string;
   /** Employee id (assistant = 0). */
   employeeId: number;
   /** Active tools for this employee-session (core + MCP + team `imb_*`). */
