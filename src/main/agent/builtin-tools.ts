@@ -249,7 +249,7 @@ function setEmployeesTool(employeeId: number, chatId: number): AnyPiTool {
     name: "imb_set_employees",
     label: "Set employees",
     description:
-      "Batch create or update employees (name, role, system prompt, linked MCP servers, skills, model). " +
+      "Batch create or update employees (name, role, system prompt, linked MCP servers, skills, model, thinking level). " +
       "Each item omits `id` to create a new employee or passes `id` to update an existing one. " +
       "Returns the array of employee ids created or updated.",
     promptSnippet: "batch create/edit employees",
@@ -267,6 +267,17 @@ function setEmployeesTool(employeeId: number, chatId: number): AnyPiTool {
             Type.Array(Type.String({ maxLength: 256 }), { maxItems: 256 }),
           ),
           modelId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+          thinkingLevel: Type.Optional(
+            Type.Union([
+              Type.Literal("off"),
+              Type.Literal("low"),
+              Type.Literal("medium"),
+              Type.Literal("high"),
+              Type.Literal("xhigh"),
+              Type.Literal("max"),
+              Type.Null(),
+            ]),
+          ),
         }),
         { minItems: 1, maxItems: 50 },
       ),
@@ -282,6 +293,8 @@ function setEmployeesTool(employeeId: number, chatId: number): AnyPiTool {
           mcp?: string[];
           skills?: string[];
           modelId?: string | null;
+          thinkingLevel?:
+            "off" | "low" | "medium" | "high" | "xhigh" | "max" | null;
         }[];
       };
       const ids = dbEmployees.upsertEmployees(

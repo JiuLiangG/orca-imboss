@@ -10,6 +10,10 @@ import {
   BASE_TOOL_SNIPPETS,
 } from "@shared/constants/prompts";
 import { SettingKeys } from "@shared/constants/settings";
+import {
+  isThinkingLevel,
+  type ThinkingLevel,
+} from "@shared/constants/thinking";
 import type {
   AgentEnvironment,
   AgentSessionContext,
@@ -77,6 +81,12 @@ interface SessionSpec {
   employeeRole: string;
   /** Resolved `"provider/modelId"`. */
   modelRef: string;
+  /**
+   * Effective thinking strength (employee → global default → null). Null
+   * means "not configured": the value is omitted from `createAgentSession`
+   * so the SDK applies its own restore/default chain.
+   */
+  thinkingLevel: ThinkingLevel | null;
   systemPrompt: string;
   /** Raw `employee.mcp` (sorted) — includes built-in tool opt-in markers. */
   mcpServerNames: string[];
@@ -207,6 +217,15 @@ export class AgentSession {
       );
     }
 
+    // Thinking strength cascade: employee override → global default → unset
+    // (the SDK then falls back to its own history/default chain and clamps
+    // the level to the selected model's capabilities).
+    const storedThinking = getSetting(SettingKeys.DefaultThinkingLevel);
+    const thinkingLevel =
+      (isThinkingLevel(employee?.thinkingLevel)
+        ? employee.thinkingLevel
+        : null) ?? (isThinkingLevel(storedThinking) ? storedThinking : null);
+
     const cwd = resolveWorkDir();
     const agentRoot = getAgentRoot();
 
@@ -242,6 +261,7 @@ export class AgentSession {
       employeeName: employee?.name ?? "",
       employeeRole: employee?.role ?? "",
       modelRef: `${model.provider}/${model.id}`,
+      thinkingLevel,
       systemPrompt: employee?.systemPrompt ?? "",
       mcpServerNames: employeeMcp,
       mcpServers: mcpServers.map((server) => ({
@@ -387,6 +407,11 @@ export class AgentSession {
         agentDir: this.env.rootDir,
         modelRuntime,
         model,
+        // Omitted when unset: the SDK restores the session-history level or
+        // falls back to its default (medium), clamped to model capabilities.
+        ...(spec.thinkingLevel !== null
+          ? { thinkingLevel: spec.thinkingLevel }
+          : {}),
         tools: activeToolNames,
         customTools,
         resourceLoader,

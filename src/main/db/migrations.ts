@@ -20,16 +20,17 @@ const MIGRATIONS: Array<(db: Database) => void> = [
         system_prompt TEXT NOT NULL DEFAULT '',
         mcp           TEXT NOT NULL DEFAULT '[]',
         skills        TEXT NOT NULL DEFAULT '[]',
-        model_id      TEXT,
-        avatar        TEXT,
+        model_id        TEXT,
+        thinking_level  TEXT,
+        avatar          TEXT,
         disabled      INTEGER NOT NULL DEFAULT 0
       );
     `);
 
     // The assistant always exists, under the reserved id 0.
     db.prepare(
-      "INSERT OR IGNORE INTO employees (id, name, role, system_prompt, mcp, skills, model_id, avatar) " +
-        "VALUES (0, 'Assistant', 'Assistant', '', '[]', '[]', NULL, NULL)",
+      "INSERT OR IGNORE INTO employees (id, name, role, system_prompt, mcp, skills, model_id, thinking_level, avatar) " +
+        "VALUES (0, 'Assistant', 'Assistant', '', '[]', '[]', NULL, NULL, NULL)",
     ).run();
 
     db.exec(`

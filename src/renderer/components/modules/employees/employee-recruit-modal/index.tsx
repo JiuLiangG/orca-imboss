@@ -1,3 +1,8 @@
+import {
+  isThinkingLevel,
+  THINKING_LEVEL_LABEL_KEYS,
+  THINKING_LEVELS,
+} from "@shared/constants/thinking";
 import { t } from "@shared/l10n";
 import type { Employee, EmployeeInput } from "@shared/types";
 import { useState } from "react";
@@ -32,6 +37,7 @@ export function EmployeeRecruitModal({
   const [mcp, setMcp] = useState<string[]>([]);
   const [skills, setSkills] = useState<string[]>([]);
   const [modelId, setModelId] = useState("");
+  const [thinkingLevel, setThinkingLevel] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -42,6 +48,7 @@ export function EmployeeRecruitModal({
     setMcp([]);
     setSkills([]);
     setModelId("");
+    setThinkingLevel("");
     setError(null);
   };
 
@@ -57,6 +64,7 @@ export function EmployeeRecruitModal({
         mcp,
         skills,
         modelId: modelId || null,
+        thinkingLevel: isThinkingLevel(thinkingLevel) ? thinkingLevel : null,
       });
       if (created) {
         reset();
@@ -145,8 +153,24 @@ export function EmployeeRecruitModal({
       <Field label={t("Model")}>
         <Select
           value={modelId}
-          options={[{ value: "", label: t("None") }, ...modelOptions]}
+          options={[{ value: "", label: t("Default") }, ...modelOptions]}
           onChange={setModelId}
+        />
+      </Field>
+      <Field
+        label={t("Thinking level")}
+        hint={t("Unset follows the default thinking level.")}
+      >
+        <Select
+          value={thinkingLevel}
+          options={[
+            { value: "", label: t("Default") },
+            ...THINKING_LEVELS.map((level) => ({
+              value: level,
+              label: t(THINKING_LEVEL_LABEL_KEYS[level]),
+            })),
+          ]}
+          onChange={setThinkingLevel}
         />
       </Field>
     </Modal>

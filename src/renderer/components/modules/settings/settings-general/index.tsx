@@ -1,5 +1,9 @@
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "@shared/constants/locales";
 import { SettingKeys } from "@shared/constants/settings";
+import {
+  THINKING_LEVELS,
+  THINKING_LEVEL_LABEL_KEYS,
+} from "@shared/constants/thinking";
 import { t } from "@shared/l10n";
 import type { WorkDirState } from "@shared/types";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -23,6 +27,7 @@ const SAVE_DEBOUNCE_MS = 400;
 export function SettingsGeneral(): React.JSX.Element {
   const { locale } = useApp();
   const [defaultModel, setDefaultModel] = useState("");
+  const [defaultThinking, setDefaultThinking] = useState("");
   const [envVars, setEnvVars] = useState<EnvVar[]>([]);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [workdir, setWorkdir] = useState<WorkDirState | null>(null);
@@ -39,15 +44,22 @@ export function SettingsGeneral(): React.JSX.Element {
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const [defaultModelStored, envStored, models, workDir] =
-        await Promise.all([
-          imb.settings.get(SettingKeys.DefaultModel),
-          imb.settings.get(SettingKeys.UserEnv),
-          imb.models.list(),
-          imb.workdir.get(),
-        ]);
+      const [
+        defaultModelStored,
+        defaultThinkingStored,
+        envStored,
+        models,
+        workDir,
+      ] = await Promise.all([
+        imb.settings.get(SettingKeys.DefaultModel),
+        imb.settings.get(SettingKeys.DefaultThinkingLevel),
+        imb.settings.get(SettingKeys.UserEnv),
+        imb.models.list(),
+        imb.workdir.get(),
+      ]);
       if (!alive) return;
       setDefaultModel(defaultModelStored ?? "");
+      setDefaultThinking(defaultThinkingStored ?? "");
       setEnvVars(parseEnv(envStored));
       setModelOptions(models.map((m) => `${m.provider}/${m.id}`));
       setWorkdir(workDir);
@@ -61,6 +73,11 @@ export function SettingsGeneral(): React.JSX.Element {
   function changeDefaultModel(value: string): void {
     setDefaultModel(value);
     void imb.settings.set(SettingKeys.DefaultModel, value);
+  }
+
+  function changeDefaultThinking(value: string): void {
+    setDefaultThinking(value);
+    void imb.settings.set(SettingKeys.DefaultThinkingLevel, value);
   }
 
   async function chooseWorkdir(): Promise<void> {
@@ -129,6 +146,25 @@ export function SettingsGeneral(): React.JSX.Element {
               ...modelOptions.map((m) => ({ value: m, label: m })),
             ]}
             onChange={changeDefaultModel}
+          />
+        </Field>
+
+        <Field
+          label={t("Default thinking level")}
+          hint={t(
+            "The default thinking strength for new employees / tasks. Unset lets each model apply its own default.",
+          )}
+        >
+          <Select
+            value={defaultThinking}
+            options={[
+              { value: "", label: t("None") },
+              ...THINKING_LEVELS.map((level) => ({
+                value: level,
+                label: t(THINKING_LEVEL_LABEL_KEYS[level]),
+              })),
+            ]}
+            onChange={changeDefaultThinking}
           />
         </Field>
 

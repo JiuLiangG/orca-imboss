@@ -1,5 +1,9 @@
 import { ASSISTANT_ID } from "@shared/constants/employees";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@shared/constants/paged";
+import {
+  isThinkingLevel,
+  type ThinkingLevel,
+} from "@shared/constants/thinking";
 import type {
   Employee,
   EmployeeDeleteResult,
@@ -99,7 +103,7 @@ export function getAssistant(): Employee | null {
 export function createEmployee(input: EmployeeInput): Employee {
   const result = getDB()
     .prepare(
-      "INSERT INTO employees (name, role, system_prompt, mcp, skills, model_id) VALUES (?, ?, ?, ?, ?, ?)",
+      "INSERT INTO employees (name, role, system_prompt, mcp, skills, model_id, thinking_level) VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
     .run(
       validateName(input.name) ?? "",
@@ -108,6 +112,7 @@ export function createEmployee(input: EmployeeInput): Employee {
       stringifyArray(validateRefList(input.mcp, "mcp") ?? []),
       stringifyArray(validateRefList(input.skills, "skills") ?? []),
       validateModelId(input.modelId),
+      validateThinkingLevel(input.thinkingLevel),
     );
   const created = getEmployee(Number(result.lastInsertRowid));
   if (!created) throw new Error("Failed to create employee.");
@@ -123,8 +128,8 @@ export function updateEmployee(
 
   if (id === ASSISTANT_ID) {
     // The assistant's profile is restricted: only name, systemPrompt (appended
-    // to ASSISTANT_SYSTEM_PROMPT) and modelId are editable; role, mcp and
-    // skills are immutable and defensively rejected if provided.
+    // to ASSISTANT_SYSTEM_PROMPT), modelId and thinkingLevel are editable;
+    // role, mcp and skills are immutable and defensively rejected if provided.
     const immutable: Array<keyof EmployeeInput> = ["role", "mcp", "skills"];
     if (immutable.some((key) => input[key] !== undefined)) {
       throw new Error(
@@ -133,7 +138,7 @@ export function updateEmployee(
     }
     getDB()
       .prepare(
-        "UPDATE employees SET name = ?, system_prompt = ?, model_id = ? WHERE id = ?",
+        "UPDATE employees SET name = ?, system_prompt = ?, model_id = ?, thinking_level = ? WHERE id = ?",
       )
       .run(
         input.name !== undefined ? validateName(input.name) : current.name,
@@ -143,6 +148,9 @@ export function updateEmployee(
         input.modelId !== undefined
           ? validateModelId(input.modelId)
           : current.modelId,
+        input.thinkingLevel !== undefined
+          ? validateThinkingLevel(input.thinkingLevel)
+          : current.thinkingLevel,
         id,
       );
     return getEmployee(id);
@@ -158,7 +166,7 @@ export function updateEmployee(
 
   getDB()
     .prepare(
-      "UPDATE employees SET name = ?, role = ?, system_prompt = ?, mcp = ?, skills = ?, model_id = ? WHERE id = ?",
+      "UPDATE employees SET name = ?, role = ?, system_prompt = ?, mcp = ?, skills = ?, model_id = ?, thinking_level = ? WHERE id = ?",
     )
     .run(
       input.name !== undefined ? validateName(input.name) : current.name,
@@ -171,6 +179,9 @@ export function updateEmployee(
       input.modelId !== undefined
         ? validateModelId(input.modelId)
         : current.modelId,
+      input.thinkingLevel !== undefined
+        ? validateThinkingLevel(input.thinkingLevel)
+        : current.thinkingLevel,
       id,
     );
   return getEmployee(id);
@@ -294,6 +305,9 @@ function toEmployee(row: EmployeeRow): Employee {
     mcp: parseStringArray(row.mcp),
     skills: parseStringArray(row.skills),
     modelId: row.model_id,
+    thinkingLevel: isThinkingLevel(row.thinking_level)
+      ? row.thinking_level
+      : null,
     avatar: row.avatar,
     // Main-owned file read; data URL (or null) is the only form ever sent
     // to the renderer — raw paths are not useful there.
@@ -360,6 +374,19 @@ function validateModelId(modelId: string | null | undefined): string | null {
     throw new Error('Model id must look like "provider/model".');
   }
   return modelId;
+}
+
+/**
+ * Validate `thinking_level` — either NULL/empty (follow the global default)
+ * or one of the app's thinking levels. Anything else (corrupt row, untyped
+ * tool input) falls back to null instead of throwing, matching the lenient
+ * parsing used elsewhere in this layer.
+ */
+function validateThinkingLevel(
+  level: ThinkingLevel | null | undefined,
+): ThinkingLevel | null {
+  if (level == null || !isThinkingLevel(level)) return null;
+  return level;
 }
 
 /** True when the employee id appears in at least one chat's participants array. */

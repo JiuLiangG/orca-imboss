@@ -1,3 +1,8 @@
+import {
+  isThinkingLevel,
+  THINKING_LEVEL_LABEL_KEYS,
+  THINKING_LEVELS,
+} from "@shared/constants/thinking";
 import { t } from "@shared/l10n";
 import type { Employee, EmployeeInput } from "@shared/types";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -46,6 +51,7 @@ export function EmployeeDetail({
           name: employee.name,
           systemPrompt: employee.systemPrompt,
           modelId: employee.modelId ?? "",
+          thinkingLevel: employee.thinkingLevel,
         }
       : {
           name: employee.name,
@@ -54,6 +60,7 @@ export function EmployeeDetail({
           mcp: employee.mcp,
           skills: employee.skills,
           modelId: employee.modelId ?? "",
+          thinkingLevel: employee.thinkingLevel,
         },
   );
   const [avatarUrl, setAvatarUrl] = useState<string | null>(employee.avatarUrl);
@@ -260,10 +267,34 @@ export function EmployeeDetail({
           <Select
             id={`emp-model-${employee.id}`}
             value={form.modelId ?? ""}
-            options={[{ value: "", label: t("None") }, ...modelOptions]}
-            placeholder={t("None")}
+            options={[{ value: "", label: t("Default") }, ...modelOptions]}
+            placeholder={t("Default")}
             onChange={(modelId) =>
               scheduleSave({ ...form, modelId: modelId || null })
+            }
+          />
+        </Field>
+
+        <Field
+          label={t("Thinking level")}
+          htmlFor={`emp-thinking-${employee.id}`}
+          hint={t("Unset follows the default thinking level.")}
+        >
+          <Select
+            id={`emp-thinking-${employee.id}`}
+            value={form.thinkingLevel ?? ""}
+            options={[
+              { value: "", label: t("Default") },
+              ...THINKING_LEVELS.map((level) => ({
+                value: level,
+                label: t(THINKING_LEVEL_LABEL_KEYS[level]),
+              })),
+            ]}
+            onChange={(level) =>
+              scheduleSave({
+                ...form,
+                thinkingLevel: isThinkingLevel(level) ? level : null,
+              })
             }
           />
         </Field>

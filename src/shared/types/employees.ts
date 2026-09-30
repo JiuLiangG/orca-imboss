@@ -1,3 +1,5 @@
+import type { ThinkingLevel } from "../constants/thinking";
+
 /** Row of the `employees` table. Id 0 is the built-in assistant (reserved). */
 export interface Employee {
   id: number;
@@ -9,6 +11,8 @@ export interface Employee {
   mcp: string[];
   skills: string[];
   modelId: string | null;
+  /** Per-employee thinking strength; null = follow the global default. */
+  thinkingLevel: ThinkingLevel | null;
   /** Stored avatar file path (main-process only, may be null). */
   avatar: string | null;
   /** Avatar as a data URL for renderer display (may be null). */
@@ -28,6 +32,7 @@ export interface EmployeeInput {
   mcp?: string[];
   skills?: string[];
   modelId?: string | null;
+  thinkingLevel?: ThinkingLevel | null;
 }
 
 export interface EmployeeRow {
@@ -38,6 +43,7 @@ export interface EmployeeRow {
   mcp: string;
   skills: string;
   model_id: string | null;
+  thinking_level: string | null;
   avatar: string | null;
   disabled: number;
 }
