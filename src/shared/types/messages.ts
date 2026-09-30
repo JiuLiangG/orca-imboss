@@ -2,7 +2,9 @@
  * Free-form message kind. The UI only special-cases `progress`; other kinds
  * (e.g. `text`, `report`, `chat`, `join_notice`) are routed through the generic
  * bubble. `report` is a free-form result summary (employee → assigner, or
- * assistant → boss for the final summary).
+ * assistant → boss for the final summary). `ack` is the app-generated receipt
+ * acknowledgement posted immediately after a user message; its display text is
+ * localized at render time and its stored content is empty.
  */
 export type MessageKind = string;
 
@@ -20,6 +22,13 @@ export interface MessageAttachment {
   name: string;
   size: number;
   type: string;
+  /**
+   * Absolute on-disk path of the original file, when known. Captured from the
+   * file picker (`webUtils.getPathForFile`) or resolved from a tool-supplied
+   * path. Used to reveal the file in the OS file manager; never shown to the
+   * model.
+   */
+  path?: string;
 }
 
 /** Row of the `messages` table, ordered per chat by `created_at`. */
@@ -35,6 +44,12 @@ export interface Message {
   steps: MessageStep[] | null;
   /** Present when the message carries attachments. */
   attachments: MessageAttachment[] | null;
+  /**
+   * True number of attachments the sender produced. May exceed
+   * `attachments.length` when an agent only forwarded the first few; `null`
+   * when the message has no attachments.
+   */
+  attachmentsTotal: number | null;
   /** UNIX timestamp in seconds. */
   createdAt: number;
 }
@@ -55,6 +70,18 @@ export interface AppendMessageOptions {
   kind?: MessageKind;
   steps?: MessageStep[];
   attachments?: MessageAttachment[];
+  /**
+   * True attachment count when it exceeds `attachments.length` (agent tools
+   * that forward only the first `MAX_TOOL_ATTACHMENTS` paths). Defaults to
+   * `attachments.length`.
+   */
+  attachmentTotal?: number;
+  /**
+   * Suppress the unread bump and the renderer's notification beep for this
+   * message (app-generated acks are silent receipts). The `messages:changed`
+   * event carries the flag so the renderer can skip the sound.
+   */
+  silent?: boolean;
 }
 
 /** Payload of the `chat:send` IPC (user → assistant placeholder pipeline). */

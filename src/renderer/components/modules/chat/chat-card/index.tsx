@@ -9,6 +9,20 @@ import "./index.css";
 /** Resolved target-chat summaries, keyed by chat id (null = missing). */
 const summaryCache = new Map<number, ChatSummary | null>();
 
+/**
+ * One-time binding that drops shared cache entries for cascade-deleted chats,
+ * so a later mount of a card for a deleted chat cannot reuse a stale summary.
+ */
+let summaryCacheCleanupBound = false;
+function bindSummaryCacheCleanup(): void {
+  if (summaryCacheCleanupBound) return;
+  summaryCacheCleanupBound = true;
+  imb.chats.onDeleted(({ chatIds }) => {
+    if (!Array.isArray(chatIds)) return;
+    for (const id of chatIds) summaryCache.delete(id);
+  });
+}
+
 export interface ChatCardProps {
   /** A `kind="chat"` message whose content is the linked chat's id. */
   message: Message;
@@ -49,6 +63,20 @@ export function ChatCard({ message }: ChatCardProps): React.JSX.Element {
     return () => {
       ignore = true;
     };
+  }, [chatId]);
+
+  // A cascade delete removes the linked group chat; disable the card and drop
+  // the shared cache entry when that happens.
+  useEffect(() => {
+    bindSummaryCacheCleanup();
+    if (chatId === null) return;
+    const off = imb.chats.onDeleted(({ chatIds }) => {
+      if (Array.isArray(chatIds) && chatIds.includes(chatId)) {
+        summaryCache.delete(chatId);
+        setSummary(null);
+      }
+    });
+    return off;
   }, [chatId]);
 
   return (

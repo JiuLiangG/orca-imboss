@@ -55,9 +55,11 @@ export function SkillsModule(): React.JSX.Element {
     clearSelection();
   }, [clearSelection, query]);
 
-  // Re-fetch on revisit when the startup load failed (best-effort).
+  // Re-fetch on every entry: skills live on the filesystem and can change
+  // outside the app, and no `skills:changed` event is emitted. First load
+  // shows the loading state; revisits revalidate silently.
   useEffect(() => {
-    appStore.ensureSkills();
+    void appStore.reloadSkills();
   }, []);
 
   // Auto-select the first skill after page 1 loads (and recover when the

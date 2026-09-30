@@ -1,3 +1,4 @@
+import { t } from "@shared/l10n";
 import type { Message } from "@shared/types";
 import { EmployeeAvatar } from "../../../employee-avatar";
 import { AnswerCard } from "../answer-card";
@@ -46,12 +47,29 @@ export function MessageItem({
       );
     case "chat":
       return <ChatCard message={message} />;
+    case "ack":
+      // App-generated receipt: stored content is empty, the label is localized
+      // at render time so it follows locale switches.
+      return (
+        <MessageBubble
+          self={false}
+          messageId={message.id}
+          content={t("ACK")}
+          attachments={null}
+          attachmentsTotal={null}
+          avatar={
+            <EmployeeAvatar employeeId={message.senderEmployeeId} size={34} />
+          }
+        />
+      );
     default:
       return (
         <MessageBubble
           self={message.senderEmployeeId === null}
+          messageId={message.id}
           content={message.content}
           attachments={message.attachments}
+          attachmentsTotal={message.attachmentsTotal}
           avatar={
             <EmployeeAvatar employeeId={message.senderEmployeeId} size={34} />
           }

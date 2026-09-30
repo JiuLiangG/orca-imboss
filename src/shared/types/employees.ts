@@ -85,6 +85,11 @@ export interface BuildEmployeeSystemPromptArgs {
   role: string;
   /** Employee id (assistant = 0). */
   employeeId: number;
+  /** The chat this session runs in; injected into the leading identity block. */
+  chatId: number;
+  /** Spawning chat for a group chat (`chats.from_chat_id`); null for root
+   *  chats. When non-null, a second line in the identity block links back. */
+  fromChatId: number | null;
   /** Active tools for this employee-session (core + MCP + team `imb_*`). */
   toolEntries: EmployeeToolEntry[];
   /** Current date in `yyyy-MM-dd`. */

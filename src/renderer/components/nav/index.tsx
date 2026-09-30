@@ -221,7 +221,7 @@ function NavChatButton({
   onContextMenu,
 }: NavChatButtonProps): React.JSX.Element {
   return (
-    <Tooltip content={chat.title} placement="right" disabled={!collapsed}>
+    <Tooltip content={chat.title} placement="right">
       <button
         type="button"
         className={cls("imb-nav-item", active && "imb-is-active")}

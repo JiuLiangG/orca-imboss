@@ -12,7 +12,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { appStore, useApp } from "../../../../app-store";
 import { useInfiniteList } from "../../../../hooks/use-infinite-list";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
-import { playNotificationSound } from "../../../../sound";
 import { ModuleView } from "../../../app-shell";
 import { Avatar } from "../../../avatar";
 import { Button } from "../../../button";
@@ -53,6 +52,7 @@ export function ChatModule(): React.JSX.Element {
   const [query, setQuery] = useState("");
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteIds, setDeleteIds] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [runStatus, setRunStatus] = useState<Map<number, ChatRunStatus>>(
     () => new Map(),
@@ -227,16 +227,14 @@ export function ChatModule(): React.JSX.Element {
   }, [focusChatId, chats, selectChat]);
 
   useEffect(() => {
-    const offMessages = imb.messages.onChanged(
-      ({ chatId, senderEmployeeId }) => {
-        // Only the currently-open chat refreshes its thread (and beeps — but
-        // not on the user's own message, where senderEmployeeId is null).
-        if (chatId !== selectedIdRef.current) return;
-        void imb.chats.markRead(chatId);
-        void loadMessages(chatId);
-        if (senderEmployeeId !== null) playNotificationSound();
-      },
-    );
+    const offMessages = imb.messages.onChanged(({ chatId }) => {
+      // Only the currently-open chat refreshes its thread. The notification
+      // beep is handled globally in app-store for any root chat, so it is no
+      // longer gated on this selection.
+      if (chatId !== selectedIdRef.current) return;
+      void imb.chats.markRead(chatId);
+      void loadMessages(chatId);
+    });
     return offMessages;
   }, [loadMessages]);
 
@@ -281,11 +279,10 @@ export function ChatModule(): React.JSX.Element {
   }, [clearSelection]);
 
   const deleteSelected = useCallback(async (): Promise<void> => {
-    const ids = [...multi.selectedKeys];
-    if (ids.length === 0) return;
+    if (deleteIds.length === 0) return;
     try {
       setDeleteOpen(false);
-      for (const id of ids) {
+      for (const id of deleteIds) {
         await imb.chats.remove(id);
       }
       await appStore.reloadChats();
@@ -295,7 +292,7 @@ export function ChatModule(): React.JSX.Element {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [multi.selectedKeys, clearSelection]);
+  }, [deleteIds, clearSelection]);
 
   const toggleSelectAll = useCallback((): void => {
     if (multi.selectedKeys.size === chats.length && chats.length > 0) {
@@ -372,7 +369,14 @@ export function ChatModule(): React.JSX.Element {
                     label: t("Delete"),
                     danger: true,
                     onSelect: () => {
-                      if (multi.selectedKeys.size === 0) multi.selectAll();
+                      // Selection-aware: a right-click on an already-selected
+                      // row deletes the whole selection; otherwise it deletes
+                      // just the right-clicked chat (never a hidden select-all).
+                      setDeleteIds(
+                        multi.selectedKeys.has(chat.id)
+                          ? [...multi.selectedKeys]
+                          : [chat.id],
+                      );
                       setDeleteOpen(true);
                     },
                   },
@@ -434,7 +438,7 @@ export function ChatModule(): React.JSX.Element {
       >
         <p className="imb-chat-delete-note">
           {t(
-            "The conversations and their messages will be permanently removed.",
+            "This chat, any chats it created, and their messages will be permanently removed.",
           )}
         </p>
       </Modal>

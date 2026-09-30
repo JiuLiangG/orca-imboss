@@ -1,3 +1,4 @@
+import { MAX_USER_ATTACHMENTS } from "@shared/constants/attachments";
 import { t } from "@shared/l10n";
 import type { MessageAttachment } from "@shared/types";
 import { useRef, useState } from "react";
@@ -18,6 +19,7 @@ export function ChatInputBar({
 }: ChatInputBarProps): React.JSX.Element {
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
   const [popupOpen, setPopupOpen] = useState(false);
   const popupRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -33,15 +35,36 @@ export function ChatInputBar({
     onSend(value, attachments);
     setText("");
     setAttachments([]);
+    setNotice(null);
   };
 
   const addFiles = (files: FileList | null): void => {
     if (!files) return;
-    const next: MessageAttachment[] = [];
-    for (const file of Array.from(files).slice(0, 16 - attachments.length)) {
-      next.push({ name: file.name, size: file.size, type: file.type });
+    setNotice(null);
+    const selected = Array.from(files);
+    const remaining = Math.max(MAX_USER_ATTACHMENTS - attachments.length, 0);
+    if (selected.length > remaining) {
+      setNotice(
+        t("Up to ${count} attachments allowed.", {
+          count: String(MAX_USER_ATTACHMENTS),
+        }),
+      );
     }
-    setAttachments((current) => [...current, ...next]);
+    const next: MessageAttachment[] = [];
+    for (const file of selected.slice(0, remaining)) {
+      // `webUtils.getPathForFile` (preload) yields "" for JS-constructed files;
+      // only persist a real on-disk path so the chip is revealable.
+      const path = imb.files.getPath(file);
+      next.push({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        ...(path ? { path } : {}),
+      });
+    }
+    if (next.length > 0) {
+      setAttachments((current) => [...current, ...next]);
+    }
     setPopupOpen(false);
   };
 
@@ -81,6 +104,7 @@ export function ChatInputBar({
             ))}
           </div>
         )}
+        {notice !== null && <div className="imb-attach-notice">{notice}</div>}
         <Textarea
           className="imb-chat-input-textarea"
           rows={1}

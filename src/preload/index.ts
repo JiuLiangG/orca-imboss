@@ -23,7 +23,7 @@ import type {
   ThemeState,
   WorkDirState,
 } from "@shared/types";
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 const initialLocale = readArg("locale") ?? DEFAULT_LOCALE;
 
@@ -44,6 +44,22 @@ const api = {
     get: () => ipcRenderer.invoke("workdir:get") as Promise<WorkDirState>,
     choose: () =>
       ipcRenderer.invoke("workdir:choose") as Promise<WorkDirState | null>,
+  },
+
+  files: {
+    /**
+     * Absolute on-disk path of a `File` picked via an `<input type=file>`.
+     * Electron 44 removed `File.path`, so `webUtils` is the supported way to
+     * recover it. Returns `""` for JS-constructed `File` objects with no
+     * backing file on disk, or when the argument is not a `File`.
+     */
+    getPath: (file: File): string => {
+      try {
+        return webUtils.getPathForFile(file);
+      } catch {
+        return "";
+      }
+    },
   },
 
   getVersion: () => ipcRenderer.invoke("app:getVersion") as Promise<string>,
@@ -113,6 +129,8 @@ const api = {
     onFocus: (cb: (chatId: number) => void) => on<number>("chat:focus", cb),
     onChanged: (cb: (payload: { chatId: number }) => void) =>
       on<{ chatId: number }>("chats:changed", cb),
+    onDeleted: (cb: (payload: { chatIds: number[] }) => void) =>
+      on<{ chatIds: number[] }>("chats:deleted", cb),
     create: (title: string, participants: number[]) =>
       ipcRenderer.invoke("chats:create", title, participants) as Promise<Chat>,
     update: (id: number, title: string) =>
@@ -152,16 +170,27 @@ const api = {
         askMessageId,
         answers,
       ) as Promise<Message>,
+    /** Reveal an attachment's file in the OS file manager (main resolves the path). */
+    revealAttachment: (messageId: number, index: number) =>
+      ipcRenderer.invoke(
+        "messages:revealAttachment",
+        messageId,
+        index,
+      ) as Promise<void>,
     onChanged: (
       cb: (payload: {
         chatId: number;
         senderEmployeeId: number | null;
+        silent?: boolean;
+        root: boolean;
       }) => void,
     ) =>
-      on<{ chatId: number; senderEmployeeId: number | null }>(
-        "messages:changed",
-        cb,
-      ),
+      on<{
+        chatId: number;
+        senderEmployeeId: number | null;
+        silent?: boolean;
+        root: boolean;
+      }>("messages:changed", cb),
   },
 
   chat: {

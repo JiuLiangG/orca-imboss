@@ -30,6 +30,7 @@ export function EmployeesModule(): React.JSX.Element {
   const [query, setQuery] = useState("");
   const [recruitOpen, setRecruitOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteIds, setDeleteIds] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
 
@@ -68,13 +69,13 @@ export function EmployeesModule(): React.JSX.Element {
       });
   }, []);
 
-  // Lazy-load the collections on first visit (best-effort). The MCP and skill
-  // option selects below read data.mcp.items / data.skills.items, so those must
-  // be ensured here too, in case the user opens Employees before those modules.
+  // Re-fetch on every entry (best-effort): employees can be changed by the
+  // agent with no renderer event, and the editor's MCP/skill option selects
+  // must reflect the current backend state.
   useEffect(() => {
-    appStore.ensureEmployees();
-    appStore.ensureMcp();
-    appStore.ensureSkills();
+    void appStore.reloadEmployees();
+    void appStore.reloadMcp();
+    void appStore.reloadSkills();
   }, []);
 
   // Linked-MCP options = built-in opt-in cron tools + configured MCP servers.
@@ -162,7 +163,7 @@ export function EmployeesModule(): React.JSX.Element {
   }, []);
 
   const deleteSelected = useCallback(async (): Promise<void> => {
-    const ids = [...multi.selectedKeys].filter((id) => id !== 0);
+    const ids = deleteIds.filter((id) => id !== 0);
     if (ids.length === 0) return;
     try {
       setDeleteOpen(false);
@@ -173,7 +174,7 @@ export function EmployeesModule(): React.JSX.Element {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [multi.selectedKeys]);
+  }, [deleteIds]);
 
   const toggleSelectAll = useCallback((): void => {
     // Compare against selectable rows only (the assistant is never selectable,
@@ -241,7 +242,15 @@ export function EmployeesModule(): React.JSX.Element {
                   label: t("Delete"),
                   danger: true,
                   onSelect: () => {
-                    if (multi.selectedKeys.size === 0) multi.selectAll();
+                    // Selection-aware: a right-click on an already-selected
+                    // row deletes the whole selection; otherwise it deletes
+                    // just the right-clicked employee (never a hidden
+                    // select-all).
+                    setDeleteIds(
+                      multi.selectedKeys.has(employee.id)
+                        ? [...multi.selectedKeys]
+                        : [employee.id],
+                    );
                     setDeleteOpen(true);
                   },
                 });

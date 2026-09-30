@@ -10,6 +10,7 @@ import type {
 import { createRef } from "react";
 import { proxy, useSnapshot } from "valtio";
 import { updateLocale } from "./locale";
+import { playNotificationSound } from "./sound";
 import { updateThemeState } from "./theme";
 
 export type AppModule =
@@ -123,6 +124,22 @@ export const appStore = proxy({
       void appStore.loadMcp();
     }
   },
+  // MCP servers are DB-backed; a re-fetch is the most robust way to reflect an
+  // add/update/delete (including agent/external changes) in the store.
+  async reloadMcp(): Promise<void> {
+    if (!appStore.data.mcp.loaded) appStore.data.mcp.loading = true;
+    try {
+      appStore.data.mcp.items = await imb.mcp.list();
+      appStore.data.mcp.loaded = true;
+      appStore.data.mcp.error = null;
+    } catch (err) {
+      console.error("[data:mcp]", err instanceof Error ? err.message : err);
+      appStore.data.mcp.error =
+        err instanceof Error ? err.message : String(err);
+    } finally {
+      appStore.data.mcp.loading = false;
+    }
+  },
   addMcp(server: McpServer): void {
     appStore.data.mcp.items.push(server);
   },
@@ -161,6 +178,27 @@ export const appStore = proxy({
   ensureEmployees(): void {
     if (!appStore.data.employees.loaded && !appStore.data.employees.loading) {
       void appStore.loadEmployees();
+    }
+  },
+  // Employees can be created/updated by the agent (`imb_set_employees`) with no
+  // renderer event, so a re-fetch on module entry is the only refresh path.
+  async reloadEmployees(): Promise<void> {
+    if (!appStore.data.employees.loaded) {
+      appStore.data.employees.loading = true;
+    }
+    try {
+      appStore.data.employees.items = await imb.employees.list();
+      appStore.data.employees.loaded = true;
+      appStore.data.employees.error = null;
+    } catch (err) {
+      console.error(
+        "[data:employees]",
+        err instanceof Error ? err.message : err,
+      );
+      appStore.data.employees.error =
+        err instanceof Error ? err.message : String(err);
+    } finally {
+      appStore.data.employees.loading = false;
     }
   },
   addEmployee(employee: Employee): void {
@@ -204,8 +242,11 @@ export const appStore = proxy({
     }
   },
   // Skills come from the filesystem (name-ASC sorted), so a re-fetch is the
-  // most robust way to reflect an install/uninstall in the store.
+  // most robust way to reflect an install/uninstall in the store. First load
+  // shows the loading state; a revisit revalidates silently (stale data stays
+  // visible until the response lands).
   async reloadSkills(): Promise<void> {
+    if (!appStore.data.skills.loaded) appStore.data.skills.loading = true;
     try {
       appStore.data.skills.items = await imb.skills.list();
       appStore.data.skills.loaded = true;
@@ -214,6 +255,8 @@ export const appStore = proxy({
       console.error("[data:skills]", err instanceof Error ? err.message : err);
       appStore.data.skills.error =
         err instanceof Error ? err.message : String(err);
+    } finally {
+      appStore.data.skills.loading = false;
     }
   },
 
@@ -285,6 +328,28 @@ export const appStore = proxy({
     const index = appStore.data.chats.items.findIndex((c) => c.id === id);
     if (index >= 0) {
       appStore.data.chats.items.splice(index, 1);
+    }
+  },
+  /**
+   * Drop cascade-deleted chats (root + spawned descendants) from the cached
+   * list and from the Nav opened-chat entries. The id set arrives over IPC, so
+   * it is filtered defensively before use.
+   */
+  removeDeletedChats(ids: number[]): void {
+    const deleted = new Set(
+      ids.filter((id) => Number.isSafeInteger(id) && id > 0),
+    );
+    if (deleted.size === 0) return;
+    for (const id of deleted) {
+      appStore.removeChat(id);
+    }
+    if (appStore.focusChatId !== null && deleted.has(appStore.focusChatId)) {
+      appStore.focusChatId = null;
+    }
+    // Close opened group chats (closeChat picks a neighbour / the chat module
+    // fallback when the active one is removed).
+    for (const chat of [...appStore.openedChats]) {
+      if (deleted.has(chat.id)) appStore.closeChat(chat.id);
     }
   },
   setChatUnread(chatId: number, unread: number): void {
@@ -413,13 +478,24 @@ export async function initAppStore(): Promise<void> {
   // Chats: every message append refreshes that chat's summary (preview,
   // lastAt, unread) and re-sorts the cached list. A lightweight unread-only
   // event (imb_notify / addUnread) updates items[].unread directly.
-  imb.messages.onChanged(({ chatId }) => {
+  imb.messages.onChanged(({ chatId, senderEmployeeId, silent, root }) => {
     void appStore.refreshChatSummary(chatId);
+    // Beep for any non-silent employee/assistant message in a root chat,
+    // regardless of the active module or the selected chat (group chats and
+    // silent acks stay quiet). Throttled inside playNotificationSound().
+    if (root && senderEmployeeId !== null && !silent) {
+      playNotificationSound();
+    }
   });
   // Title-only updates (auto title generation lands asynchronously, after the
   // messages:changed refresh) — same summary refresh keeps list + header in sync.
   imb.chats.onChanged(({ chatId }) => {
     void appStore.refreshChatSummary(chatId);
+  });
+  // Cascade deletes push the full deleted id set (root + spawned chats) so the
+  // list cache, Nav opened chats and the focus target all stay consistent.
+  imb.chats.onDeleted(({ chatIds }) => {
+    if (Array.isArray(chatIds)) appStore.removeDeletedChats(chatIds);
   });
   imb.chats.onUnreadChanged(({ chatId, unread }) => {
     appStore.setChatUnread(chatId, unread);

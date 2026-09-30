@@ -1,3 +1,7 @@
+import {
+  MAX_ATTACHMENT_TOTAL,
+  MAX_USER_ATTACHMENTS,
+} from "@shared/constants/attachments";
 import type {
   AppendMessageOptions,
   Message,
@@ -27,11 +31,12 @@ interface MessageRow {
 const MAX_CONTENT_LENGTH = 100_000;
 const MAX_KIND_LENGTH = 64;
 const MAX_STEPS = 64;
-const MAX_ATTACHMENTS = 16;
+const MAX_ATTACHMENTS = MAX_USER_ATTACHMENTS;
 const MAX_STEP_NAME_LENGTH = 256;
 const MAX_STEP_ROLE_LENGTH = 256;
 const MAX_ATTACH_NAME_LENGTH = 256;
 const MAX_ATTACH_TYPE_LENGTH = 128;
+const MAX_ATTACH_PATH_LENGTH = 4096;
 const MAX_ATTACH_SIZE = 50 * 1024 * 1024; // metadata only
 const STEP_STATUSES: StepStatus[] = ["done", "busy"];
 
@@ -92,22 +97,8 @@ export function appendMessage(
   options: AppendMessageOptions = {},
 ): Message {
   const db = getDB();
-  if (typeof content !== "string" || content.length === 0) {
-    throw new Error("Message content must be a non-empty string.");
-  }
-  if (content.length > MAX_CONTENT_LENGTH) {
-    throw new Error("Message is too long.");
-  }
-  if (!db.prepare("SELECT 1 FROM chats WHERE id = ?").get(chatId)) {
-    throw new Error("Chat does not exist.");
-  }
-  if (
-    senderEmployeeId != null &&
-    !db.prepare("SELECT 1 FROM employees WHERE id = ?").get(senderEmployeeId)
-  ) {
-    throw new Error("Sender employee does not exist.");
-  }
-
+  // Resolve the kind first: the app-generated receipt ack is the one kind that
+  // legitimately stores empty content (its text is localized at render time).
   const kind: MessageKind = options.kind ?? "text";
   if (
     typeof kind !== "string" ||
@@ -116,13 +107,42 @@ export function appendMessage(
   ) {
     throw new Error("Message kind is invalid.");
   }
+  if (typeof content !== "string") {
+    throw new Error("Message content must be a string.");
+  }
+  if (content.length === 0 && kind !== "ack") {
+    throw new Error("Message content must be a non-empty string.");
+  }
+  if (content.length > MAX_CONTENT_LENGTH) {
+    throw new Error("Message is too long.");
+  }
+  // Resolve the owning chat's root/group nature while validating it: the
+  // renderer gates the notification beep on root chats only, and this is the
+  // synchronous place that knows it (no extra IPC round-trip).
+  const chatRow = db
+    .prepare("SELECT from_chat_id AS fromChatId FROM chats WHERE id = ?")
+    .get(chatId) as { fromChatId: number | null } | undefined;
+  if (!chatRow) {
+    throw new Error("Chat does not exist.");
+  }
+  if (
+    senderEmployeeId != null &&
+    !db.prepare("SELECT 1 FROM employees WHERE id = ?").get(senderEmployeeId)
+  ) {
+    throw new Error("Sender employee does not exist.");
+  }
   const steps = validateSteps(options.steps);
   if (kind === "progress" && (steps === undefined || steps.length === 0)) {
     throw new Error("Progress messages need at least one step.");
   }
   const attachments = validateAttachments(options.attachments);
+  const attachmentTotal = validateAttachmentTotal(
+    options.attachmentTotal,
+    attachments,
+  );
 
   const createdAt = Math.floor(Date.now() / 1000);
+  const attachmentsJson = serializeAttachments(attachments, attachmentTotal);
   const result = db
     .prepare(
       "INSERT INTO messages (chat_id, sender_employee_id, kind, content, steps, attachments, created_at) " +
@@ -134,13 +154,14 @@ export function appendMessage(
       kind,
       content,
       steps !== undefined ? JSON.stringify({ steps }) : null,
-      attachments !== undefined ? JSON.stringify({ attachments }) : null,
+      attachmentsJson,
       createdAt,
     );
 
   // Unread bump lives here (single append write path): assistant/employee
-  // messages mark the chat as unread; user messages do not.
-  if (senderEmployeeId != null) {
+  // messages mark the chat as unread; user messages do not. Silent messages
+  // (the app-generated receipt ack) never bump the counter.
+  if (senderEmployeeId != null && options.silent !== true) {
     bumpUnread(chatId);
   }
 
@@ -151,7 +172,12 @@ export function appendMessage(
     createdAt,
     chatId,
   );
-  sendToRenderer("messages:changed", { chatId, senderEmployeeId });
+  sendToRenderer("messages:changed", {
+    chatId,
+    senderEmployeeId,
+    silent: options.silent === true,
+    root: chatRow.fromChatId === null,
+  });
 
   return toMessage({
     id: Number(result.lastInsertRowid),
@@ -160,8 +186,7 @@ export function appendMessage(
     kind,
     content,
     steps: steps !== undefined ? JSON.stringify({ steps }) : null,
-    attachments:
-      attachments !== undefined ? JSON.stringify({ attachments }) : null,
+    attachments: attachmentsJson,
     created_at: createdAt,
   });
 }
@@ -184,7 +209,7 @@ export function searchMessages(query: string): MessageSearchResult[] {
         `SELECT m.chat_id AS chatId, m.id AS messageId, m.created_at AS createdAt,
                 m.content AS content, c.title AS chatTitle
          FROM messages m JOIN chats c ON c.id = m.chat_id
-         WHERE m.content LIKE ? ESCAPE '\\'
+         WHERE m.content LIKE ? ESCAPE '\\' AND m.kind <> 'ack'
          ORDER BY m.created_at DESC, m.id DESC
          LIMIT ?`,
       )
@@ -214,7 +239,7 @@ export function searchMessages(query: string): MessageSearchResult[] {
        FROM messages_fts
        JOIN messages m ON m.id = messages_fts.rowid
        JOIN chats c ON c.id = m.chat_id
-       WHERE messages_fts MATCH ?
+       WHERE messages_fts MATCH ? AND m.kind <> 'ack'
        ORDER BY rank
        LIMIT ?`,
     )
@@ -223,6 +248,7 @@ export function searchMessages(query: string): MessageSearchResult[] {
 }
 
 function toMessage(row: MessageRow): Message {
+  const attachments = parseAttachments(row.attachments);
   return {
     id: row.id,
     chatId: row.chat_id,
@@ -230,7 +256,14 @@ function toMessage(row: MessageRow): Message {
     kind: row.kind || "text",
     content: row.content,
     steps: parseSteps(row.steps),
-    attachments: parseAttachments(row.attachments),
+    attachments,
+    attachmentsTotal:
+      attachments === null
+        ? null
+        : Math.max(
+            parseAttachmentTotal(row.attachments) ?? attachments.length,
+            attachments.length,
+          ),
     createdAt: row.created_at,
   };
 }
@@ -277,13 +310,50 @@ function parseAttachments(raw: string | null): MessageAttachment[] | null {
     if (typeof record["name"] !== "string" || record["name"].length === 0) {
       continue;
     }
+    const path = record["path"];
     result.push({
       name: record["name"],
       size: typeof record["size"] === "number" ? record["size"] : 0,
       type: typeof record["type"] === "string" ? record["type"] : "",
+      ...(typeof path === "string" &&
+      path.length > 0 &&
+      path.length <= MAX_ATTACH_PATH_LENGTH
+        ? { path }
+        : {}),
     });
   }
   return result;
+}
+
+/**
+ * Read the optional true attachment `total` stored alongside an attachments
+ * payload. Returns `null` when absent or invalid; the caller falls back to the
+ * number of rows actually stored.
+ */
+function parseAttachmentTotal(raw: string | null): number | null {
+  if (!raw) return null;
+  const parsed = parseJsonObject(raw);
+  const total = parsed["total"];
+  if (typeof total !== "number" || !Number.isSafeInteger(total) || total < 0) {
+    return null;
+  }
+  return total;
+}
+
+/**
+ * Serialize attachment metadata (and the true total when it exceeds the rows
+ * actually stored) into the single `attachments` column.
+ */
+function serializeAttachments(
+  attachments: MessageAttachment[] | undefined,
+  total: number | undefined,
+): string | null {
+  if (attachments === undefined) return null;
+  const payload: { attachments: MessageAttachment[]; total?: number } = {
+    attachments,
+  };
+  if (total !== undefined && total > attachments.length) payload.total = total;
+  return JSON.stringify(payload);
 }
 
 function validateSteps(
@@ -344,9 +414,47 @@ function validateAttachments(
     if (type.length > MAX_ATTACH_TYPE_LENGTH) {
       throw new Error("Attachment type is too long.");
     }
-    result.push({ name, size: item.size, type });
+    const attachment: MessageAttachment = { name, size: item.size, type };
+    if (item.path !== undefined) {
+      if (
+        typeof item.path !== "string" ||
+        item.path.length === 0 ||
+        item.path.length > MAX_ATTACH_PATH_LENGTH
+      ) {
+        throw new Error("Attachment path has invalid length.");
+      }
+      attachment.path = item.path;
+    }
+    result.push(attachment);
   }
   return result;
+}
+
+/**
+ * Validate the tool-supplied true attachment count. It must be an integer
+ * between the number of rows actually stored and `MAX_ATTACHMENT_TOTAL`; when
+ * omitted it defaults to the number of stored rows. The total is only
+ * meaningful alongside attachments.
+ */
+function validateAttachmentTotal(
+  total: number | undefined,
+  attachments: MessageAttachment[] | undefined,
+): number | undefined {
+  if (attachments === undefined) {
+    if (total !== undefined) {
+      throw new Error("attachmentTotal requires attachments.");
+    }
+    return undefined;
+  }
+  if (total === undefined) return attachments.length;
+  if (
+    !Number.isSafeInteger(total) ||
+    total < attachments.length ||
+    total > MAX_ATTACHMENT_TOTAL
+  ) {
+    throw new Error("Attachment total is out of range.");
+  }
+  return total;
 }
 
 /** Wrap the first (case-insensitive) match in the same markers FTS uses. */

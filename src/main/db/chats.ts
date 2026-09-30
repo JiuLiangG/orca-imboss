@@ -42,9 +42,11 @@ export function listChatSummaries(): ChatSummary[] {
     .prepare(
       `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
               c.last_message_at,
-              (SELECT m.content FROM messages m WHERE m.chat_id = c.id
+              (SELECT m.content FROM messages m
+               WHERE m.chat_id = c.id AND m.kind <> 'ack'
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
-              (SELECT m.created_at FROM messages m WHERE m.chat_id = c.id
+              (SELECT m.created_at FROM messages m
+               WHERE m.chat_id = c.id AND m.kind <> 'ack'
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_at
        FROM chats c
        WHERE c.from_chat_id IS NULL
@@ -63,9 +65,11 @@ export function getChatSummary(id: number): ChatSummary | null {
     .prepare(
       `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
               c.last_message_at,
-              (SELECT m.content FROM messages m WHERE m.chat_id = c.id
+              (SELECT m.content FROM messages m
+               WHERE m.chat_id = c.id AND m.kind <> 'ack'
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
-              (SELECT m.created_at FROM messages m WHERE m.chat_id = c.id
+              (SELECT m.created_at FROM messages m
+               WHERE m.chat_id = c.id AND m.kind <> 'ack'
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_at
        FROM chats c
        WHERE c.id = ?`,
@@ -114,13 +118,13 @@ export function listChatSummariesPage(
         "(c.title LIKE ? ESCAPE '\\' OR c.id IN " +
           "(SELECT DISTINCT m.chat_id FROM messages_fts " +
           " JOIN messages m ON m.id = messages_fts.rowid " +
-          " WHERE messages_fts MATCH ?))",
+          " WHERE messages_fts MATCH ? AND m.kind <> 'ack'))",
       );
       params.push(pattern, toFtsPhrase(needle));
     } else {
       conditions.push(
         "(c.title LIKE ? ESCAPE '\\' OR c.id IN " +
-          "(SELECT DISTINCT chat_id FROM messages WHERE content LIKE ? ESCAPE '\\'))",
+          "(SELECT DISTINCT chat_id FROM messages WHERE content LIKE ? ESCAPE '\\' AND kind <> 'ack'))",
       );
       params.push(pattern, pattern);
     }
@@ -130,9 +134,11 @@ export function listChatSummariesPage(
     .prepare(
       `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
               c.last_message_at,
-              (SELECT m.content FROM messages m WHERE m.chat_id = c.id
+              (SELECT m.content FROM messages m
+               WHERE m.chat_id = c.id AND m.kind <> 'ack'
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
-              (SELECT m.created_at FROM messages m WHERE m.chat_id = c.id
+              (SELECT m.created_at FROM messages m
+               WHERE m.chat_id = c.id AND m.kind <> 'ack'
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_at
        FROM chats c
        WHERE ${conditions.join(" AND ")}
@@ -229,11 +235,52 @@ export function updateChatTitle(id: number, title: string): Chat | null {
 }
 
 /**
+ * Collect a chat id together with every chat spawned from it (transitively),
+ * via a cycle-safe recursive CTE. `UNION` (not `UNION ALL`) dedupes rows so a
+ * malformed self/circular `from_chat_id` chain still terminates. Returns `[]`
+ * when the root chat does not exist.
+ */
+export function listChatTreeIds(rootId: number): number[] {
+  const rows = getDB()
+    .prepare(
+      `WITH RECURSIVE tree(id) AS (
+         SELECT id FROM chats WHERE id = ?
+         UNION
+         SELECT c.id FROM chats c JOIN tree t ON c.from_chat_id = t.id
+       )
+       SELECT id FROM tree`,
+    )
+    .all(rootId) as Array<{ id: number }>;
+  return rows.map((row) => row.id);
+}
+
+/**
+ * Delete several chats atomically. Messages and session rows cascade via
+ * foreign keys; callers are responsible for tearing down warm agent sessions
+ * and cleaning up the corresponding disk session files.
+ */
+export function deleteChats(ids: number[]): number {
+  const unique = [...new Set(ids)].filter(
+    (id) => Number.isSafeInteger(id) && id > 0,
+  );
+  if (unique.length === 0) return 0;
+  const db = getDB();
+  const remove = db.prepare("DELETE FROM chats WHERE id = ?");
+  return db.transaction(() => {
+    let changes = 0;
+    for (const id of unique) {
+      changes += remove.run(id).changes;
+    }
+    return changes;
+  })();
+}
+
+/**
  * Delete a chat. Messages and session rows cascade via foreign keys; callers
  * are responsible for cleaning up the corresponding disk session files.
  */
 export function deleteChat(id: number): boolean {
-  return getDB().prepare("DELETE FROM chats WHERE id = ?").run(id).changes > 0;
+  return deleteChats([id]) > 0;
 }
 
 /** Apply additive/removal participant edits with duplicate-tolerant merging. */

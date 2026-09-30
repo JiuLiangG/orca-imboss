@@ -69,12 +69,19 @@ export function registerChatHandlers(): void {
 
   ipcMain.handle("chats:delete", async (_event, id: unknown) => {
     const safeId = assertInteger(id, "chat id");
-    const records = listByChat(safeId);
-    // Tear down any warm agent session for this chat before its files go away.
-    await disposeForChat(safeId);
-    const removed = dbChats.deleteChat(safeId);
+    // Chats spawned from this one (`from_chat_id`) go with it, and those may
+    // spawn further chats, so delete the whole descendant tree.
+    const chatIds = dbChats.listChatTreeIds(safeId);
+    if (chatIds.length === 0) return false;
+    // Capture disk session file paths BEFORE the FK cascade wipes the rows.
+    const records = chatIds.flatMap((chatId) => listByChat(chatId));
+    // Tear down any warm agent sessions for these chats before files go away.
+    await Promise.all(chatIds.map((chatId) => disposeForChat(chatId)));
+    const removed = dbChats.deleteChats(chatIds) > 0;
     if (removed) {
       await Promise.all(records.map((r) => unlinkSessionFile(r.session)));
+      // Keep every window in sync: chat caches + opened group-chat entries.
+      sendToRenderer("chats:deleted", { chatIds });
     }
     return removed;
   });
@@ -96,6 +103,21 @@ export function registerChatHandlers(): void {
         safeContent.length > 0 ? safeContent : "[附件]",
         !!safeAttachments?.length ? { attachments: safeAttachments } : {},
       );
+
+      // Immediate, app-generated receipt so the user sees an acknowledgement
+      // before the (slow) agent turn produces anything. Defensive: a failure
+      // here must never break the send — the user message is already stored.
+      try {
+        dbMessages.appendMessage(safeChatId, ASSISTANT_ID, "", {
+          kind: "ack",
+          silent: true,
+        });
+      } catch (err) {
+        console.error(
+          "[chat:send] failed to append receipt ack:",
+          err instanceof Error ? err.message : err,
+        );
+      }
 
       // Serialized run; the agent posts its own reply via `imb_send_message`.
       void deliver(ASSISTANT_ID, safeChatId, safeContent);

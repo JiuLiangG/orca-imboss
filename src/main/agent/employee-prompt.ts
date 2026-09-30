@@ -13,11 +13,13 @@ import { BuildEmployeeSystemPromptArgs } from "@shared/types";
  * `systemPromptOverride` (the Pi SDK customPrompt branch). Because the SDK
  * appends `<project_context>`, `[skills]` and a trailing
  * `Current working directory` line after the override, this function emits
- * the role, persona, `[builtinSkills]`, response-language rule, the `[tools]`
- * block and the `Today` / `Employee ID` lines (in that order). The exact
- * template shape:
+ * the leading identity block, the role, persona, `[builtinSkills]`,
+ * response-language rule, the `[tools]` block and the `Today` line (in that
+ * order). The exact template shape:
  *
  * ```
+ * This is your working session as employee {ID} in chat {chatId}.
+ * [This chat was created from chat {fromChatId}.  — only when fromChatId is set]
  * [role: generated for non-assistants; baked into ASSISTANT_SYSTEM_PROMPT for the assistant]
  * [employeePrompt: persona]
  * [report skill: assistant aggregation/progress/summary OR employee result report]
@@ -25,7 +27,6 @@ import { BuildEmployeeSystemPromptArgs } from "@shared/types";
  * [response language]
  * [tools]
  * Today is {yyyy-MM-dd}
- * Employee ID: {ID}
  * ```
  */
 
@@ -35,6 +36,8 @@ export function buildEmployeeSystemPrompt({
   name,
   role,
   employeeId,
+  chatId,
+  fromChatId,
   toolEntries,
   today,
 }: BuildEmployeeSystemPromptArgs): string {
@@ -55,9 +58,21 @@ export function buildEmployeeSystemPrompt({
     ...TOOLS_GUIDELINES.map((guideline) => `- ${guideline}`),
   ].join("\n");
 
-  const metaBlock = [`Today is ${today}`, `Employee ID: ${employeeId}`].join(
-    "\n",
-  );
+  // Leading identity block: which employee this session is and which chat it
+  // runs in. The spawning-chat line is added only for group chats (root chats
+  // have no `from`). The old standalone `Employee ID: {ID}` line is merged in
+  // here, so the prompt states the id exactly once.
+  const identityLines = [
+    `This is your working session as employee ${employeeId} in chat ${chatId}.`,
+  ];
+  if (fromChatId != null) {
+    identityLines.push(
+      `This task group chat was created from chat ${fromChatId}.`,
+    );
+  }
+  const identityBlock = identityLines.join("\n");
+
+  const metaBlock = `Today is ${today}`;
 
   // Role-specific reporting skill: the assistant aggregates employee reports into
   // boss-facing progress + a summary; a non-assistant reports finished work to its
@@ -67,6 +82,7 @@ export function buildEmployeeSystemPrompt({
     : EMPLOYEE_REPORT_PROMPT;
 
   const sections = [
+    identityBlock,
     roleBlock,
     persona,
     reportBlock,

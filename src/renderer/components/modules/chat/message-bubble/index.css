@@ -1,7 +1,7 @@
 .imb-msg {
   display: flex;
   gap: 10px;
-  max-width: 78%;
+  max-width: 82%;
 }
 
 .imb-msg.imb-self {
@@ -16,6 +16,7 @@
   line-height: var(--imb-leading-body);
   word-break: break-word;
   min-width: 0;
+  user-select: text;
 }
 
 .imb-msg.imb-self .imb-bubble {
@@ -54,10 +55,35 @@
   gap: 4px;
   padding: 3px 8px;
   background: rgba(255, 255, 255, 0.5);
+  border: none;
   border-radius: var(--imb-radius-sm);
+  font: inherit;
   font-size: var(--imb-text-xs);
   color: inherit;
   max-width: 260px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.imb-bubble-chip:hover:not(.imb-bubble-chip-static) {
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.imb-bubble-chip-static {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.imb-bubble-chip-more {
+  cursor: default;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.imb-bubble-attachment-error {
+  margin-bottom: 6px;
+  font-size: var(--imb-text-xs);
+  color: var(--imb-danger);
 }
 
 .imb-msg.imb-self .imb-bubble-chip {

@@ -74,6 +74,14 @@
   flex: none;
 }
 
+/* Long chat titles truncate with an ellipsis instead of hard-clipping. */
+.imb-nav-item > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .imb-nav-spacer {
   flex: 1;
 }

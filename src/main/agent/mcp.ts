@@ -472,11 +472,9 @@ function toPiToolDefinition(
       }
       return {
         content: mcpContentToPi(callResult.content),
-        details: {
-          mcpServer: server.name,
-          mcpTool: mcpTool.name,
-          structuredContent: callResult.structuredContent ?? undefined,
-        },
+        // `details` is persisted in the session file but never sent to the
+        // model; keep it empty so MCP results don't carry a duplicate payload.
+        details: {},
       };
     },
   };

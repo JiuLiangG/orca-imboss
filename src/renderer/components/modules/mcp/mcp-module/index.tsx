@@ -51,9 +51,10 @@ export function McpModule(): React.JSX.Element {
     clearSelection();
   }, [clearSelection, query]);
 
-  // Re-fetch on revisit when the startup load failed (best-effort).
+  // Re-fetch on every entry (MCP servers can change via the agent/external
+  // edits); first load shows the loading state, revisits revalidate silently.
   useEffect(() => {
-    appStore.ensureMcp();
+    void appStore.reloadMcp();
   }, []);
 
   // Auto-select the first server after page 1 loads (and recover when the

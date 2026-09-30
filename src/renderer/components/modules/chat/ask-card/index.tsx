@@ -58,8 +58,10 @@ export function AskCard({
     return (
       <MessageBubble
         self={self}
+        messageId={message.id}
         content={message.content}
         attachments={message.attachments}
+        attachmentsTotal={message.attachmentsTotal}
         avatar={
           <EmployeeAvatar employeeId={message.senderEmployeeId} size={34} />
         }

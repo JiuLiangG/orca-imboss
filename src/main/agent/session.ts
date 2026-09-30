@@ -25,6 +25,7 @@ import type {
 } from "@shared/types";
 import { createHash } from "crypto";
 import { getAgentRoot, getAgentSessionsDir } from "../data-dir";
+import { getChat } from "../db/chats";
 import { getEmployee } from "../db/employees";
 import { listMcpServers } from "../db/mcp";
 import { getSession } from "../db/sessions";
@@ -75,6 +76,14 @@ export type AgentSessionEventListener = (event: AgentSessionEvent) => void;
 interface SessionSpec {
   employeeId: number;
   isAssistant: boolean;
+  /** The chat this session runs in; part of the hash so the signature covers
+   *  the identity block injected into the prompt. Immutable per wrapper (one
+   *  `AgentSession` is bound to a single `(employee, chat)` key for life), so
+   *  adding it never causes extra rebuilds on its own. */
+  chatId: number;
+  /** Spawning chat for a group chat; null for root chats. Immutable after
+   *  `createChat` (no update path touches `from_chat_id`). */
+  fromChatId: number | null;
   /** Employee display name; injected into the generated non-assistant role block. */
   employeeName: string;
   /** Employee role; injected into the generated non-assistant role block. */
@@ -258,6 +267,10 @@ export class AgentSession {
     const spec: SessionSpec = {
       employeeId,
       isAssistant,
+      // Defensive: a chat row that vanished between queueing and composing
+      // degrades to a null `from` rather than failing the whole run.
+      chatId: this.context.chatId,
+      fromChatId: getChat(this.context.chatId)?.fromChatId ?? null,
       employeeName: employee?.name ?? "",
       employeeRole: employee?.role ?? "",
       modelRef: `${model.provider}/${model.id}`,
@@ -359,9 +372,9 @@ export class AgentSession {
       const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
       // Every employee session goes fully custom (decision 8): the SDK base
-      // prompt is dropped and the app builds the role block, persona,
-      // response-language rule, `[builtinSkills]`, `[tools]` and
-      // Today/Employee ID. The SDK still appends `<project_context>`,
+      // prompt is dropped and the app builds the identity block, role block,
+      // persona, response-language rule, `[builtinSkills]`, `[tools]` and the
+      // Today line. The SDK still appends `<project_context>`,
       // `[skills]` and a trailing `Current working directory` line after the
       // override.
       const systemPromptOverride = (): string =>
@@ -373,6 +386,8 @@ export class AgentSession {
           name: spec.employeeName,
           role: spec.employeeRole,
           employeeId: spec.employeeId,
+          chatId: spec.chatId,
+          fromChatId: spec.fromChatId,
           toolEntries,
           today,
         });

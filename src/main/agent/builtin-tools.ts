@@ -3,19 +3,26 @@ import {
   BUILTIN_REMOVE_CRON_MARKER,
   BUILTIN_SET_CRON_MARKER,
 } from "@shared/constants/agent_tools";
+import {
+  MAX_ATTACHMENT_TOTAL,
+  MAX_TOOL_ATTACHMENTS,
+} from "@shared/constants/attachments";
 import { ASSISTANT_ID } from "@shared/constants/employees";
 import { READ_CHAT_PROMPT } from "@shared/constants/prompts";
 import type {
   AgentEnvironment,
   AnyPiTool,
+  CronJob,
+  Employee,
   EmployeeSession,
   Message,
   MessageAttachment,
+  MessageKind,
   MessageStep,
   TeamToolOptions,
 } from "@shared/types";
 import { stat } from "fs/promises";
-import { basename, extname } from "path";
+import { basename, extname, resolve } from "path";
 import { Type } from "typebox";
 import * as cron from "../cron";
 import { getDB } from "../db";
@@ -110,12 +117,14 @@ function mimeByExtension(path: string): string {
   return MIME_BY_EXT[ext] ?? "application/octet-stream";
 }
 
-/** Resolve file paths → attachment metadata (name/size/type); no previews. */
+/** Resolve file paths → attachment metadata (name/size/type/path); no previews. */
 async function resolveAttachments(
   paths: string[] | undefined,
 ): Promise<MessageAttachment[] | undefined> {
   if (!paths || paths.length === 0) return undefined;
-  if (paths.length > 16) throw new Error("Too many attachments.");
+  if (paths.length > MAX_TOOL_ATTACHMENTS) {
+    throw new Error("Too many attachments.");
+  }
   const result: MessageAttachment[] = [];
   for (const path of paths) {
     let stats;
@@ -132,6 +141,9 @@ async function resolveAttachments(
       name: basename(path),
       size: stats.size,
       type: mimeByExtension(path),
+      // Store an absolute path (matching how `stat` resolved it) so the file
+      // can later be revealed in the OS file manager.
+      path: resolve(path),
     });
   }
   return result;
@@ -154,6 +166,7 @@ async function performSendMessage(
     content: string;
     steps?: MessageStep[];
     attachments?: string[];
+    attachmentTotal?: number;
     notify?: number[];
     notifyPrompt?: string;
     skipSenderCheck?: boolean;
@@ -180,6 +193,7 @@ async function performSendMessage(
       kind: input.kind ?? "text",
       steps: input.steps,
       attachments,
+      attachmentTotal: input.attachmentTotal,
     },
   );
 
@@ -198,12 +212,93 @@ async function performSendMessage(
   return message;
 }
 
-/** Wrap a tool payload as a Pi text tool result. */
+/**
+ * Wrap a tool payload as a Pi text tool result.
+ *
+ * `details` is deliberately empty: the SDK never sends it to the model and no
+ * app code reads it, yet it is persisted in the session file — mirroring the
+ * payload there would double every tool result. Only `content` is meaningful,
+ * so the model receives `JSON.stringify(value)` once.
+ */
 function toolResult(value: unknown): AgentToolResult<unknown> {
   return {
     content: [{ type: "text", text: JSON.stringify(value) }],
-    details: { result: value },
+    details: {},
   };
+}
+
+/**
+ * Slim employee projection: keeps what the orchestrator uses (id for
+ * @-mentions/notify, name/role for step cards, skills/mcp to judge fit) and
+ * drops the rest — notably the full `systemPrompt` and the base64 `avatarUrl`.
+ */
+interface EmployeeBrief {
+  id: number;
+  name: string;
+  role: string;
+  skills: string[];
+  mcp: string[];
+}
+
+function toEmployeeBrief(employee: Employee): EmployeeBrief {
+  return {
+    id: employee.id,
+    name: employee.name,
+    role: employee.role,
+    skills: employee.skills,
+    mcp: employee.mcp,
+  };
+}
+
+/** Slim message projection; `steps`/`attachments` are omitted when absent. */
+interface MessageBrief {
+  id: number;
+  senderEmployeeId: number | null;
+  kind: MessageKind;
+  content: string;
+  steps?: MessageStep[];
+  attachments?: MessageAttachment[];
+  /** True attachment count when it exceeds the metadata rows forwarded. */
+  attachmentsTotal?: number;
+  createdAt: number;
+}
+
+function toMessageBrief(message: Message): MessageBrief {
+  const brief: MessageBrief = {
+    id: message.id,
+    senderEmployeeId: message.senderEmployeeId,
+    kind: message.kind,
+    content: message.content,
+    createdAt: message.createdAt,
+  };
+  if (message.steps && message.steps.length > 0) brief.steps = message.steps;
+  if (message.attachments && message.attachments.length > 0) {
+    // Strip the on-disk `path`: the model has its own filesystem tools and
+    // must not receive local paths through the chat brief.
+    brief.attachments = message.attachments.map((attachment) => ({
+      name: attachment.name,
+      size: attachment.size,
+      type: attachment.type,
+    }));
+    if (
+      message.attachmentsTotal !== null &&
+      message.attachmentsTotal > message.attachments.length
+    ) {
+      brief.attachmentsTotal = message.attachmentsTotal;
+    }
+  }
+  return brief;
+}
+
+/** Slim cron job projection: enough to confirm the schedule, no echoed content. */
+interface CronJobBrief {
+  id: string;
+  schedule: string;
+  nextRunAt: number | null;
+}
+
+function toCronJobBrief(job: CronJob): CronJobBrief {
+  return { id: job.id, schedule: job.schedule, nextRunAt: job.nextRunAt };
 }
 
 /**
@@ -384,7 +479,10 @@ function createChatTool(
         skipSenderCheck: true,
       });
 
-      return toolResult({ chat, sessions: sessionRecords });
+      return toolResult({
+        chatId: chat.id,
+        participants: chat.participants,
+      });
     },
   };
 }
@@ -400,7 +498,8 @@ function sendMessageTool(
     label: "Send message",
     description:
       "Send a message into a chat as one of the active participants, with optional file-path attachments " +
-      "and notifications to other participants. Use `kind` `report` to report a finished task's result; " +
+      "(at most 5; pass `attachmentTotal` when more files were produced) and notifications to other " +
+      "participants. Use `kind` `report` to report a finished task's result; " +
       "the assistant may post `kind` `progress` with `steps` to publish a progress card.",
     promptSnippet: "post to a chat",
     parameters: Type.Object({
@@ -418,9 +517,14 @@ function sendMessageTool(
           { maxItems: 64 },
         ),
       ),
-      attachments: Type.Optional(Type.Array(Type.String(), { maxItems: 16 })),
+      attachments: Type.Optional(
+        Type.Array(Type.String(), { maxItems: MAX_TOOL_ATTACHMENTS }),
+      ),
+      attachmentTotal: Type.Optional(
+        Type.Integer({ minimum: 0, maximum: MAX_ATTACHMENT_TOTAL }),
+      ),
       notify: Type.Optional(
-        Type.Array(Type.Integer({ minimum: 1 }), { maxItems: 64 }),
+        Type.Array(Type.Integer({ minimum: 0 }), { maxItems: 64 }),
       ),
     }),
     execute: async (_toolCallId, params) => {
@@ -432,6 +536,7 @@ function sendMessageTool(
         content: string;
         steps?: MessageStep[];
         attachments?: string[];
+        attachmentTotal?: number;
         notify?: number[];
       };
       // `steps` only make sense for a progress card, which is assistant-only.
@@ -451,9 +556,10 @@ function sendMessageTool(
         content: input.content,
         steps: input.steps,
         attachments: input.attachments,
+        attachmentTotal: input.attachmentTotal,
         notify: input.notify,
       });
-      return toolResult(message);
+      return toolResult({ id: message.id });
     },
   };
 }
@@ -485,10 +591,12 @@ function readChatTool(employeeId: number, chatId: number): AnyPiTool {
         dbSessions.setReadCursor(employeeId, input.chatId, nextCursor);
       }
       return toolResult({
-        chatId: input.chatId,
         from: chat.fromChatId,
-        cursor: nextCursor,
-        messages,
+        // App-generated receipt acks are noise for the model; the cursor above
+        // still advances past them so they are never re-read.
+        messages: messages
+          .filter((message) => message.kind !== "ack")
+          .map(toMessageBrief),
       });
     },
   };
@@ -508,7 +616,7 @@ function listEmployeesTool(employeeId: number, chatId: number): AnyPiTool {
       const employees = dbEmployees
         .listEmployees()
         .filter((employee) => employee.id !== ASSISTANT_ID);
-      return toolResult(employees);
+      return toolResult(employees.map(toEmployeeBrief));
     },
   };
 }
@@ -577,15 +685,14 @@ function setCronjobTool(employeeId: number, chatId: number): AnyPiTool {
           );
         }
       }
-      return toolResult(
-        cron.setJob({
-          id: input.id,
-          chatId: parsed.chatId,
-          employeeId: parsed.employeeId,
-          schedule: input.schedule,
-          content: input.content,
-        }),
-      );
+      const job = cron.setJob({
+        id: input.id,
+        chatId: parsed.chatId,
+        employeeId: parsed.employeeId,
+        schedule: input.schedule,
+        content: input.content,
+      });
+      return toolResult(toCronJobBrief(job));
     },
   };
 }
@@ -673,14 +780,8 @@ function addParticipantTool(
           skipSenderCheck: true,
         });
 
-        const sessions: EmployeeSession[] = [];
         for (const participant of newParticipants) {
           await ensureSessionFile(participant.employeeID, input.chatId);
-          const record = dbSessions.getSession(
-            participant.employeeID,
-            input.chatId,
-          );
-          if (record) sessions.push(record);
           fireAndForgetPrompt(
             env,
             participant.employeeID,
@@ -688,14 +789,10 @@ function addParticipantTool(
             participant.prompt,
           );
         }
-        return toolResult({
-          chat: updated,
-          added: add,
-          sessions,
-        });
+        return toolResult({ chatId: updated.id, added: add });
       }
 
-      return toolResult({ chat, added: [], sessions: [] });
+      return toolResult({ chatId: chat.id, added: [] });
     },
   };
 }
@@ -712,7 +809,8 @@ function imbAskTool(
     description:
       "Post a question set into a chat as one of the active participants and notify the specified " +
       "employees to answer. Each question offers candidate options (single or multiple) and/or a " +
-      "free-form answer; the message body is the JSON serialization of the question set.",
+      "free-form answer; the message body is the JSON serialization of the question set. " +
+      "Attachments are capped at 5; pass `attachmentTotal` when more files were produced.",
     promptSnippet: "post a question set",
     parameters: Type.Object({
       senderEmployeeId: Type.Integer({ minimum: 0 }),
@@ -734,11 +832,16 @@ function imbAskTool(
           { minItems: 1, maxItems: 32 },
         ),
       }),
-      notify: Type.Array(Type.Integer({ minimum: 1 }), {
+      notify: Type.Array(Type.Integer({ minimum: 0 }), {
         minItems: 1,
         maxItems: 64,
       }),
-      attachments: Type.Optional(Type.Array(Type.String(), { maxItems: 16 })),
+      attachments: Type.Optional(
+        Type.Array(Type.String(), { maxItems: MAX_TOOL_ATTACHMENTS }),
+      ),
+      attachmentTotal: Type.Optional(
+        Type.Integer({ minimum: 0, maximum: MAX_ATTACHMENT_TOTAL }),
+      ),
     }),
     execute: async (_toolCallId, params) => {
       logToolCall("imb_ask", employeeId, chatId, params);
@@ -755,6 +858,7 @@ function imbAskTool(
         };
         notify: number[];
         attachments?: string[];
+        attachmentTotal?: number;
       };
       const message = await performSendMessage(env, {
         senderEmployeeId: input.senderEmployeeId,
@@ -762,9 +866,10 @@ function imbAskTool(
         kind: "ask",
         content: JSON.stringify(input.questions),
         attachments: input.attachments,
+        attachmentTotal: input.attachmentTotal,
         notify: input.notify,
       });
-      return toolResult(message);
+      return toolResult({ id: message.id });
     },
   };
 }
@@ -780,7 +885,8 @@ function imbAnswerTool(
     label: "Answer a question",
     description:
       "Post an answer to a previous question set into a chat as one of the active participants and " +
-      "notify the specified employees. The message body is the JSON serialization of the answers.",
+      "notify the specified employees. The message body is the JSON serialization of the answers. " +
+      "Attachments are capped at 5; pass `attachmentTotal` when more files were produced.",
     promptSnippet: "post an answer",
     parameters: Type.Object({
       senderEmployeeId: Type.Integer({ minimum: 0 }),
@@ -797,11 +903,16 @@ function imbAnswerTool(
           { minItems: 1, maxItems: 32 },
         ),
       }),
-      notify: Type.Array(Type.Integer({ minimum: 1 }), {
+      notify: Type.Array(Type.Integer({ minimum: 0 }), {
         minItems: 1,
         maxItems: 64,
       }),
-      attachments: Type.Optional(Type.Array(Type.String(), { maxItems: 16 })),
+      attachments: Type.Optional(
+        Type.Array(Type.String(), { maxItems: MAX_TOOL_ATTACHMENTS }),
+      ),
+      attachmentTotal: Type.Optional(
+        Type.Integer({ minimum: 0, maximum: MAX_ATTACHMENT_TOTAL }),
+      ),
     }),
     execute: async (_toolCallId, params) => {
       logToolCall("imb_answer", employeeId, chatId, params);
@@ -817,6 +928,7 @@ function imbAnswerTool(
         };
         notify: number[];
         attachments?: string[];
+        attachmentTotal?: number;
       };
       const message = await performSendMessage(env, {
         senderEmployeeId: input.senderEmployeeId,
@@ -824,9 +936,10 @@ function imbAnswerTool(
         kind: "answer",
         content: JSON.stringify(input.answers),
         attachments: input.attachments,
+        attachmentTotal: input.attachmentTotal,
         notify: input.notify,
       });
-      return toolResult(message);
+      return toolResult({ id: message.id });
     },
   };
 }
