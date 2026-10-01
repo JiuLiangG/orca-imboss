@@ -1,1 +1,1 @@
-export const MCP_TRANSPORTS = ["stdio", "sse", "streamable-http"] as const;
+export const MCP_TRANSPORTS = ["stdio", "http"] as const;

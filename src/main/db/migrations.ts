@@ -130,6 +130,12 @@ const MIGRATIONS: Array<(db: Database) => void> = [
       );
     `);
   },
+  // 1 — MCP server configuration moved out of SQLite into the app's
+  // `~/.imboss/agent/mcp.json` (managed by `src/main/mcp-store.ts` and read by
+  // the Pi SDK MCP extension). Existing rows are intentionally not migrated.
+  (db) => {
+    db.exec("DROP TABLE IF EXISTS mcp_servers;");
+  },
 ];
 
 export function migrate(db: Database): void {

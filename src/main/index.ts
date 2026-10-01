@@ -5,6 +5,7 @@ import { refreshModelStore } from "./agent/model-runtime";
 import { disposeAll } from "./agent/session-queue";
 import { deleteAvatarFiles } from "./avatars";
 import * as cron from "./cron";
+import { getAgentRoot } from "./data-dir";
 import { initDatabase } from "./db";
 import { purgeDisabledEmployees } from "./db/employees";
 import { unlinkSessionFile } from "./db/sessions";
@@ -21,6 +22,12 @@ import {
   MIN_WINDOW_WIDTH,
   saveWindowBounds,
 } from "./window-state";
+
+// Keep the Pi SDK's own agent-dir defaults (MCP OAuth credentials and MCP logs)
+// inside the app's isolated data dir instead of the host's `~/.pi/agent`. The
+// app passes explicit `agentDir`/paths everywhere else, and the MCP extension's
+// server discovery is supplied by the app's own `loadConfig`.
+process.env.PI_CODING_AGENT_DIR = getAgentRoot();
 
 // Single instance
 const singleInstanceLock = app.requestSingleInstanceLock();

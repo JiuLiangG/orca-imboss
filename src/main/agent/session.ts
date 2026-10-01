@@ -27,16 +27,17 @@ import { createHash } from "crypto";
 import { getAgentRoot, getAgentSessionsDir } from "../data-dir";
 import { getChat } from "../db/chats";
 import { getEmployee } from "../db/employees";
-import { listMcpServers } from "../db/mcp";
 import { getSession } from "../db/sessions";
 import { getSetting } from "../db/settings";
+import { readMcpServers } from "../mcp-store";
 import { createTeamToolDefinitions } from "./builtin-tools";
 import { buildEmployeeSystemPrompt } from "./employee-prompt";
-import { createMcpToolDefinitions } from "./mcp";
+import { toMcpServerEntries } from "./mcp";
 import { getModelRuntime, resolveModel } from "./model-runtime";
 import { loadPiSdk, type PiSdk } from "./pi-sdk";
 import { listSkills } from "./skills";
 import { createShellToolDefinitions } from "./tools";
+import { readUserEnv } from "./user-env";
 import { resolveWorkDir } from "./workdir";
 
 /**
@@ -55,9 +56,10 @@ import { resolveWorkDir } from "./workdir";
  * - the bash tool (and the PowerShell tool on Windows) is replaced by an
  *   env-injected definition (user env via the tool's `spawnHook` — see
  *   `tools.ts`);
- * - the employee's configured MCP servers are connected by the app-side
- *   bridge and their tools are registered (see `mcp.ts`; stdio servers get
- *   the merged user env too).
+ * - the employee's configured MCP servers are connected by the Pi SDK's
+ *   built-in MCP extension, which is given only this employee's servers via a
+ *   custom `loadConfig` (see `mcp.ts`; stdio servers get the user env merged
+ *   into their `env`).
  *
  * The wrapper never captures or persists a reply: the agent posts its own
  * output through the built-in `imb_*` tools. `prompt()` only advances the
@@ -128,7 +130,6 @@ export class AgentSession {
   private _disposed = false;
   private _piSession: PiAgentSession | undefined;
   private _signature: string | undefined;
-  private _closeMcp: (() => Promise<void>) | undefined;
 
   constructor(
     private readonly env: AgentEnvironment,
@@ -186,23 +187,25 @@ export class AgentSession {
     this._piSession = undefined;
     this._signature = undefined;
     if (session) {
+      // `AgentSession.dispose()` does not emit `session_shutdown`; emit it so
+      // extension-scoped resources (MCP stdio children, connections) are
+      // released before the session goes away.
+      try {
+        await session.extensionRunner.emit({
+          type: "session_shutdown",
+          reason: "quit",
+        });
+      } catch (err) {
+        console.error(
+          "[agent-session] failed to emit session_shutdown:",
+          err instanceof Error ? err.message : err,
+        );
+      }
       try {
         session.dispose();
       } catch (err) {
         console.error(
           "[agent-session] failed to dispose Pi session:",
-          err instanceof Error ? err.message : err,
-        );
-      }
-    }
-    const close = this._closeMcp;
-    this._closeMcp = undefined;
-    if (close) {
-      try {
-        await close();
-      } catch (err) {
-        console.error(
-          "[agent-session] failed to close MCP connections:",
           err instanceof Error ? err.message : err,
         );
       }
@@ -241,7 +244,7 @@ export class AgentSession {
     const employeeMcp = [...(employee?.mcp ?? [])].sort((a, b) =>
       a.localeCompare(b),
     );
-    const mcpServers = listMcpServers()
+    const mcpServers = readMcpServers()
       .filter((server) => employeeMcp.includes(server.name))
       .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -299,156 +302,166 @@ export class AgentSession {
     const { spec, model, modelRuntime, mcpServers } = composed;
     const cwd = spec.cwd;
 
-    const mcp = await createMcpToolDefinitions(mcpServers);
-    try {
-      const shellTools = await createShellToolDefinitions({ cwd });
-      // Role-based team tools: the assistant orchestrates; participants just
-      // work inside chats. The context is guaranteed by `prepare()`.
-      const teamTools = this.context
-        ? createTeamToolDefinitions({
-            env: this.env,
-            employeeId: spec.employeeId,
-            chatId: this.context.chatId,
-            // Includes built-in opt-in markers (e.g. `builtin:imb_set_cronjob`)
-            // alongside any MCP server names.
-            mcp: spec.mcpServerNames,
-          })
-        : [];
-      const customTools: AnyPiTool[] = [
-        ...shellTools,
-        ...teamTools,
-        ...mcp.tools,
-      ];
-      // `powershell` is only ever active on Windows: the explicit entry below
-      // and the custom-shell spread are both gated, and a final filter guards
-      // against any future tool list re-introducing the name off-Windows.
-      // (`activeToolNames` doubles as the SDK tool allowlist and as the source
-      // of the generated `Available tools:` block.)
-      const isWindows = process.platform === "win32";
-      const activeToolNames = [
-        "read",
-        "bash",
-        "edit",
-        "write",
-        ...(isWindows ? ["powershell"] : []),
-        ...customTools.map((tool) => tool.name),
-      ];
+    // Per-employee MCP scoping: the SDK MCP extension connects every server its
+    // `loadConfig` returns, so this build only hands it the servers selected by
+    // this employee. The extension is created per session build and reconnects
+    // when the composition signature changes.
+    const userEnv = readUserEnv();
+    const mcpExtension = pi.createMcpExtension({
+      loadConfig: () => ({
+        servers: toMcpServerEntries(mcpServers, userEnv),
+        errors: [],
+      }),
+    });
 
-      // Resume the persistent per-(employee, chat) session when a row exists;
-      // otherwise start ephemeral. A stored-but-unreadable session file falls
-      // back to in-memory rather than failing the turn.
-      let sessionManager: SessionManager;
-      const sessionRecord = this.context
-        ? getSession(spec.employeeId, this.context.chatId)
-        : null;
-      if (sessionRecord) {
-        try {
-          sessionManager = pi.SessionManager.open(
-            sessionRecord.session,
-            getAgentSessionsDir(),
-            cwd,
-          );
-        } catch {
-          sessionManager = pi.SessionManager.inMemory(cwd);
-        }
-      } else {
+    const shellTools = await createShellToolDefinitions({ cwd });
+    // Role-based team tools: the assistant orchestrates; participants just
+    // work inside chats. The context is guaranteed by `prepare()`.
+    const teamTools = this.context
+      ? createTeamToolDefinitions({
+          env: this.env,
+          employeeId: spec.employeeId,
+          chatId: this.context.chatId,
+          // Includes built-in opt-in markers (e.g. `builtin:imb_set_cronjob`)
+          // alongside any MCP server names.
+          mcp: spec.mcpServerNames,
+        })
+      : [];
+    const customTools: AnyPiTool[] = [...shellTools, ...teamTools];
+
+    // Base built-in tools are pinned through the in-memory `defaultTools`
+    // setting instead of the `tools` allowlist: an allowlist would filter out
+    // extension-registered MCP tools entirely, so direct MCP tools would never
+    // become active. Custom tools and direct MCP tools auto-activate on
+    // registration; only these base names are enabled initially.
+    const isWindows = process.platform === "win32";
+    const defaultToolNames = [
+      "read",
+      "bash",
+      "edit",
+      "write",
+      ...(isWindows ? ["powershell"] : []),
+    ];
+    // Source of the generated `Available tools:` block. MCP tools are not listed
+    // here (their servers connect only after this prompt is built); the model
+    // still receives their full tool declarations once they do.
+    const activeToolNames = [
+      ...defaultToolNames,
+      ...customTools.map((tool) => tool.name),
+    ];
+
+    // Resume the persistent per-(employee, chat) session when a row exists;
+    // otherwise start ephemeral. A stored-but-unreadable session file falls
+    // back to in-memory rather than failing the turn.
+    let sessionManager: SessionManager;
+    const sessionRecord = this.context
+      ? getSession(spec.employeeId, this.context.chatId)
+      : null;
+    if (sessionRecord) {
+      try {
+        sessionManager = pi.SessionManager.open(
+          sessionRecord.session,
+          getAgentSessionsDir(),
+          cwd,
+        );
+      } catch {
         sessionManager = pi.SessionManager.inMemory(cwd);
       }
-
-      const settingsManager = pi.SettingsManager.inMemory();
-
-      // Enumeration of the active tools for this employee-session's `[tools]`
-      // block: the SDK core tools use their base snippets; MCP + team `imb_*`
-      // tools use their `promptSnippet` (falling back to the description).
-      const toolEntries = buildEmployeeToolEntries(
-        activeToolNames,
-        customTools,
-      );
-
-      // Current local date (`yyyy-MM-dd`) for the `Today is ...` line. Kept out
-      // of the composition signature so a warm session never rebuilds at
-      // midnight (it may show a day-stale date until the next rebuild).
-      const now = new Date();
-      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-
-      // Every employee session goes fully custom (decision 8): the SDK base
-      // prompt is dropped and the app builds the identity block, role block,
-      // persona, response-language rule, `[builtinSkills]`, `[tools]` and the
-      // Today line. The SDK still appends `<project_context>`,
-      // `[skills]` and a trailing `Current working directory` line after the
-      // override.
-      const systemPromptOverride = (): string =>
-        buildEmployeeSystemPrompt({
-          personaParts: spec.isAssistant
-            ? [ASSISTANT_SYSTEM_PROMPT, spec.systemPrompt]
-            : [spec.systemPrompt],
-          isAssistant: spec.isAssistant,
-          name: spec.employeeName,
-          role: spec.employeeRole,
-          employeeId: spec.employeeId,
-          chatId: spec.chatId,
-          fromChatId: spec.fromChatId,
-          toolEntries,
-          today,
-        });
-
-      // Anchor `<project_context>` to the app's `~/.imboss/agent` dir only,
-      // dropping any ancestor AGENTS.md files outside it (decision 5), and
-      // filter the global installed skills down to the employee's selection
-      // (empty selection ⇒ no `[skills]` block).
-      const selectedSkills = new Set(spec.employeeSkills);
-
-      const resourceLoader = new pi.DefaultResourceLoader({
-        cwd,
-        agentDir: this.env.rootDir,
-        settingsManager,
-        systemPromptOverride,
-        agentsFilesOverride: (base) => ({
-          agentsFiles: filterAgentContextFiles(
-            base.agentsFiles,
-            getAgentRoot(),
-          ),
-        }),
-        skillsOverride: (base) => ({
-          skills: base.skills.filter((skill) => selectedSkills.has(skill.name)),
-          diagnostics: base.diagnostics,
-        }),
-      });
-      await resourceLoader.reload();
-
-      console.log("pi session prompt", systemPromptOverride());
-      const { session } = await pi.createAgentSession({
-        cwd,
-        agentDir: this.env.rootDir,
-        modelRuntime,
-        model,
-        // Omitted when unset: the SDK restores the session-history level or
-        // falls back to its default (medium), clamped to model capabilities.
-        ...(spec.thinkingLevel !== null
-          ? { thinkingLevel: spec.thinkingLevel }
-          : {}),
-        tools: activeToolNames,
-        customTools,
-        resourceLoader,
-        sessionManager,
-        settingsManager,
-      });
-
-      session.subscribe((event) => {
-        this.onEvent?.(event);
-      });
-
-      this._piSession = session;
-      this._closeMcp = mcp.close;
-    } catch (err) {
-      // A failed build must not leak MCP child processes / connections.
-      try {
-        await mcp.close();
-      } catch {
-        // Best-effort cleanup.
-      }
-      throw err;
+    } else {
+      sessionManager = pi.SessionManager.inMemory(cwd);
     }
+
+    const settingsManager = pi.SettingsManager.inMemory();
+    settingsManager.applyOverrides({ defaultTools: defaultToolNames });
+
+    // Enumeration of the active tools for this employee-session's `[tools]`
+    // block: the SDK core tools use their base snippets; team `imb_*` tools use
+    // their `promptSnippet` (falling back to the description).
+    const toolEntries = buildEmployeeToolEntries(activeToolNames, customTools);
+
+    // Current local date (`yyyy-MM-dd`) for the `Today is ...` line. Kept out
+    // of the composition signature so a warm session never rebuilds at
+    // midnight (it may show a day-stale date until the next rebuild).
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+    // Every employee session goes fully custom (decision 8): the SDK base
+    // prompt is dropped and the app builds the identity block, role block,
+    // persona, response-language rule, `[builtinSkills]`, `[tools]` and the
+    // Today line. The SDK still appends `<project_context>`,
+    // `[skills]` and a trailing `Current working directory` line after the
+    // override.
+    const systemPromptOverride = (): string =>
+      buildEmployeeSystemPrompt({
+        personaParts: spec.isAssistant
+          ? [ASSISTANT_SYSTEM_PROMPT, spec.systemPrompt]
+          : [spec.systemPrompt],
+        isAssistant: spec.isAssistant,
+        name: spec.employeeName,
+        role: spec.employeeRole,
+        employeeId: spec.employeeId,
+        chatId: spec.chatId,
+        fromChatId: spec.fromChatId,
+        toolEntries,
+        today,
+      });
+
+    // Anchor `<project_context>` to the app's `~/.imboss/agent` dir only,
+    // dropping any ancestor AGENTS.md files outside it (decision 5), and
+    // filter the global installed skills down to the employee's selection
+    // (empty selection ⇒ no `[skills]` block).
+    const selectedSkills = new Set(spec.employeeSkills);
+
+    const resourceLoader = new pi.DefaultResourceLoader({
+      cwd,
+      agentDir: this.env.rootDir,
+      settingsManager,
+      systemPromptOverride,
+      agentsFilesOverride: (base) => ({
+        agentsFiles: filterAgentContextFiles(base.agentsFiles, getAgentRoot()),
+      }),
+      skillsOverride: (base) => ({
+        skills: base.skills.filter((skill) => selectedSkills.has(skill.name)),
+        diagnostics: base.diagnostics,
+      }),
+      // Built-in extensions are opt-in for SDK hosts; add the MCP extension so
+      // this session connects the employee's servers.
+      extensionFactories: [mcpExtension],
+    });
+    await resourceLoader.reload();
+
+    const { session } = await pi.createAgentSession({
+      cwd,
+      agentDir: this.env.rootDir,
+      modelRuntime,
+      model,
+      // Omitted when unset: the SDK restores the session-history level or
+      // falls back to its default (medium), clamped to model capabilities.
+      ...(spec.thinkingLevel !== null
+        ? { thinkingLevel: spec.thinkingLevel }
+        : {}),
+      customTools,
+      resourceLoader,
+      sessionManager,
+      settingsManager,
+    });
+
+    // Emits `session_start`, which connects the MCP servers in the background.
+    await session.bindExtensions({});
+
+    // Debug: dump the effective system prompt actually sent to the model. This
+    // is the full assembled text — the app's override plus everything the SDK
+    // appends at runtime (`<project_context>`, `[skills]`, the trailing
+    // `Current working directory` line).
+    console.log(
+      `[agent-session] system prompt (employee=${spec.employeeId}, chat=${spec.chatId}):\n${session.systemPrompt}`,
+    );
+
+    session.subscribe((event) => {
+      this.onEvent?.(event);
+    });
+
+    this._piSession = session;
   }
 }
 

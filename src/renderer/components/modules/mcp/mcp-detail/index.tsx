@@ -28,7 +28,6 @@ export function McpDetail({
   onPatch,
   onRemove,
 }: McpDetailProps): React.JSX.Element {
-  const [name, setName] = useState(server.name);
   const [description, setDescription] = useState(server.description);
   const [configForm, setConfigForm] = useState<McpConfigFormValue>(() =>
     configToForm(server.config),
@@ -38,11 +37,12 @@ export function McpDetail({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const save = useCallback(
-    (next: { name: string; description: string; form: McpConfigFormValue }) => {
+    (next: { description: string; form: McpConfigFormValue }) => {
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
         void onPatch({
-          name: next.name,
+          // `mcp.json` keys servers by name, so the name is immutable here.
+          name: server.name,
           description: next.description,
           config: formToConfig(next.form),
         }).catch((err: unknown) =>
@@ -50,7 +50,7 @@ export function McpDetail({
         );
       }, SAVE_DEBOUNCE_MS);
     },
-    [onPatch],
+    [onPatch, server.name],
   );
 
   useEffect(() => {
@@ -59,24 +59,20 @@ export function McpDetail({
     };
   }, []);
 
-  const updateName = (value: string): void => {
-    setName(value);
-    save({ name: value, description, form: configForm });
-  };
   const updateDescription = (value: string): void => {
     setDescription(value);
-    save({ name, description: value, form: configForm });
+    save({ description: value, form: configForm });
   };
   const updateConfig = (form: McpConfigFormValue): void => {
     setConfigForm(form);
-    save({ name, description, form });
+    save({ description, form });
   };
 
   return (
     <>
       <DetailHead
         eyebrow="MCP Server"
-        title={name.trim() || t("Unnamed MCP")}
+        title={server.name}
         sub={description.split("\n")[0] || "—"}
         actions={
           <Button
@@ -89,8 +85,11 @@ export function McpDetail({
         }
       />
       <DetailBody>
-        <Field label={t("MCP name")}>
-          <Input value={name} onChange={(e) => updateName(e.target.value)} />
+        <Field
+          label={t("MCP name")}
+          hint={t("Server names are set when created and cannot be changed.")}
+        >
+          <Input value={server.name} readOnly />
         </Field>
         <Field label={t("Description")}>
           <Textarea
@@ -100,7 +99,7 @@ export function McpDetail({
           />
         </Field>
         <McpConfigFields
-          idPrefix={`mcp-${server.id}`}
+          idPrefix="mcp-detail"
           value={configForm}
           onChange={updateConfig}
         />
@@ -112,7 +111,7 @@ export function McpDetail({
         onClose={() => setRemoveOpen(false)}
         title={t("Delete MCP")}
         sub={t('Are you sure you want to delete "${name}"?', {
-          name: name.trim() || server.name,
+          name: server.name,
         })}
         actions={
           <>

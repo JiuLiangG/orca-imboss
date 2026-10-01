@@ -110,7 +110,7 @@ export function McpAddModal({
       <Field label={t("MCP name")}>
         <Input
           value={name}
-          placeholder={t("e.g. Web Search")}
+          placeholder={t("e.g. web-search")}
           data-autofocus
           onChange={(e) => setName(e.target.value)}
         />

@@ -17,7 +17,7 @@ import { McpAddModal } from "../mcp-add-modal";
 import { McpDetail } from "../mcp-detail";
 
 export function McpModule(): React.JSX.Element {
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedName, setSelectedName] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -39,10 +39,10 @@ export function McpModule(): React.JSX.Element {
     );
   }, [data.mcp.items, query]);
 
-  const multi = useMultiSelect<McpServer, number>({
-    getKey: (server) => server.id,
+  const multi = useMultiSelect<McpServer, string>({
+    getKey: (server) => server.name,
     items: servers,
-    onActivate: (server) => setSelectedId(server.id),
+    onActivate: (server) => setSelectedName(server.name),
   });
   const clearSelection = multi.clear;
 
@@ -62,22 +62,23 @@ export function McpModule(): React.JSX.Element {
   useEffect(() => {
     if (loading) return;
     if (servers.length === 0) {
-      setSelectedId(null);
+      setSelectedName(null);
       return;
     }
-    setSelectedId((current) =>
-      current !== null && servers.some((server) => server.id === current)
+    setSelectedName((current) =>
+      current !== null && servers.some((server) => server.name === current)
         ? current
-        : servers[0].id,
+        : servers[0].name,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [servers, loading]);
 
-  const selected = servers.find((server) => server.id === selectedId) ?? null;
+  const selected =
+    servers.find((server) => server.name === selectedName) ?? null;
 
   const patch = useCallback(
-    async (id: number, input: McpServerInput): Promise<void> => {
-      const updated = await imb.mcp.update(id, input);
+    async (name: string, input: McpServerInput): Promise<void> => {
+      const updated = await imb.mcp.update(name, input);
       if (updated) appStore.replaceMcp(updated);
     },
     [],
@@ -87,10 +88,10 @@ export function McpModule(): React.JSX.Element {
     async (input: McpServerInput): Promise<boolean> => {
       try {
         const created = await imb.mcp.create(input);
-        // Newest id sorts last (id ASC) — append so it is immediately visible
-        // and the auto-select effect picks it up when it matches the filter.
+        // Append so it is immediately visible and the auto-select effect picks
+        // it up when it matches the filter.
         appStore.addMcp(created);
-        setSelectedId(created.id);
+        setSelectedName(created.name);
         setError(null);
         return true;
       } catch (err) {
@@ -101,23 +102,23 @@ export function McpModule(): React.JSX.Element {
     [],
   );
 
-  const remove = useCallback(async (id: number): Promise<void> => {
+  const remove = useCallback(async (name: string): Promise<void> => {
     try {
-      const removed = await imb.mcp.remove(id);
-      if (removed) appStore.removeMcp(id);
+      const removed = await imb.mcp.remove(name);
+      if (removed) appStore.removeMcp(name);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
   }, []);
 
   const deleteSelected = useCallback(async (): Promise<void> => {
-    const ids = [...multi.selectedKeys];
-    if (ids.length === 0) return;
+    const names = [...multi.selectedKeys];
+    if (names.length === 0) return;
     try {
       setDeleteOpen(false);
-      for (const id of ids) {
-        await imb.mcp.remove(id);
-        appStore.removeMcp(id);
+      for (const name of names) {
+        await imb.mcp.remove(name);
+        appStore.removeMcp(name);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -150,7 +151,7 @@ export function McpModule(): React.JSX.Element {
     >
       <ItemList
         items={servers}
-        getItemKey={(server) => server.id}
+        getItemKey={(server) => server.name}
         loading={loading}
         loadError={listError}
         selectable
@@ -160,7 +161,7 @@ export function McpModule(): React.JSX.Element {
         }
         renderItem={(server, { selected: isSelectedRow }) => (
           <ListRow
-            active={server.id === selectedId}
+            active={server.name === selectedName}
             selected={isSelectedRow}
             avatar={
               <Avatar letter={server.name.slice(0, 2)} name={server.name} alt />
@@ -199,10 +200,10 @@ export function McpModule(): React.JSX.Element {
 
   const detail = selected ? (
     <McpDetail
-      key={selected.id}
+      key={selected.name}
       server={selected}
-      onPatch={(input) => patch(selected.id, input)}
-      onRemove={() => void remove(selected.id)}
+      onPatch={(input) => patch(selected.name, input)}
+      onRemove={() => void remove(selected.name)}
     />
   ) : null;
 

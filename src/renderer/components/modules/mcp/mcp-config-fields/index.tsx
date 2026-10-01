@@ -9,7 +9,7 @@ import { Textarea } from "../../../textarea";
 /**
  * Transport-aware MCP config form (shared by detail + add modal).
  * stdio → command / args / env (KEY=value lines);
- * sse / streamable-http → url / headers (KEY=value lines).
+ * http (streamable HTTP) → url / headers (KEY=value lines).
  */
 
 export interface McpConfigFormValue {
@@ -62,10 +62,12 @@ function recordToLines(record: Record<string, string>): string {
     .join("\n");
 }
 
-/** Parse "KEY=value" lines; keys must be env-var-like (defensive). */
+/** Parse "KEY=value" lines; keys are validated further in the main process. */
 export function linesToRecord(lines: string): Record<string, string> {
   const result: Record<string, string> = {};
-  const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+  // Permissive so HTTP header names (e.g. `X-Api-Key`) survive; the `mcp.json`
+  // store rejects env keys that are not env-var shaped.
+  const KEY_RE = /^[A-Za-z0-9_.-]+$/;
   for (const rawLine of lines.split("\n")) {
     const line = rawLine.trim();
     if (line.length === 0) continue;
@@ -151,7 +153,7 @@ export function McpConfigFields({
               id={`${idPrefix}-url`}
               mono
               value={value.url}
-              placeholder={t("https://mcp.example.com/sse")}
+              placeholder={t("https://mcp.example.com/mcp")}
               onChange={(e) => set({ url: e.target.value })}
             />
           </Field>

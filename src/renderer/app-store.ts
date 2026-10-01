@@ -144,13 +144,15 @@ export const appStore = proxy({
     appStore.data.mcp.items.push(server);
   },
   replaceMcp(server: McpServer): void {
-    const index = appStore.data.mcp.items.findIndex((s) => s.id === server.id);
+    const index = appStore.data.mcp.items.findIndex(
+      (s) => s.name === server.name,
+    );
     if (index >= 0) {
       appStore.data.mcp.items[index] = server;
     }
   },
-  removeMcp(id: number): void {
-    const index = appStore.data.mcp.items.findIndex((s) => s.id === id);
+  removeMcp(name: string): void {
+    const index = appStore.data.mcp.items.findIndex((s) => s.name === name);
     if (index >= 0) {
       appStore.data.mcp.items.splice(index, 1);
     }

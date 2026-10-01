@@ -13,7 +13,7 @@ import { getSetting } from "../db/settings";
  * - Expansion: each value is expanded once using `expandValue` against
  *   `process.env` only. There are no user-var-to-user-var references.
  * - Validation: keys must look like env-var names and lengths are capped,
- *   mirroring the MCP service (`src/main/db/mcp.ts`).
+ *   mirroring the MCP service (`src/main/mcp-store.ts`).
  */
 
 interface UserEnvEntry {

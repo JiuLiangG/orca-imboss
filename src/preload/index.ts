@@ -268,16 +268,16 @@ const api = {
 
   mcp: {
     list: () => ipcRenderer.invoke("mcp:list") as Promise<McpServer[]>,
-    listPage: (page: PageQuery) =>
-      ipcRenderer.invoke("mcp:listPage", page) as Promise<
-        PageResult<McpServer>
-      >,
     create: (input: McpServerInput) =>
       ipcRenderer.invoke("mcp:create", input) as Promise<McpServer>,
-    update: (id: number, input: McpServerInput) =>
-      ipcRenderer.invoke("mcp:update", id, input) as Promise<McpServer | null>,
-    remove: (id: number) =>
-      ipcRenderer.invoke("mcp:delete", id) as Promise<boolean>,
+    update: (name: string, input: McpServerInput) =>
+      ipcRenderer.invoke(
+        "mcp:update",
+        name,
+        input,
+      ) as Promise<McpServer | null>,
+    remove: (name: string) =>
+      ipcRenderer.invoke("mcp:delete", name) as Promise<boolean>,
   },
 
   skills: {
