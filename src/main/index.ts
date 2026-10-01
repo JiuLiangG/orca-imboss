@@ -1,6 +1,7 @@
 import { app, BrowserWindow, shell } from "electron";
 import { join } from "path";
 import icon from "../../resources/icon.png?asset";
+import { materializeBuiltinSkills } from "./agent/builtin-skills";
 import { refreshModelStore } from "./agent/model-runtime";
 import { disposeAll } from "./agent/session-queue";
 import { deleteAvatarFiles } from "./avatars";
@@ -64,6 +65,10 @@ app.whenReady().then(() => {
   app.setAppUserModelId("com.orcastudio.imboss");
 
   initDatabase();
+  // Generate the app's built-in Skills (hidden from the Skills module) so the
+  // assistant's sessions can load them. Best-effort: a failure is logged and
+  // never blocks startup.
+  materializeBuiltinSkills();
   registerIpcHandlers();
   initTheme();
 

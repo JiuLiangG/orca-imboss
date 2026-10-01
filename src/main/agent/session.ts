@@ -24,12 +24,20 @@ import type {
   McpTransport,
 } from "@shared/types";
 import { createHash } from "crypto";
-import { getAgentRoot, getAgentSessionsDir } from "../data-dir";
+import {
+  getAgentRoot,
+  getAgentSessionsDir,
+  getBuiltinSkillsDir,
+} from "../data-dir";
 import { getChat } from "../db/chats";
 import { getEmployee } from "../db/employees";
 import { getSession } from "../db/sessions";
 import { getSetting } from "../db/settings";
 import { readMcpServers } from "../mcp-store";
+import {
+  BUILTIN_SKILL_NAMES,
+  materializeBuiltinSkills,
+} from "./builtin-skills";
 import { createTeamToolDefinitions } from "./builtin-tools";
 import { buildEmployeeSystemPrompt } from "./employee-prompt";
 import { toMcpServerEntries } from "./mcp";
@@ -409,8 +417,16 @@ export class AgentSession {
     // Anchor `<project_context>` to the app's `~/.imboss/agent` dir only,
     // dropping any ancestor AGENTS.md files outside it (decision 5), and
     // filter the global installed skills down to the employee's selection
-    // (empty selection ⇒ no `[skills]` block).
+    // (empty selection ⇒ no `[skills]` block). The assistant (id 0) has no
+    // selectable skill list, so its code-shipped built-in skills are forced in
+    // here instead.
     const selectedSkills = new Set(spec.employeeSkills);
+    const builtinSkills = spec.isAssistant
+      ? new Set<string>(BUILTIN_SKILL_NAMES)
+      : null;
+    // Built-in skills are generated onto disk; the startup pass covers the
+    // normal path, this is a defensive no-op when they are already current.
+    if (spec.isAssistant) materializeBuiltinSkills();
 
     const resourceLoader = new pi.DefaultResourceLoader({
       cwd,
@@ -421,9 +437,18 @@ export class AgentSession {
         agentsFiles: filterAgentContextFiles(base.agentsFiles, getAgentRoot()),
       }),
       skillsOverride: (base) => ({
-        skills: base.skills.filter((skill) => selectedSkills.has(skill.name)),
+        skills: base.skills.filter(
+          (skill) =>
+            selectedSkills.has(skill.name) ||
+            (builtinSkills !== null && builtinSkills.has(skill.name)),
+        ),
         diagnostics: base.diagnostics,
       }),
+      // Built-in skills live in their own dir so they never show up in the
+      // Skills module; only the assistant loads them.
+      ...(spec.isAssistant
+        ? { additionalSkillPaths: [getBuiltinSkillsDir()] }
+        : {}),
       // Built-in extensions are opt-in for SDK hosts; add the MCP extension so
       // this session connects the employee's servers.
       extensionFactories: [mcpExtension],

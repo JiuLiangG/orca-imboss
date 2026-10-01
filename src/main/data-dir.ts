@@ -26,6 +26,15 @@ export function getAgentSkillsDir(): string {
   return join(getAgentRoot(), "skills");
 }
 
+/**
+ * Directory holding the app's built-in (code-shipped) Skills. Deliberately
+ * separate from the user skills dir so they never appear in the Skills module;
+ * they are loaded into the assistant's session via `additionalSkillPaths`.
+ */
+export function getBuiltinSkillsDir(): string {
+  return join(getAgentRoot(), "builtin-skills");
+}
+
 /** Directory where Pi session files will live once runtime wiring lands. */
 export function getAgentSessionsDir(): string {
   return join(getAgentRoot(), "sessions");
@@ -76,6 +85,7 @@ export function ensureDataDir(): void {
     getAvatarsDir(),
     getAgentRoot(),
     getAgentSkillsDir(),
+    getBuiltinSkillsDir(),
     getAgentSessionsDir(),
     getWorkDir(),
   ];
