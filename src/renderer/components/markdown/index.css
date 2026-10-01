@@ -1,0 +1,281 @@
+/* Markdown + KaTeX typography for chat content. Scoped under `.imb-markdown`
+   so it never leaks into the rest of the UI. Colors are derived from the shared
+   theme tokens; the syntax-highlight palette has explicit dark overrides. */
+
+.imb-markdown {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  --md-code-bg: color-mix(in oklch, var(--imb-fg) 6%, transparent);
+  --md-code-border: color-mix(in oklch, var(--imb-fg) 12%, transparent);
+  --md-hl-comment: #6a737d;
+  --md-hl-keyword: #d73a49;
+  --md-hl-string: #032f62;
+  --md-hl-number: #005cc5;
+  --md-hl-title: #6f42c1;
+  --md-hl-builtin: #e36209;
+  --md-hl-meta: #6a737d;
+}
+
+.imb-markdown-inline {
+  display: inline;
+}
+
+.imb-markdown > :first-child {
+  margin-top: 0;
+}
+
+.imb-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.imb-markdown p {
+  margin: 0 0 var(--imb-space-2);
+}
+
+.imb-markdown h1,
+.imb-markdown h2,
+.imb-markdown h3,
+.imb-markdown h4,
+.imb-markdown h5,
+.imb-markdown h6 {
+  margin: var(--imb-space-3) 0 var(--imb-space-2);
+  line-height: var(--imb-leading-tight);
+  font-weight: 600;
+}
+
+.imb-markdown h1 {
+  font-size: var(--imb-text-2xl);
+}
+
+.imb-markdown h2 {
+  font-size: var(--imb-text-xl);
+}
+
+.imb-markdown h3 {
+  font-size: var(--imb-text-lg);
+}
+
+.imb-markdown h4,
+.imb-markdown h5,
+.imb-markdown h6 {
+  font-size: var(--imb-text-base);
+}
+
+.imb-markdown ul,
+.imb-markdown ol {
+  margin: 0 0 var(--imb-space-2);
+  padding-left: var(--imb-space-5);
+}
+
+.imb-markdown li {
+  margin: 2px 0;
+}
+
+.imb-markdown li > p {
+  margin: 0;
+}
+
+.imb-markdown li::marker {
+  color: var(--imb-muted);
+}
+
+/* GFM task lists: drop the marker and align the checkbox. */
+.imb-markdown li.task-list-item {
+  list-style: none;
+  margin-left: calc(-1 * var(--imb-space-5));
+}
+
+.imb-markdown li.task-list-item input {
+  margin-right: 6px;
+}
+
+.imb-markdown blockquote {
+  margin: 0 0 var(--imb-space-2);
+  padding: 0 var(--imb-space-3);
+  border-left: 3px solid var(--imb-border);
+  color: var(--imb-muted);
+}
+
+.imb-markdown hr {
+  border: none;
+  border-top: 1px solid var(--imb-border);
+  margin: var(--imb-space-3) 0;
+}
+
+.imb-markdown a {
+  color: var(--imb-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.imb-md-link-inert {
+  text-decoration: underline dotted;
+  text-decoration-color: var(--imb-muted);
+  cursor: default;
+}
+
+.imb-markdown img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: var(--imb-space-2) 0;
+  border-radius: var(--imb-radius-md);
+}
+
+.imb-markdown code {
+  font-family: var(--imb-font-mono);
+  font-size: 0.88em;
+  background: var(--md-code-bg);
+  border-radius: var(--imb-radius-sm);
+  padding: 1px 4px;
+}
+
+.imb-markdown pre {
+  margin: 0 0 var(--imb-space-2);
+  padding: var(--imb-space-3);
+  background: var(--md-code-bg);
+  border: 1px solid var(--md-code-border);
+  border-radius: var(--imb-radius-md);
+  overflow-x: auto;
+}
+
+.imb-markdown pre code {
+  display: block;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--imb-text-sm);
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.imb-markdown table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  margin: 0 0 var(--imb-space-2);
+  border-collapse: collapse;
+  overflow-x: auto;
+  font-size: var(--imb-text-sm);
+}
+
+.imb-markdown th,
+.imb-markdown td {
+  border: 1px solid var(--imb-border);
+  padding: 4px 10px;
+  text-align: left;
+}
+
+.imb-markdown th {
+  background: var(--md-code-bg);
+  font-weight: 600;
+}
+
+/* KaTeX: keep long display equations scrollable inside a bubble. */
+.imb-markdown .katex {
+  font-size: 1.05em;
+}
+
+.imb-markdown .katex-display {
+  margin: var(--imb-space-2) 0;
+  padding: 2px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.imb-markdown .katex-error {
+  color: var(--imb-danger);
+  font-family: var(--imb-font-mono);
+  font-size: 0.9em;
+}
+
+/* highlight.js token theme */
+.imb-markdown .hljs {
+  color: var(--imb-fg);
+  background: none;
+}
+
+.imb-markdown .hljs-comment,
+.imb-markdown .hljs-quote {
+  color: var(--md-hl-comment);
+  font-style: italic;
+}
+
+.imb-markdown .hljs-keyword,
+.imb-markdown .hljs-selector-tag,
+.imb-markdown .hljs-literal,
+.imb-markdown .hljs-doctag,
+.imb-markdown .hljs-name {
+  color: var(--md-hl-keyword);
+}
+
+.imb-markdown .hljs-string,
+.imb-markdown .hljs-regexp,
+.imb-markdown .hljs-addition,
+.imb-markdown .hljs-attribute {
+  color: var(--md-hl-string);
+}
+
+.imb-markdown .hljs-number,
+.imb-markdown .hljs-symbol,
+.imb-markdown .hljs-bullet,
+.imb-markdown .hljs-link,
+.imb-markdown .hljs-type {
+  color: var(--md-hl-number);
+}
+
+.imb-markdown .hljs-title,
+.imb-markdown .hljs-title.class_,
+.imb-markdown .hljs-title.function_,
+.imb-markdown .hljs-section,
+.imb-markdown .hljs-selector-id {
+  color: var(--md-hl-title);
+}
+
+.imb-markdown .hljs-built_in,
+.imb-markdown .hljs-variable,
+.imb-markdown .hljs-template-variable,
+.imb-markdown .hljs-attr,
+.imb-markdown .hljs-selector-attr,
+.imb-markdown .hljs-selector-pseudo {
+  color: var(--md-hl-builtin);
+}
+
+.imb-markdown .hljs-meta,
+.imb-markdown .hljs-meta .hljs-keyword {
+  color: var(--md-hl-meta);
+}
+
+.imb-markdown .hljs-deletion {
+  color: var(--imb-danger);
+}
+
+.imb-markdown .hljs-emphasis {
+  font-style: italic;
+}
+
+.imb-markdown .hljs-strong {
+  font-weight: 600;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme-mode="light"]) .imb-markdown {
+    --md-hl-comment: #8b949e;
+    --md-hl-keyword: #ff7b72;
+    --md-hl-string: #a5d6ff;
+    --md-hl-number: #79c0ff;
+    --md-hl-title: #d2a8ff;
+    --md-hl-builtin: #ffa657;
+    --md-hl-meta: #8b949e;
+  }
+}
+
+:root[data-theme-mode="dark"] .imb-markdown {
+  --md-hl-comment: #8b949e;
+  --md-hl-keyword: #ff7b72;
+  --md-hl-string: #a5d6ff;
+  --md-hl-number: #79c0ff;
+  --md-hl-title: #d2a8ff;
+  --md-hl-builtin: #ffa657;
+  --md-hl-meta: #8b949e;
+}

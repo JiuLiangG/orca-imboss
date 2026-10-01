@@ -83,6 +83,32 @@ app.whenReady().then(() => {
   if (app.isPackaged) initUpdater();
 });
 
+/**
+ * Only these schemes are ever handed to the OS. Chat content is model- and
+ * user-authored, so an arbitrary `shell.openExternal` target (custom protocol,
+ * `file:`, …) must never be reachable from a link.
+ */
+function isSafeExternalUrl(rawUrl: string): boolean {
+  try {
+    const { protocol } = new URL(rawUrl);
+    return (
+      protocol === "http:" || protocol === "https:" || protocol === "mailto:"
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * True when `rawUrl` belongs to the app itself: the current window URL (a
+ * reload) or the Vite dev-server origin (a full HMR reload in development).
+ */
+function isAppOwnUrl(win: BrowserWindow, rawUrl: string): boolean {
+  if (win.isDestroyed() || rawUrl === win.webContents.getURL()) return true;
+  const devUrl = process.env["ELECTRON_RENDERER_URL"];
+  return devUrl !== undefined && rawUrl.startsWith(devUrl);
+}
+
 function createWindow(): void {
   const locale = getResolvedLocale();
   const savedBounds = loadWindowBounds();
@@ -123,10 +149,26 @@ function createWindow(): void {
   setMainWindow(mainWindow);
   mainWindow.on("closed", () => setMainWindow(null));
 
-  // Open external links in the OS browser; never allow in-app popups.
+  // Open external links in the OS browser; never allow in-app popups. Only
+  // known-safe schemes are forwarded.
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url);
+    if (isSafeExternalUrl(details.url)) {
+      void shell.openExternal(details.url);
+    }
     return { action: "deny" };
+  });
+
+  // Defense-in-depth: a Markdown link without `target="_blank"` would otherwise
+  // navigate the app window away from the UI (and a `file:` target could load
+  // local HTML with the preload bridge attached). Allow only the app's own
+  // URL / dev-server origin (reloads, HMR) and forward safe external URLs to
+  // the OS; everything else is dropped.
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (isAppOwnUrl(mainWindow, url)) return;
+    event.preventDefault();
+    if (isSafeExternalUrl(url)) {
+      void shell.openExternal(url);
+    }
   });
 
   if (process.env["ELECTRON_RENDERER_URL"]) {

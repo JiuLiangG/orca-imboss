@@ -3,6 +3,7 @@ import type { Message } from "@shared/types";
 import { useState } from "react";
 import { cls } from "reactutils";
 import { EmployeeAvatar } from "../../../employee-avatar";
+import { Markdown } from "../../../markdown";
 import { MessageBubble } from "../message-bubble";
 import "./index.css";
 
@@ -100,7 +101,9 @@ export function AskCard({
         <div className="imb-ask-card-title">{t("Question")}</div>
         {payload.questions.map((q) => (
           <div className="imb-ask-question" key={q.id}>
-            <div className="imb-ask-q-text">{q.text}</div>
+            <div className="imb-ask-q-text">
+              <Markdown content={q.text} inline />
+            </div>
             {isFreeForm(q) ? (
               <textarea
                 className="imb-ask-free"
@@ -125,7 +128,9 @@ export function AskCard({
                         setTextByQuestion((p) => ({ ...p, [q.id]: "" }));
                       }}
                     />
-                    <span>{opt}</span>
+                    <span>
+                      <Markdown content={opt} inline />
+                    </span>
                   </label>
                 ))}
                 <input
@@ -160,7 +165,9 @@ export function AskCard({
                         })
                       }
                     />
-                    <span>{opt}</span>
+                    <span>
+                      <Markdown content={opt} inline />
+                    </span>
                   </label>
                 ))}
                 <input

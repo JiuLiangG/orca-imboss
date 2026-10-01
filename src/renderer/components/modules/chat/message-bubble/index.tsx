@@ -4,6 +4,7 @@ import type { MessageAttachment } from "@shared/types";
 import { useState } from "react";
 import { cls } from "reactutils";
 import { IconFile } from "../../../icons";
+import { Markdown } from "../../../markdown";
 import "./index.css";
 
 export interface MessageBubbleProps {
@@ -20,6 +21,12 @@ export interface MessageBubbleProps {
   attachmentsTotal?: number | null;
   /** Avatar node (left side for other-messages, right side for self). */
   avatar: React.ReactNode;
+  /**
+   * Render `content` as Markdown + KaTeX instead of plain pre-wrapped text.
+   * Only free-form prose kinds opt in (`text`, `report`); system/structured
+   * kinds keep the literal rendering.
+   */
+  markdown?: boolean;
 }
 
 export function MessageBubble({
@@ -29,6 +36,7 @@ export function MessageBubble({
   attachments,
   attachmentsTotal,
   avatar,
+  markdown = false,
 }: MessageBubbleProps): React.JSX.Element {
   const [revealError, setRevealError] = useState<string | null>(null);
   const all = attachments ?? [];
@@ -73,7 +81,9 @@ export function MessageBubble({
                   onClick={hasPath ? () => void reveal(index) : undefined}
                 >
                   <IconFile className="imb-icon imb-sm" />
-                  <span className="imb-bubble-chip-name">{attachment.name}</span>
+                  <span className="imb-bubble-chip-name">
+                    {attachment.name}
+                  </span>
                   <span className="imb-bubble-chip-size">
                     {formatSize(attachment.size)}
                   </span>
@@ -95,9 +105,12 @@ export function MessageBubble({
         {revealError !== null && (
           <div className="imb-bubble-attachment-error">{revealError}</div>
         )}
-        {content.length > 0 && (
-          <span className="imb-bubble-text">{content}</span>
-        )}
+        {content.length > 0 &&
+          (markdown ? (
+            <Markdown content={content} />
+          ) : (
+            <span className="imb-bubble-text">{content}</span>
+          ))}
       </div>
     </div>
   );

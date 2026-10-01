@@ -4,6 +4,8 @@
  * else yyyy/M/d.
  */
 
+import { toPlainText } from "../../markdown/plain-text";
+
 const WEEKDAYS_ZH = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 const WEEKDAYS_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -60,6 +62,8 @@ export function formatMessageTime(secs: number, locale: string): string {
 
 /** Truncate a long preview for the chat list (fixed max width, CSS ellipsis). */
 export function previewText(content: string, max = 80): string {
-  const collapsed = content.replace(/\s+/g, " ").trim();
+  // Messages are Markdown; show a plain-text teaser so formatting markers and
+  // math source do not leak into the list.
+  const collapsed = toPlainText(content).replace(/\s+/g, " ").trim();
   return collapsed.length > max ? `${collapsed.slice(0, max)}…` : collapsed;
 }

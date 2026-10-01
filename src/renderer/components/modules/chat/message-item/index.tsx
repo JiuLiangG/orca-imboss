@@ -70,6 +70,7 @@ export function MessageItem({
           content={message.content}
           attachments={message.attachments}
           attachmentsTotal={message.attachmentsTotal}
+          markdown={message.kind === "text" || message.kind === "report"}
           avatar={
             <EmployeeAvatar employeeId={message.senderEmployeeId} size={34} />
           }
