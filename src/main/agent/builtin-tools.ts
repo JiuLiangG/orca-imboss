@@ -279,31 +279,6 @@ function toCronJobBrief(job: CronJob): CronJobBrief {
   return { id: job.id, schedule: job.schedule, nextRunAt: job.nextRunAt };
 }
 
-/**
- * Log one `imb_*` tool invocation (name + caller + args). Entry-only by design:
- * no outcome/duration is recorded. Best-effort — a circular/unserializable
- * payload must never break a tool. Args are capped so huge prompts never flood
- * the console.
- */
-function logToolCall(
-  toolName: string,
-  employeeId: number,
-  chatId: number,
-  params: unknown,
-): void {
-  let args: string;
-  try {
-    args = JSON.stringify(params) ?? String(params);
-  } catch {
-    args = "[unserializable]";
-  }
-  const max = 2000;
-  const capped = args.length > max ? `${args.slice(0, max)}…` : args;
-  console.log(
-    `[imb-tool] ${toolName} caller=${employeeId}/${chatId} args=${capped}`,
-  );
-}
-
 /** Validate an employee id is an active (non-disabled) employee. */
 function assertActiveEmployee(employeeId: number): void {
   const employee = getEmployee(employeeId);
@@ -317,7 +292,7 @@ function assertActiveEmployee(employeeId: number): void {
 // ---------------------------------------------------------------------------
 
 /** `imb_set_employees` — batch create (omit `id`) or update (pass `id`) employees. */
-function setEmployeesTool(employeeId: number, chatId: number): AnyPiTool {
+function setEmployeesTool(): AnyPiTool {
   return {
     name: "imb_set_employees",
     label: "Set employees",
@@ -356,7 +331,6 @@ function setEmployeesTool(employeeId: number, chatId: number): AnyPiTool {
       ),
     }),
     execute: async (_toolCallId, params) => {
-      logToolCall("imb_set_employees", employeeId, chatId, params);
       const input = params as {
         employees: {
           id?: number;
@@ -381,7 +355,6 @@ function setEmployeesTool(employeeId: number, chatId: number): AnyPiTool {
 /** `imb_create_chat` — new chat + one persistent session per employee. */
 function createChatTool(
   env: AgentEnvironment,
-  employeeId: number,
   callingChatId: number,
 ): AnyPiTool {
   return {
@@ -399,7 +372,6 @@ function createChatTool(
       participants: Type.Array(Type.Integer({ minimum: 1 }), { minItems: 1 }),
     }),
     execute: async (_toolCallId, params) => {
-      logToolCall("imb_create_chat", employeeId, callingChatId, params);
       const input = params as {
         title: string;
         participants: number[];
@@ -469,11 +441,7 @@ function createChatTool(
 }
 
 /** `imb_send_message` — post as an active participant, optionally notifying others. */
-function sendMessageTool(
-  env: AgentEnvironment,
-  employeeId: number,
-  chatId: number,
-): AnyPiTool {
+function sendMessageTool(env: AgentEnvironment, employeeId: number): AnyPiTool {
   return {
     name: "imb_send_message",
     label: "Send message",
@@ -509,7 +477,6 @@ function sendMessageTool(
       ),
     }),
     execute: async (_toolCallId, params) => {
-      logToolCall("imb_send_message", employeeId, chatId, params);
       const input = params as {
         senderEmployeeId: number;
         chatId: number;
@@ -546,7 +513,7 @@ function sendMessageTool(
 }
 
 /** `imb_read_chat` — advance the calling agent's cursor and return new messages. */
-function readChatTool(employeeId: number, chatId: number): AnyPiTool {
+function readChatTool(employeeId: number): AnyPiTool {
   return {
     name: "imb_read_chat",
     label: "Read chat",
@@ -557,7 +524,6 @@ function readChatTool(employeeId: number, chatId: number): AnyPiTool {
       chatId: Type.Integer({ minimum: 1 }),
     }),
     execute: async (_toolCallId, params) => {
-      logToolCall("imb_read_chat", employeeId, chatId, params);
       const input = params as { chatId: number };
       const chat = dbChats.getChat(input.chatId);
       if (!chat) throw new Error("Chat does not exist.");
@@ -585,7 +551,7 @@ function readChatTool(employeeId: number, chatId: number): AnyPiTool {
 }
 
 /** `imb_list_employees` — active employees, excluding the built-in assistant. */
-function listEmployeesTool(employeeId: number, chatId: number): AnyPiTool {
+function listEmployeesTool(): AnyPiTool {
   return {
     name: "imb_list_employees",
     label: "List employees",
@@ -593,8 +559,7 @@ function listEmployeesTool(employeeId: number, chatId: number): AnyPiTool {
       "List all active employees (excluding the built-in assistant), ordered by id.",
     promptSnippet: "active team members",
     parameters: Type.Object({}),
-    execute: async (_toolCallId, params) => {
-      logToolCall("imb_list_employees", employeeId, chatId, params);
+    execute: async (_toolCallId, _params) => {
       const employees = dbEmployees
         .listEmployees()
         .filter((employee) => employee.id !== ASSISTANT_ID);
@@ -604,7 +569,7 @@ function listEmployeesTool(employeeId: number, chatId: number): AnyPiTool {
 }
 
 /** `imb_notify` — bump a chat's unread and optionally raise an OS notification. */
-function notifyTool(employeeId: number, chatId: number): AnyPiTool {
+function notifyTool(): AnyPiTool {
   return {
     name: "imb_notify",
     label: "Notify",
@@ -618,7 +583,6 @@ function notifyTool(employeeId: number, chatId: number): AnyPiTool {
       text: Type.String({ minLength: 1, maxLength: 1000 }),
     }),
     execute: async (_toolCallId, params) => {
-      logToolCall("imb_notify", employeeId, chatId, params);
       const input = params as { chatId: number; unread: number; text: string };
       const chat = dbChats.getChat(input.chatId);
       if (!chat) throw new Error("Chat does not exist.");
@@ -634,7 +598,7 @@ function notifyTool(employeeId: number, chatId: number): AnyPiTool {
  * A participant (non-assistant) may only schedule for themselves, within a
  * chat they participate in; the assistant (id 0) remains unrestricted.
  */
-function setCronjobTool(employeeId: number, chatId: number): AnyPiTool {
+function setCronjobTool(employeeId: number): AnyPiTool {
   return {
     name: "imb_set_cronjob",
     label: "Set cron job",
@@ -649,7 +613,6 @@ function setCronjobTool(employeeId: number, chatId: number): AnyPiTool {
       content: Type.String({ minLength: 1, maxLength: 100000 }),
     }),
     execute: async (_toolCallId, params) => {
-      logToolCall("imb_set_cronjob", employeeId, chatId, params);
       const input = params as {
         id: string;
         schedule: string;
@@ -684,7 +647,7 @@ function setCronjobTool(employeeId: number, chatId: number): AnyPiTool {
  *
  * A participant may only remove their own cron jobs; the assistant can remove any.
  */
-function removeCronjobTool(employeeId: number, chatId: number): AnyPiTool {
+function removeCronjobTool(employeeId: number): AnyPiTool {
   return {
     name: "imb_remove_cronjob",
     label: "Remove cron job",
@@ -694,7 +657,6 @@ function removeCronjobTool(employeeId: number, chatId: number): AnyPiTool {
       id: Type.String({ minLength: 1, maxLength: 256 }),
     }),
     execute: async (_toolCallId, params) => {
-      logToolCall("imb_remove_cronjob", employeeId, chatId, params);
       const input = params as { id: string };
       if (employeeId !== ASSISTANT_ID) {
         const parsed = parseCronJobId(input.id);
@@ -708,11 +670,7 @@ function removeCronjobTool(employeeId: number, chatId: number): AnyPiTool {
 }
 
 /** `imb_add_participant` — add members to a chat, notify, and prompt their agents. */
-function addParticipantTool(
-  env: AgentEnvironment,
-  employeeId: number,
-  chatId: number,
-): AnyPiTool {
+function addParticipantTool(env: AgentEnvironment): AnyPiTool {
   return {
     name: "imb_add_participant",
     label: "Add participant",
@@ -730,7 +688,6 @@ function addParticipantTool(
       ),
     }),
     execute: async (_toolCallId, params) => {
-      logToolCall("imb_add_participant", employeeId, chatId, params);
       const input = params as {
         chatId: number;
         participants: { employeeID: number; prompt: string }[];
@@ -778,11 +735,7 @@ function addParticipantTool(
 }
 
 /** `imb_ask` — post a structured question set into a chat, notifying respondents. */
-function imbAskTool(
-  env: AgentEnvironment,
-  employeeId: number,
-  chatId: number,
-): AnyPiTool {
+function imbAskTool(env: AgentEnvironment): AnyPiTool {
   return {
     name: "imb_ask",
     label: "Ask a question",
@@ -824,7 +777,6 @@ function imbAskTool(
       ),
     }),
     execute: async (_toolCallId, params) => {
-      logToolCall("imb_ask", employeeId, chatId, params);
       const input = params as {
         senderEmployeeId: number;
         chatId: number;
@@ -855,11 +807,7 @@ function imbAskTool(
 }
 
 /** `imb_answer` — post an answer to a question set into a chat, notifying others. */
-function imbAnswerTool(
-  env: AgentEnvironment,
-  employeeId: number,
-  chatId: number,
-): AnyPiTool {
+function imbAnswerTool(env: AgentEnvironment): AnyPiTool {
   return {
     name: "imb_answer",
     label: "Answer a question",
@@ -895,7 +843,6 @@ function imbAnswerTool(
       ),
     }),
     execute: async (_toolCallId, params) => {
-      logToolCall("imb_answer", employeeId, chatId, params);
       const input = params as {
         senderEmployeeId: number;
         chatId: number;
@@ -948,28 +895,28 @@ export function createTeamToolDefinitions(
   const mcp = options.mcp ?? [];
   const tools: AnyPiTool[] = [];
   if (isAssistant) {
-    tools.push(setEmployeesTool(employeeId, chatId));
-    tools.push(createChatTool(env, employeeId, chatId));
-    tools.push(listEmployeesTool(employeeId, chatId));
-    tools.push(notifyTool(employeeId, chatId));
+    tools.push(setEmployeesTool());
+    tools.push(createChatTool(env, chatId));
+    tools.push(listEmployeesTool());
+    tools.push(notifyTool());
     // `imb_set_cronjob` / `imb_remove_cronjob` are intentionally NOT given to
     // the assistant; they remain opt-in for participant employees only.
   } else {
     // Cron tools are opt-in: registered only when the employee selected the
     // corresponding marker in their "Linked MCP" list.
     if (mcp.includes(BUILTIN_SET_CRON_MARKER)) {
-      tools.push(setCronjobTool(employeeId, chatId));
+      tools.push(setCronjobTool(employeeId));
     }
     if (mcp.includes(BUILTIN_REMOVE_CRON_MARKER)) {
-      tools.push(removeCronjobTool(employeeId, chatId));
+      tools.push(removeCronjobTool(employeeId));
     }
   }
-  tools.push(sendMessageTool(env, employeeId, chatId));
-  tools.push(readChatTool(employeeId, chatId));
-  tools.push(imbAskTool(env, employeeId, chatId));
-  tools.push(imbAnswerTool(env, employeeId, chatId));
+  tools.push(sendMessageTool(env, employeeId));
+  tools.push(readChatTool(employeeId));
+  tools.push(imbAskTool(env));
+  tools.push(imbAnswerTool(env));
   // add_participant is intentionally disabled for all roles (see plan §10.1);
   // kept in the file for reference and updated if re-enabled.
-  // tools.push(addParticipantTool(env, employeeId, chatId));
+  // tools.push(addParticipantTool(env));
   return tools;
 }
