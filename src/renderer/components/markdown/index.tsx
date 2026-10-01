@@ -1,15 +1,26 @@
-import { memo, useMemo } from "react";
+import { t } from "@shared/l10n";
+import hljs from "highlight.js/lib/common";
+import "katex/dist/katex.min.css";
+import {
+  isValidElement,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import ReactMarkdown, {
   type Components,
   type UrlTransform,
 } from "react-markdown";
+import { cls } from "reactutils";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math-extended";
-import { cls } from "reactutils";
 import type { PluggableList } from "unified";
-import hljs from "highlight.js/lib/common";
-import "katex/dist/katex.min.css";
+import { IconCheck, IconCopy } from "../icons";
 import "./index.css";
 
 /**
@@ -74,6 +85,95 @@ function escapeHtml(value: string): string {
     .replace(/>/g, "&gt;");
 }
 
+/** Recursively collect the text content of a rendered node tree. */
+function extractText(node: ReactNode): string {
+  if (typeof node === "string") return node;
+  if (typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(extractText).join("");
+  if (isValidElement(node)) {
+    return extractText((node.props as { children?: ReactNode }).children);
+  }
+  return "";
+}
+
+/**
+ * Copy plain text to the clipboard. `navigator.clipboard` needs a focused,
+ * secure document; fall back to the legacy `<textarea>` trick so the button
+ * still works if that path is unavailable or rejects.
+ */
+async function copyToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard !== undefined) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // Fall through to the legacy path.
+    }
+  }
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "");
+  area.style.position = "fixed";
+  area.style.top = "-1000px";
+  area.style.opacity = "0";
+  document.body.appendChild(area);
+  area.select();
+  try {
+    document.execCommand("copy");
+  } finally {
+    document.body.removeChild(area);
+  }
+}
+
+/**
+ * Fenced code block wrapper: the raw source is the `<code>` child's text, and
+ * the copy button lives outside the horizontally scrollable `<pre>` so it
+ * stays pinned to the top-right corner.
+ */
+function CodeBlock({ children }: { children?: ReactNode }): React.JSX.Element {
+  const [copied, setCopied] = useState(false);
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (resetTimerRef.current !== null) clearTimeout(resetTimerRef.current);
+    },
+    [],
+  );
+
+  const copy = useCallback((): void => {
+    const text = extractText(children).replace(/\n$/, "");
+    void copyToClipboard(text)
+      .then(() => {
+        setCopied(true);
+        if (resetTimerRef.current !== null) clearTimeout(resetTimerRef.current);
+        resetTimerRef.current = setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => {
+        // Clipboard failures are non-fatal; the text stays selectable.
+      });
+  }, [children]);
+
+  return (
+    <div className="imb-code-block">
+      <pre>{children}</pre>
+      <button
+        type="button"
+        className="imb-code-copy"
+        onClick={copy}
+        aria-label={t("Copy")}
+        title={copied ? t("Copied") : t("Copy")}
+      >
+        {copied ? (
+          <IconCheck className="imb-icon imb-xs" />
+        ) : (
+          <IconCopy className="imb-icon imb-xs" />
+        )}
+      </button>
+    </div>
+  );
+}
+
 /**
  * Build the element overrides. `inline` adds a paragraph unwrapper so the
  * output stays phrasing content and can be embedded in labels/table cells.
@@ -120,6 +220,8 @@ function createComponents(inline: boolean): Components {
   };
   if (inline) {
     components.p = ({ children }) => <>{children}</>;
+  } else {
+    components.pre = CodeBlock;
   }
   return components;
 }

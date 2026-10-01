@@ -7,6 +7,10 @@
   overflow-wrap: anywhere;
   --md-code-bg: color-mix(in oklch, var(--imb-fg) 6%, transparent);
   --md-code-border: color-mix(in oklch, var(--imb-fg) 12%, transparent);
+  /* Darken the accent against a light surface / lighten it against a dark one
+     so links keep enough contrast (the raw accent can be ~2:1 on a surface).
+     `in srgb` (not oklch) avoids hue drift when mixing with a near-neutral. */
+  --md-link: color-mix(in srgb, var(--imb-accent) 50%, var(--imb-fg));
   --md-hl-comment: #6a737d;
   --md-hl-keyword: #d73a49;
   --md-hl-string: #032f62;
@@ -20,11 +24,11 @@
   display: inline;
 }
 
-.imb-markdown > :first-child {
+.imb-markdown> :first-child {
   margin-top: 0;
 }
 
-.imb-markdown > :last-child {
+.imb-markdown> :last-child {
   margin-bottom: 0;
 }
 
@@ -71,7 +75,7 @@
   margin: 2px 0;
 }
 
-.imb-markdown li > p {
+.imb-markdown li>p {
   margin: 0;
 }
 
@@ -103,12 +107,19 @@
 }
 
 .imb-markdown a {
-  color: var(--imb-accent);
+  color: var(--md-link);
   text-decoration: underline;
-  text-underline-offset: 2px;
+}
+
+/* The self bubble is green in both themes, so an accent-derived link would be
+   green-on-green. Match the bubble text and let the underline carry the link
+   affordance. */
+.imb-self .imb-markdown a {
+  color: inherit;
 }
 
 .imb-md-link-inert {
+  color: inherit;
   text-decoration: underline dotted;
   text-decoration-color: var(--imb-muted);
   cursor: default;
@@ -147,6 +158,47 @@
   font-size: var(--imb-text-sm);
   line-height: 1.5;
   white-space: pre;
+}
+
+/* Fenced code block with a copy button pinned to the top-right. The wrapper
+   owns the margin so the button is not part of the scrollable <pre>. */
+.imb-code-block {
+  position: relative;
+  margin: 0 0 var(--imb-space-2);
+}
+
+.imb-code-block pre {
+  margin: 0;
+}
+
+.imb-code-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--imb-radius-sm);
+  background: color-mix(in oklch, var(--imb-fg) 12%, transparent);
+  color: var(--imb-fg);
+  opacity: 0.55;
+  cursor: pointer;
+  transition:
+    opacity var(--imb-motion-fast) var(--imb-ease-standard),
+    background var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-code-block:hover .imb-code-copy,
+.imb-code-copy:focus-visible {
+  opacity: 1;
+}
+
+.imb-code-copy:hover {
+  background: color-mix(in oklch, var(--imb-fg) 20%, transparent);
 }
 
 .imb-markdown table {
