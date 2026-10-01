@@ -25,6 +25,7 @@ export function SkillsModule(): React.JSX.Element {
     null,
   );
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkNames, setBulkNames] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
 
@@ -108,11 +109,10 @@ export function SkillsModule(): React.JSX.Element {
   };
 
   const uninstallSelected = async (): Promise<void> => {
-    const names = [...multi.selectedKeys];
-    if (names.length === 0) return;
+    if (bulkNames.length === 0) return;
     setBusy(true);
     try {
-      for (const name of names) {
+      for (const name of bulkNames) {
         await imb.skills.uninstall(name);
       }
       setBulkOpen(false);
@@ -185,7 +185,14 @@ export function SkillsModule(): React.JSX.Element {
                     label: t("Uninstall"),
                     danger: true,
                     onSelect: () => {
-                      if (multi.selectedKeys.size === 0) multi.selectAll();
+                      // Selection-aware: a right-click on an already-selected
+                      // row uninstalls the whole selection; otherwise only the
+                      // right-clicked skill (never a hidden select-all).
+                      setBulkNames(
+                        multi.selectedKeys.has(skill.name)
+                          ? [...multi.selectedKeys]
+                          : [skill.name],
+                      );
                       setBulkOpen(true);
                     },
                   },

@@ -21,6 +21,7 @@ export function McpModule(): React.JSX.Element {
   const [query, setQuery] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteNames, setDeleteNames] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
 
@@ -112,18 +113,17 @@ export function McpModule(): React.JSX.Element {
   }, []);
 
   const deleteSelected = useCallback(async (): Promise<void> => {
-    const names = [...multi.selectedKeys];
-    if (names.length === 0) return;
+    if (deleteNames.length === 0) return;
     try {
       setDeleteOpen(false);
-      for (const name of names) {
+      for (const name of deleteNames) {
         await imb.mcp.remove(name);
         appStore.removeMcp(name);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [multi.selectedKeys]);
+  }, [deleteNames]);
 
   const toggleSelectAll = useCallback((): void => {
     if (multi.selectedKeys.size === servers.length && servers.length > 0) {
@@ -185,7 +185,14 @@ export function McpModule(): React.JSX.Element {
                     label: t("Delete"),
                     danger: true,
                     onSelect: () => {
-                      if (multi.selectedKeys.size === 0) multi.selectAll();
+                      // Selection-aware: a right-click on an already-selected
+                      // row deletes the whole selection; otherwise only the
+                      // right-clicked server (never a hidden select-all).
+                      setDeleteNames(
+                        multi.selectedKeys.has(server.name)
+                          ? [...multi.selectedKeys]
+                          : [server.name],
+                      );
                       setDeleteOpen(true);
                     },
                   },

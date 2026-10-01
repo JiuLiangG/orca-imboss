@@ -21,6 +21,7 @@ export function ProvidersModule(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteIds, setDeleteIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
 
@@ -66,18 +67,17 @@ export function ProvidersModule(): React.JSX.Element {
   }, []);
 
   const deleteSelected = useCallback(async (): Promise<void> => {
-    const ids = [...multi.selectedKeys];
-    if (ids.length === 0) return;
+    if (deleteIds.length === 0) return;
     try {
       setDeleteOpen(false);
-      for (const id of ids) {
+      for (const id of deleteIds) {
         await imb.providers.remove(id);
       }
       await appStore.reloadProviders();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [multi.selectedKeys]);
+  }, [deleteIds]);
 
   const toggleSelectAll = useCallback((): void => {
     if (multi.selectedKeys.size === providers.length && providers.length > 0) {
@@ -152,7 +152,14 @@ export function ProvidersModule(): React.JSX.Element {
                     label: t("Delete"),
                     danger: true,
                     onSelect: () => {
-                      if (multi.selectedKeys.size === 0) multi.selectAll();
+                      // Selection-aware: a right-click on an already-selected
+                      // row deletes the whole selection; otherwise only the
+                      // right-clicked provider (never a hidden select-all).
+                      setDeleteIds(
+                        multi.selectedKeys.has(provider.id)
+                          ? [...multi.selectedKeys]
+                          : [provider.id],
+                      );
                       setDeleteOpen(true);
                     },
                   },
