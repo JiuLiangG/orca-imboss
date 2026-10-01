@@ -2,7 +2,7 @@ import { READ_CHAT_PROMPT } from "@shared/constants/prompts";
 import { ipcMain, shell } from "electron";
 import { existsSync } from "fs";
 import { isAbsolute } from "path";
-import { deliver } from "../agent/session-queue";
+import { wakeAgent } from "../agent/session-queue";
 import * as dbMessages from "../db/messages";
 import { assertInteger, assertObject, assertString } from "./helpers";
 
@@ -44,7 +44,9 @@ export function registerMessageHandlers(): void {
       });
       const ask = dbMessages.getMessageById(safeAskId);
       if (ask && ask.senderEmployeeId != null) {
-        void deliver(ask.senderEmployeeId, safeChatId, READ_CHAT_PROMPT);
+        // `wakeAgent` redirects the assistant (id 0) from a task group chat to
+        // its root-chat session.
+        void wakeAgent(ask.senderEmployeeId, safeChatId, READ_CHAT_PROMPT);
       }
       return message;
     },

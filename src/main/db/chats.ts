@@ -32,6 +32,23 @@ export function getChat(id: number): Chat | null {
 }
 
 /**
+ * Resolve the root (user) chat of a chat by walking `from_chat_id` upward.
+ * Cycle-safe: a malformed self/circular chain returns the last id visited. A
+ * root chat returns itself; an unknown chat returns the input id.
+ */
+export function getRootChatId(chatId: number): number {
+  let current = chatId;
+  const seen = new Set<number>();
+  while (!seen.has(current)) {
+    seen.add(current);
+    const chat = getChat(current);
+    if (!chat || chat.fromChatId === null) return current;
+    current = chat.fromChatId;
+  }
+  return current;
+}
+
+/**
  * Chat list with the latest-message preview (chat module). Root-only
  * (assistant ↔ user); ordered by last-message time — newest first. A chat
  * that has never received a message falls back to its creation time (set on

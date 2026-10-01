@@ -95,6 +95,16 @@ const MIGRATIONS: Array<(db: Database) => void> = [
         employee_id         INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
         chat_id             INTEGER NOT NULL REFERENCES chats(id)     ON DELETE CASCADE,
         session             TEXT NOT NULL,
+        PRIMARY KEY (employee_id, chat_id)
+      );
+
+      -- Per-(employee, chat) read cursor, independent of whether an agent
+      -- session exists there. The assistant reads task group chats from its
+      -- root-chat session, so it needs a cursor in chats where it has no
+      -- session row of its own.
+      CREATE TABLE IF NOT EXISTS read_cursors (
+        employee_id          INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        chat_id              INTEGER NOT NULL REFERENCES chats(id)     ON DELETE CASCADE,
         last_read_message_id INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (employee_id, chat_id)
       );

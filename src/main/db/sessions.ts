@@ -8,7 +8,6 @@ interface SessionRow {
   employee_id: number;
   chat_id: number;
   session: string;
-  last_read_message_id: number;
 }
 
 export function getSession(
@@ -59,29 +58,6 @@ export function listByChat(chatId: number): EmployeeSession[] {
   ).map(toRecord);
 }
 
-/** Read the per-(employee, chat) read cursor (0 when no session row exists). */
-export function getReadCursor(employeeId: number, chatId: number): number {
-  const row = getDB()
-    .prepare(
-      "SELECT last_read_message_id FROM sessions WHERE employee_id = ? AND chat_id = ?",
-    )
-    .get(employeeId, chatId) as { last_read_message_id: number } | undefined;
-  return row?.last_read_message_id ?? 0;
-}
-
-/** Advance the per-(employee, chat) read cursor. */
-export function setReadCursor(
-  employeeId: number,
-  chatId: number,
-  messageId: number,
-): void {
-  getDB()
-    .prepare(
-      "UPDATE sessions SET last_read_message_id = ? WHERE employee_id = ? AND chat_id = ?",
-    )
-    .run(messageId, employeeId, chatId);
-}
-
 /** Unlink a recorded session file when (and only when) contained. */
 export async function unlinkSessionFile(sessionPath: string): Promise<void> {
   try {
@@ -122,7 +98,6 @@ function toRecord(row: SessionRow): EmployeeSession {
     employeeId: row.employee_id,
     chatId: row.chat_id,
     session: row.session,
-    lastReadMessageId: row.last_read_message_id ?? 0,
   };
 }
 

@@ -2,6 +2,15 @@ export const READ_CHAT_PROMPT =
   "You have new messages in this chat. Call `imb_read_chat` to read the latest messages and respond as appropriate.";
 
 /**
+ * Wake prompt for the assistant's root-chat session: the new messages are in a
+ * *different* chat (a task group chat), so the target id must be stated
+ * explicitly. The assistant reads the group chat from its root session.
+ */
+export function readChatPrompt(chatId: number): string {
+  return `You have new messages in chat ${chatId}. Call \`imb_read_chat\` with chatId ${chatId} to read the latest messages and respond as appropriate.`;
+}
+
+/**
  * The built-in assistant's hardcoded base system prompt. This REPLACES the
  * Pi SDK default base prompt for the assistant (id 0); the editable employee
  * `systemPrompt` is appended below it. Regular employees also go fully custom

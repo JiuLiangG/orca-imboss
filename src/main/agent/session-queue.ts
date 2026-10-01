@@ -1,5 +1,8 @@
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import { ASSISTANT_ID } from "@shared/constants/employees";
+import { readChatPrompt } from "@shared/constants/prompts";
 import type { WebContents } from "electron";
+import * as dbChats from "../db/chats";
 import { errorEvent, sendEventTo, toStreamEvent } from "./agent-events";
 import { getAgentEnvironment } from "./environment";
 import type { AgentSession as AppAgentSession } from "./session";
@@ -60,6 +63,29 @@ export async function deliver(
   if (state.busy) return;
   state.busy = true;
   void drain(state);
+}
+
+/**
+ * Wake an employee's session for a chat. The assistant deliberately has no
+ * session in task group chats: it is woken in its root-chat session instead,
+ * with a prompt that names the group chat to read.
+ */
+export async function wakeAgent(
+  employeeId: number,
+  chatId: number,
+  fallbackText: string,
+): Promise<void> {
+  let targetChatId = chatId;
+  let text = fallbackText;
+  if (employeeId === ASSISTANT_ID) {
+    const rootId = dbChats.getRootChatId(chatId);
+    if (rootId !== chatId) {
+      targetChatId = rootId;
+      text = readChatPrompt(chatId);
+    }
+  }
+  await ensureSessionFile(employeeId, targetChatId);
+  await deliver(employeeId, targetChatId, text);
 }
 
 /**

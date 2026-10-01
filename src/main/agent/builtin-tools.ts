@@ -30,14 +30,11 @@ import * as dbChats from "../db/chats";
 import { parseCronJobId } from "../db/cron";
 import * as dbEmployees from "../db/employees";
 import * as dbMessages from "../db/messages";
+import * as dbReadCursors from "../db/read-cursors";
 import * as dbSessions from "../db/sessions";
 import { notifyUnread } from "../notifications";
-import {
-  ensureSessionFile,
-  materializeSessionFile,
-  sessionPathFor,
-} from "./session-files";
-import { deliver } from "./session-queue";
+import { materializeSessionFile, sessionPathFor } from "./session-files";
+import { wakeAgent } from "./session-queue";
 
 /**
  * Imboss built-in team tools.
@@ -45,7 +42,8 @@ import { deliver } from "./session-queue";
  * LLM-callable tools that let the assistant orchestrate a team (create/edit
  * employees, create chats, send messages, schedule cron jobs, notify) and let
  * participant agents work inside chats. Backed by a persistent per-(employee,
- * chat) Pi session with a read cursor.
+ * chat) Pi session with a read cursor. The assistant has no session in task
+ * group chats: it reads them from its root-chat session on `wakeAgent`.
  *
  * The tool set is role-based: the assistant (employee id 0) gets the
  * orchestration tools (`imb_set_employees`, `imb_create_chat`,
@@ -91,26 +89,10 @@ const MIME_BY_EXT: Record<string, string> = {
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 };
 
-// Session file materialization (`sessionPathFor` / `materializeSessionFile` /
-// `ensureSessionFile`) lives in `./session-files`, shared with the session
-// queue so every run — including the assistant's root chat — is persisted.
-
-/**
- * Fire-and-forget a participant's agent turn, serialized per (employee, chat)
- * by the session queue. The sub-agent mirrors the normal per-(employee, chat)
- * session (resumed from its own file) and is told to act on a new signal (read
- * a chat, process a prompt). No auto-persist here — the participant posts its
- * reply via `send_message` itself. Failures are logged and never propagated
- * back to the tool that scheduled the run.
- */
-function fireAndForgetPrompt(
-  _env: AgentEnvironment,
-  employeeId: number,
-  chatId: number,
-  text: string,
-): void {
-  void deliver(employeeId, chatId, text);
-}
+// Session file materialization (`sessionPathFor` / `materializeSessionFile`)
+// lives in `./session-files`, shared with the session queue so every run —
+// including the assistant's root chat — is persisted. Waking a participant goes
+// through `wakeAgent`, which redirects the assistant to its root-chat session.
 
 function mimeByExtension(path: string): string {
   const ext = extname(path).slice(1).toLowerCase();
@@ -158,7 +140,7 @@ async function resolveAttachments(
  * assistant can post without being a participant of the target chat.
  */
 async function performSendMessage(
-  env: AgentEnvironment,
+  _env: AgentEnvironment,
   input: {
     senderEmployeeId: number;
     chatId: number;
@@ -201,13 +183,9 @@ async function performSendMessage(
     if (!chat.participants.includes(pid)) continue;
     const target = dbEmployees.getEmployee(pid);
     if (!target || target.disabled) continue;
-    await ensureSessionFile(pid, input.chatId);
-    fireAndForgetPrompt(
-      env,
-      pid,
-      input.chatId,
-      input.notifyPrompt ?? READ_CHAT_PROMPT,
-    );
+    // `wakeAgent` redirects the assistant (id 0) from a task group chat to its
+    // root-chat session; participants run in their own (pid, chat) session.
+    await wakeAgent(pid, input.chatId, input.notifyPrompt ?? READ_CHAT_PROMPT);
   }
   return message;
 }
@@ -400,7 +378,7 @@ function setEmployeesTool(employeeId: number, chatId: number): AnyPiTool {
   };
 }
 
-/** `imb_create_chat` — new chat + one persistent session per participant. */
+/** `imb_create_chat` — new chat + one persistent session per employee. */
 function createChatTool(
   env: AgentEnvironment,
   employeeId: number,
@@ -410,7 +388,8 @@ function createChatTool(
     name: "imb_create_chat",
     label: "Create chat",
     description:
-      "Create a new chat with the given employee participants, initializing one persistent agent session per participant. " +
+      "Create a new chat with the given employee participants, initializing one persistent agent session per employee participant " +
+      "(the assistant orchestrates from its own root-chat session and gets no session here). " +
       "The assistant always joins, and the chat that spawned this one is linked as `from_chat_id`. " +
       "Participants are NOT notified or started automatically — assign their work afterwards with `imb_send_message`, " +
       "passing their ids in `notify` to wake them.",
@@ -439,7 +418,9 @@ function createChatTool(
       const participants = [...new Set([ASSISTANT_ID, ...input.participants])];
 
       const db = getDB();
-      // Atomic: chat row + one session row per participant commit together.
+      // Atomic: chat row + one session row per employee participant commit
+      // together. The assistant is deliberately skipped — it has no session in
+      // a task group chat and reads it from its root-chat session instead.
       const { chat, sessionRecords } = db.transaction(() => {
         const chat = dbChats.createChat(
           input.title,
@@ -448,13 +429,13 @@ function createChatTool(
         );
         const records: EmployeeSession[] = [];
         for (const pid of chat.participants) {
+          if (pid === ASSISTANT_ID) continue;
           const path = sessionPathFor(chat.id, pid);
           dbSessions.setSession(pid, chat.id, path);
           records.push({
             employeeId: pid,
             chatId: chat.id,
             session: path,
-            lastReadMessageId: 0,
           });
         }
         return { chat, sessionRecords: records };
@@ -580,15 +561,16 @@ function readChatTool(employeeId: number, chatId: number): AnyPiTool {
       const input = params as { chatId: number };
       const chat = dbChats.getChat(input.chatId);
       if (!chat) throw new Error("Chat does not exist.");
-      await ensureSessionFile(employeeId, input.chatId);
-      const cursor = dbSessions.getReadCursor(employeeId, input.chatId);
+      // Cursors live in their own table: the assistant reads task group chats
+      // from its root-chat session and has no `sessions` row there.
+      const cursor = dbReadCursors.getReadCursor(employeeId, input.chatId);
       const messages = dbMessages.listMessagesAfter(input.chatId, cursor);
       const nextCursor =
         messages.length > 0
           ? Math.max(...messages.map((message) => message.id))
           : cursor;
       if (nextCursor !== cursor) {
-        dbSessions.setReadCursor(employeeId, input.chatId, nextCursor);
+        dbReadCursors.setReadCursor(employeeId, input.chatId, nextCursor);
       }
       return toolResult({
         from: chat.fromChatId,
@@ -781,9 +763,7 @@ function addParticipantTool(
         });
 
         for (const participant of newParticipants) {
-          await ensureSessionFile(participant.employeeID, input.chatId);
-          fireAndForgetPrompt(
-            env,
+          await wakeAgent(
             participant.employeeID,
             input.chatId,
             participant.prompt,
