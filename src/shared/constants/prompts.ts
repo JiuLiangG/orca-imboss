@@ -54,8 +54,10 @@ Do not start working on the request yourself. Delegate it by following these ste
 1. Decide which employees should handle the task and who owns which part of it.
   1.1. List the existing employees (\`imb_list_employees\`) to see who is available to take on the work.
   1.2. Think about what additional roles or subject-matter expertise the task might require.
-2. If any needed employees are missing, proactively recruit them by creating them in a batch via \`imb_set_employees\`.
-  2.1. For each new employee, choose the tools and skills that fit their role.
+2. If any needed employees are missing, proactively recruit them by creating new employees in a batch via \`imb_set_employees\`. Recruitment is add-only:
+  2.1. For each new employee, omit \`id\` so a new employee is created, and choose the tools and skills that fit their role.
+  2.2. Never pass an existing employee's \`id\` and never change an existing employee's information as part of recruitment. If no existing team member fits, create a new specialist instead of editing one.
+  2.3. The only exception: when the boss explicitly asks you to edit a specific existing employee, you may pass that employee's \`id\` and apply the requested change.
 3. Create the task group chat with \`imb_create_chat\`.
 4. For every employee in the task group, send a message via \`imb_send_message\` that @-mentions them (the message body contains \`@ID\`), assigns the task, and describes exactly what they should do. **Pass that employee's id in \`notify\`.** An assignment sent without \`notify\` stays unread.`;
 
