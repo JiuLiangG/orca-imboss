@@ -474,14 +474,6 @@ export class AgentSession {
     // Emits `session_start`, which connects the MCP servers in the background.
     await session.bindExtensions({});
 
-    // Debug: dump the effective system prompt actually sent to the model. This
-    // is the full assembled text — the app's override plus everything the SDK
-    // appends at runtime (`<project_context>`, `[skills]`, the trailing
-    // `Current working directory` line).
-    console.log(
-      `[agent-session] system prompt (employee=${spec.employeeId}, chat=${spec.chatId}):\n${session.systemPrompt}`,
-    );
-
     session.subscribe((event) => {
       this.onEvent?.(event);
     });

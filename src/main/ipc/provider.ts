@@ -1,4 +1,3 @@
-import { t } from "@shared/l10n";
 import type { ProviderModelsQuery, ProviderUpsert } from "@shared/types";
 import { clipboard, ipcMain } from "electron";
 import { listAvailableModels, refreshModelStore } from "../agent/model-runtime";
@@ -10,24 +9,10 @@ import {
   revealProviderKey,
   upsertProvider,
 } from "../agent/providers";
-import {
-  installSkillsFromFolders,
-  listSkills,
-  listSkillsPage,
-  uninstallSkill,
-} from "../agent/skills";
-import { showOpenDialog } from "./dialog";
 import { assertString, parsePageQuery } from "./helpers";
 
-async function pickSkillFolders(): Promise<string[] | null> {
-  return showOpenDialog({
-    title: t("Select skill folders"),
-    properties: ["openDirectory", "multiSelections"],
-  });
-}
-
 // --- providers / skills ---
-export function registerAgentEnvHandlers(): void {
+export function registerProviderHandlers(): void {
   ipcMain.handle("providers:list", () => listProviders());
 
   ipcMain.handle("providers:listPage", (_event, page: unknown) =>
@@ -61,22 +46,5 @@ export function registerAgentEnvHandlers(): void {
     if (!key) throw new Error("No API key set for this provider.");
     clipboard.writeText(key);
     return true;
-  });
-
-  ipcMain.handle("skills:list", () => listSkills());
-
-  ipcMain.handle("skills:listPage", (_event, page: unknown) =>
-    listSkillsPage(parsePageQuery(page)),
-  );
-
-  ipcMain.handle("skills:install", async () => {
-    const paths = await pickSkillFolders();
-    if (paths === null) return null;
-    const imported = await installSkillsFromFolders(paths);
-    return imported;
-  });
-
-  ipcMain.handle("skills:uninstall", async (_event, name: unknown) => {
-    await uninstallSkill(assertString(name, "skill name"));
   });
 }

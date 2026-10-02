@@ -42,7 +42,7 @@ The app follows the standard Electron process model, with the **data layer and a
 **Data flow**
 
 - The **renderer never touches SQLite directly**; it goes through IPC.
-- Data is read/written in the main process by services (`src/main/db/*`) and, in the future, by **Pi tools** that close over the same data layer.
+- Data is read/written in the main process by services (`src/main/db/*`).
 - **Agent events** stream from the Pi session (in main) to the renderer over IPC.
 
 ---
@@ -122,31 +122,10 @@ Packaging is configured in `electron-builder.yml`.
 
 ---
 
-## Release & auto-update
-
-- **GitHub Actions** (`.github/workflows/release.yml`) builds and publishes on a `v*` tag across macOS / Ubuntu / Windows to a **GitHub release**.
-- **`electron-updater`** (`src/main/updater/index.ts`) checks **GitHub** for updates. It runs only in the packaged app.
-
-**To publish a release:**
-
-1. Push a tag, e.g. `git tag v0.1.0 && git push --tags`.
-2. The workflow will run (`pnpm build` + `electron-builder --publish always`).
-3. Ensure the GitHub `GH_TOKEN` secret is configured in the repository settings.
-
----
-
 ## Deferred / TODO
 
 These areas are scoped for upcoming iterations and are intentionally left as stubs or extension points:
 
-- **Progress messages** — `task_progress` kind is renderable from DB rows; nothing generates `steps` yet (placeholder pipeline only).
 - **Mini Apps (世界地图)** — the nav entry exists as a "暂未开放" placeholder page.
 - **Notification rules** — which events trigger OS notifications in the background.
 - **Auto-update UI feedback** — progress + install prompts over IPC.
-
----
-
-## Notes
-
-- Native modules (`better-sqlite3`) are rebuilt for the Electron ABI via `postinstall` (`electron-builder install-app-deps`).
-- The CSP in `src/renderer/index.html` is intentionally strict (inline styles allowed for the theme accent injection).
