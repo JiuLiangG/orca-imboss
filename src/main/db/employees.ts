@@ -127,24 +127,31 @@ export function updateEmployee(
   if (!current) return null;
 
   if (id === ASSISTANT_ID) {
-    // The assistant's profile is restricted: only name, systemPrompt (appended
-    // to ASSISTANT_SYSTEM_PROMPT), modelId and thinkingLevel are editable;
-    // role, mcp and skills are immutable and defensively rejected if provided.
-    const immutable: Array<keyof EmployeeInput> = ["role", "mcp", "skills"];
+    // The assistant's profile is restricted: name, systemPrompt (appended to
+    // ASSISTANT_SYSTEM_PROMPT), skills, modelId and thinkingLevel are editable;
+    // role and mcp are immutable and defensively rejected if provided. Skills
+    // are user-selectable so the assistant can be taught additional work
+    // methods beyond its code-shipped built-in skills.
+    const immutable: Array<keyof EmployeeInput> = ["role", "mcp"];
     if (immutable.some((key) => input[key] !== undefined)) {
       throw new Error(
-        "The built-in assistant's role, MCP, and skills cannot be modified.",
+        "The built-in assistant's role and MCP cannot be modified.",
       );
     }
+    const skills =
+      input.skills !== undefined
+        ? (validateRefList(input.skills, "skills") ?? [])
+        : current.skills;
     getDB()
       .prepare(
-        "UPDATE employees SET name = ?, system_prompt = ?, model_id = ?, thinking_level = ? WHERE id = ?",
+        "UPDATE employees SET name = ?, system_prompt = ?, skills = ?, model_id = ?, thinking_level = ? WHERE id = ?",
       )
       .run(
         input.name !== undefined ? validateName(input.name) : current.name,
         input.systemPrompt !== undefined
           ? validatePrompt(input.systemPrompt)
           : current.systemPrompt,
+        stringifyArray(skills),
         input.modelId !== undefined
           ? validateModelId(input.modelId)
           : current.modelId,

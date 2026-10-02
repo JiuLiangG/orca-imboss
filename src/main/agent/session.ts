@@ -417,9 +417,9 @@ export class AgentSession {
     // Anchor `<project_context>` to the app's `~/.imboss/agent` dir only,
     // dropping any ancestor AGENTS.md files outside it (decision 5), and
     // filter the global installed skills down to the employee's selection
-    // (empty selection ⇒ no `[skills]` block). The assistant (id 0) has no
-    // selectable skill list, so its code-shipped built-in skills are forced in
-    // here instead.
+    // (empty selection ⇒ no `[skills]` block). The assistant (id 0) may also
+    // select user-installed skills like any employee; its code-shipped
+    // built-in skills are always forced in on top of that selection.
     const selectedSkills = new Set(spec.employeeSkills);
     const builtinSkills = spec.isAssistant
       ? new Set<string>(BUILTIN_SKILL_NAMES)

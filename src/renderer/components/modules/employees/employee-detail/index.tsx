@@ -43,13 +43,15 @@ export function EmployeeDetail({
   onAvatarUpdated,
 }: EmployeeDetailProps): React.JSX.Element {
   const isAssistant = employee.id === 0;
-  // The built-in assistant's profile only exposes name, systemPrompt, modelId;
-  // role/mcp/skills never enter the form so they are never sent on patch.
+  // role/mcp never enter the assistant's form so they are never sent on patch;
+  // skills are user-selectable for the assistant (built-in skills are always
+  // included by the session on top of the selection).
   const [form, setForm] = useState<EmployeeInput>(
     isAssistant
       ? {
           name: employee.name,
           systemPrompt: employee.systemPrompt,
+          skills: employee.skills,
           modelId: employee.modelId ?? "",
           thinkingLevel: employee.thinkingLevel,
         }
@@ -240,28 +242,26 @@ export function EmployeeDetail({
         </Field>
 
         {!isAssistant && (
-          <>
-            <Field label={t("Linked MCP")}>
-              <MultiSelect
-                value={form.mcp ?? []}
-                options={mcpOptions}
-                placeholder={t("Select MCP")}
-                emptyHint={t("No MCP configured")}
-                onChange={(mcp) => scheduleSave({ ...form, mcp })}
-              />
-            </Field>
-
-            <Field label={t("Skill set")}>
-              <MultiSelect
-                value={form.skills ?? []}
-                options={skillOptions}
-                placeholder={t("Select skills")}
-                emptyHint={t("No skills installed")}
-                onChange={(skills) => scheduleSave({ ...form, skills })}
-              />
-            </Field>
-          </>
+          <Field label={t("Linked MCP")}>
+            <MultiSelect
+              value={form.mcp ?? []}
+              options={mcpOptions}
+              placeholder={t("Select MCP")}
+              emptyHint={t("No MCP configured")}
+              onChange={(mcp) => scheduleSave({ ...form, mcp })}
+            />
+          </Field>
         )}
+
+        <Field label={t("Skill set")}>
+          <MultiSelect
+            value={form.skills ?? []}
+            options={skillOptions}
+            placeholder={t("Select skills")}
+            emptyHint={t("No skills installed")}
+            onChange={(skills) => scheduleSave({ ...form, skills })}
+          />
+        </Field>
 
         <Field label={t("Model")} htmlFor={`emp-model-${employee.id}`}>
           <Select
