@@ -1,6 +1,8 @@
 .imb-group-avatar {
   display: grid;
-  gap: 2px;
+  /* JS sets a tighter gap for small composites (Nav rail); 2px is the
+     comfortable default for the larger card/header avatars. */
+  gap: var(--imb-group-gap, 2px);
   overflow: hidden;
   background: var(--imb-border);
   flex: none;
@@ -27,13 +29,15 @@
 }
 
 /* Stretch every tile to its grid cell and square it off (individual avatars
-   are circular elsewhere). */
+   are circular elsewhere). The tile glyph is sized by JS so it scales with the
+   cell instead of the base Avatar's fixed 11px minimum. */
 .imb-group-avatar .imb-avatar {
   width: 100% !important;
   height: 100% !important;
   border-radius: 0;
   min-width: 0;
   min-height: 0;
+  font-size: var(--imb-group-tile-font, 11px) !important;
 }
 
 .imb-group-avatar .imb-avatar img {

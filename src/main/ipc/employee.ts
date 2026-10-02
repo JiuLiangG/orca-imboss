@@ -4,7 +4,13 @@ import { disposeForEmployee } from "../agent/session-queue";
 import { deleteAvatarFiles, saveAvatar } from "../avatars";
 import * as dbEmployees from "../db/employees";
 import { listByEmployee, unlinkSessionFile } from "../db/sessions";
+import { sendToRenderer } from "../notifications";
 import { assertInteger, assertString, parsePageQuery } from "./helpers";
+
+/** Notify the renderer that the employees collection changed (name/avatar). */
+function notifyEmployeesChanged(ids: number[]): void {
+  sendToRenderer("employees:changed", { ids });
+}
 
 export function registerEmployeeHandlers(): void {
   ipcMain.handle("employees:list", () => dbEmployees.listEmployees());
@@ -13,15 +19,22 @@ export function registerEmployeeHandlers(): void {
     dbEmployees.listEmployeesPage(parsePageQuery(page)),
   );
 
-  ipcMain.handle("employees:create", (_event, input: EmployeeInput): Employee =>
-    dbEmployees.createEmployee(input),
+  ipcMain.handle(
+    "employees:create",
+    (_event, input: EmployeeInput): Employee => {
+      const employee = dbEmployees.createEmployee(input);
+      notifyEmployeesChanged([employee.id]);
+      return employee;
+    },
   );
 
   ipcMain.handle(
     "employees:update",
     (_event, id: unknown, input: EmployeeInput) => {
       const safeId = assertInteger(id, "employee id");
-      return dbEmployees.updateEmployee(safeId, input);
+      const employee = dbEmployees.updateEmployee(safeId, input);
+      if (employee) notifyEmployeesChanged([safeId]);
+      return employee;
     },
   );
 
@@ -38,6 +51,7 @@ export function registerEmployeeHandlers(): void {
       await Promise.all(records.map((r) => unlinkSessionFile(r.session)));
       deleteAvatarFiles(safeId);
     }
+    notifyEmployeesChanged([safeId]);
     return result;
   });
 
@@ -50,7 +64,9 @@ export function registerEmployeeHandlers(): void {
         throw new Error("Avatar data must be bytes.");
       }
       const path = saveAvatar(safeId, safeExt, Buffer.from(data));
-      return dbEmployees.updateEmployeeAvatar(safeId, path);
+      const employee = dbEmployees.updateEmployeeAvatar(safeId, path);
+      if (employee) notifyEmployeesChanged([safeId]);
+      return employee;
     },
   );
 }

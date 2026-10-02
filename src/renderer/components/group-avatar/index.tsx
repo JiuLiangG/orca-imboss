@@ -34,15 +34,27 @@ export function GroupAvatar({
   // The tile size only drives the fallback font size; the grid stretches each
   // avatar to its cell.
   const cellSize = count <= 1 ? size : Math.floor(size / 2);
+  // Small composites (e.g. the Nav rail) have almost no room per tile, so use a
+  // tighter gap and glyphs scaled to the tile instead of the base Avatar's
+  // 11px floor, which would otherwise overflow the cell and look cramped.
+  const gap = size >= 32 ? 2 : 1;
+  const tileFont =
+    count <= 1
+      ? Math.max(11, Math.round(size * 0.35))
+      : Math.max(8, Math.round(cellSize * 0.55));
 
   return (
     <span
       className={cls("imb-group-avatar", `imb-count-${count}`, className)}
-      style={{
-        width: size,
-        height: size,
-        borderRadius: Math.max(4, Math.round(size * 0.22)),
-      }}
+      style={
+        {
+          width: size,
+          height: size,
+          borderRadius: Math.max(4, Math.round(size * 0.22)),
+          "--imb-group-gap": `${gap}px`,
+          "--imb-group-tile-font": `${tileFont}px`,
+        } as React.CSSProperties
+      }
       title={title}
       aria-hidden={title ? undefined : true}
     >

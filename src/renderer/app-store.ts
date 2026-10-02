@@ -182,8 +182,10 @@ export const appStore = proxy({
       void appStore.loadEmployees();
     }
   },
-  // Employees can be created/updated by the agent (`imb_set_employees`) with no
-  // renderer event, so a re-fetch on module entry is the only refresh path.
+  // Employees can be created/updated by main (the agent's `imb_set_employees`
+  // or IPC mutations), which pushes `employees:changed`; the subscription in
+  // initAppStore re-fetches so chat avatars/names stay fresh between module
+  // visits.
   async reloadEmployees(): Promise<void> {
     if (!appStore.data.employees.loaded) {
       appStore.data.employees.loading = true;
@@ -204,7 +206,15 @@ export const appStore = proxy({
     }
   },
   addEmployee(employee: Employee): void {
-    appStore.data.employees.items.push(employee);
+    // Idempotent: an `employees:changed` reload may race the optimistic add.
+    const index = appStore.data.employees.items.findIndex(
+      (e) => e.id === employee.id,
+    );
+    if (index >= 0) {
+      appStore.data.employees.items[index] = employee;
+    } else {
+      appStore.data.employees.items.push(employee);
+    }
   },
   replaceEmployee(employee: Employee): void {
     const index = appStore.data.employees.items.findIndex(
@@ -501,6 +511,13 @@ export async function initAppStore(): Promise<void> {
   });
   imb.chats.onUnreadChanged(({ chatId, unread }) => {
     appStore.setChatUnread(chatId, unread);
+  });
+
+  // Employees can change from main with no renderer-side mutation (notably the
+  // agent's `imb_set_employees` when it recruits staff mid-conversation).
+  // Re-fetch the cache so chat avatars/names resolve immediately.
+  imb.employees.onChanged(() => {
+    void appStore.reloadEmployees();
   });
 
   // OS notification click → switch to the chat module and select the chat.

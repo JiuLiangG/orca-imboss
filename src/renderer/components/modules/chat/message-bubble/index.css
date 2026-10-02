@@ -106,3 +106,9 @@
   opacity: 0.7;
   flex: none;
 }
+
+@media (prefers-color-scheme: dark) {
+  .imb-bubble-chip {
+    background: rgba(255, 255, 255, 0.2);
+  }
+}

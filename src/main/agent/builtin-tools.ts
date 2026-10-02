@@ -32,7 +32,7 @@ import * as dbEmployees from "../db/employees";
 import * as dbMessages from "../db/messages";
 import * as dbReadCursors from "../db/read-cursors";
 import * as dbSessions from "../db/sessions";
-import { notifyUnread } from "../notifications";
+import { notifyUnread, sendToRenderer } from "../notifications";
 import { materializeSessionFile, sessionPathFor } from "./session-files";
 import { wakeAgent } from "./session-queue";
 
@@ -347,6 +347,9 @@ function setEmployeesTool(): AnyPiTool {
       const ids = dbEmployees.upsertEmployees(
         input.employees.map((item) => ({ ...item })),
       );
+      // The renderer caches employees for chat avatars/names; let it refresh so
+      // newly recruited staff show up without visiting the Employees module.
+      if (ids.length > 0) sendToRenderer("employees:changed", { ids });
       return toolResult({ ids });
     },
   };

@@ -230,7 +230,7 @@ function NavChatButton({
         onClick={onClick}
         onContextMenu={onContextMenu}
       >
-        <GroupAvatar participants={chat.participants} size={20} />
+        <GroupAvatar participants={chat.participants} size={24} />
         <span className="imb-nav-label">{chat.title}</span>
       </button>
     </Tooltip>
