@@ -28,7 +28,7 @@
     "dist:linux": "pnpm run build && electron-builder --linux"
   },
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "^0.99.2",
+    "@earendil-works/pi-coding-agent": "^1.0.0",
     "better-sqlite3": "^13.0.3",
     "croner": "^10.0.1",
     "electron-updater": "^6.8.9",
