@@ -75,7 +75,7 @@
 }
 
 /* Long chat titles truncate with an ellipsis instead of hard-clipping. */
-.imb-nav-item > span {
+.imb-nav-item > .imb-nav-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -150,7 +150,7 @@
   grid-template-columns: 76px 1fr;
 }
 
-.imb-nav.imb-is-collapsed .imb-nav-item span,
+.imb-nav.imb-is-collapsed .imb-nav-item .imb-nav-label,
 .imb-nav.imb-is-collapsed .imb-nav-brandname {
   display: none;
 }

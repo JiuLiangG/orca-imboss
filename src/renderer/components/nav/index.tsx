@@ -198,7 +198,7 @@ function NavButton({ item, collapsed }: NavButtonProps): React.JSX.Element {
         onClick={() => setModule(item.module)}
       >
         <Icon className="imb-icon" />
-        <span>{t(item.labelKey)}</span>
+        <span className="imb-nav-label">{t(item.labelKey)}</span>
       </button>
     </Tooltip>
   );
@@ -231,7 +231,7 @@ function NavChatButton({
         onContextMenu={onContextMenu}
       >
         <GroupAvatar participants={chat.participants} size={20} />
-        <span>{chat.title}</span>
+        <span className="imb-nav-label">{chat.title}</span>
       </button>
     </Tooltip>
   );
