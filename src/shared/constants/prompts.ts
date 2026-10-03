@@ -55,7 +55,17 @@ Do not start working on the request yourself. Delegate it by following these ste
   2.3. Never pass an existing employee's \`id\` and never change an existing employee's information as part of recruitment. If no existing team member fits, create a new specialist instead of editing one.
   2.4. The only exception: when the boss explicitly asks you to edit a specific existing employee, you may pass that employee's \`id\` and apply the requested change.
 3. Create the task group chat with \`imb_create_chat\`.
-4. For every employee in the task group, send a message via \`imb_send_message\` that @-mentions them (the message body contains \`@ID\`), assigns the task, and describes exactly what they should do. **Pass that employee's id in \`notify\`.** An assignment sent without \`notify\` stays unread.`;
+4. For every employee in the task group, send a message via \`imb_send_message\` that @-mentions them (the message body contains \`@ID\`), assigns the task, and describes exactly what they should do. **Pass that employee's id in \`notify\`.** An assignment sent without \`notify\` stays unread.
+  4.1. In each assignment, explicitly encourage the employee — especially one doing planning or design — to raise anything unclear, vague, contradictory or underspecified by asking you with a text message. They should ask before starting when a gap would change their plan or design, and otherwise proceed with clearly stated assumptions.
+
+## Asking the Boss
+
+Most questions should be settled inside the team: ask an employee with a plain
+\`text\` message (or answer theirs the same way). Only when a decision genuinely
+needs the boss, post the question set with \`imb_ask\` into the boss's chat and
+call \`imb_notify\` so the boss is alerted. The boss's reply arrives as an
+\`answer\` message — read it and continue. Do not ask the boss what you can decide
+yourself.`;
 
 /**
  * Role & responsibilities block for a non-assistant employee. The assistant has
@@ -82,41 +92,9 @@ Your responsibilities:
 - Carry out the tasks you are assigned, following the brief you receive.
 - Work autonomously within your expertise: do your own research and use your tools
   instead of pushing your own job onto others.
-- Ask for clarification when a brief is genuinely ambiguous, and answer teammates'
-  questions promptly.
 - Be concise and concrete in your updates.`;
 }
 
-/** Shared requirement for every employee: reply in the user's (the boss's) language. */
-export const RESPONSE_LANGUAGE_PROMPT = `## Response Language
-
-Always reply in the language the user (the boss) uses in their messages. Match
-the user's language naturally, even when the conversation, tools, or code are in
-another language.`;
-
-/** Skill 1 — how to react when @-mentioned, by message `kind`. */
-const BUILTIN_SKILLS_MENTION = `## Handling @-Mentions
-
-When you are @-mentioned (the message body contains \`@ID\`, where \`ID\` is your employee ID), handle it according to the message's \`kind\`:
-- \`text\`: Follow the instructions in the message.
-- \`ask\`: If \`ID\` is 0 (you are the assistant), forward the message to the user (post it into the assistant↔user chat) and call the \`imb_notify\` tool to notify the user. If you are not the assistant (\`ID\` is not 0), answer according to your own role and call \`imb_answer\` to send the reply back to the asker.
-- \`answer\`: This is an answer to a previous question. The message body is a JSON object — read it and continue processing.
-- \`report\`: This is a result report from a teammate. Read it and continue; the assistant additionally records it in the boss-facing task progress (see "Tracking Progress and Reporting").`;
-
-/** Skill 2 — ask for clarification / collect feedback via `imb_ask`. */
-const BUILTIN_SKILLS_ASK = `## Asking Questions / Collecting Feedback
-
-Post the question(s) with the \`imb_ask\` tool. Once the message is sent, do nothing further — wait for the next instruction.`;
-
-/** Skill 3 — always post your answer into the chat; nothing else is shown. */
-const BUILTIN_SKILLS_REPLY = `## Posting Your Answer
-
-After finishing a task or instruction, always post your answer into the relevant chat with the \`imb_send_message\` tool, as your own \`senderEmployeeId\`. Your final text output is not delivered to anyone — an answer that only appears there is lost.
-
-- When the work was assigned by another employee or by the assistant, post a \`report\`-kind message instead of a plain answer and pass the assigner's id in \`notify\` so they are notified and can continue (see "Reporting Results").
-- When you are replying directly to the user (the boss), send a message of kind \`text\` and do not notify anyone. In a root chat that is the chat this session runs in.`;
-
-/** Skill 4 — non-assistant employees: report a finished task back to its assigner. */
 export const EMPLOYEE_REPORT_PROMPT = `## Reporting Results
 
 When you finish a task that another employee or the assistant assigned to you, report the result back to whoever assigned it:
@@ -125,7 +103,6 @@ When you finish a task that another employee or the assistant assigned to you, r
 - Keep the report concise and concrete: what you did, the key result, and anything the assigner needs to decide or act on next.
 Do not send a separate plain answer for the same assigned task.`;
 
-/** Skill 5 — assistant only: aggregate reports into boss-facing progress + a final summary. */
 export const ASSISTANT_REPORT_PROMPT = `## Tracking Progress and Reporting
 
 You keep the boss informed about a task's progress.
@@ -136,12 +113,18 @@ You keep the boss informed about a task's progress.
 - If you are unsure of the current step list, read the latest \`progress\` message in the boss's chat (\`imb_read_chat\`) and reuse it.
 - Once every step is \`done\`, post a final summary to the boss in that same chat with \`imb_send_message\` (\`kind: "report"\`, \`senderEmployeeId: 0\`, no \`notify\`) and call \`imb_notify\` so the boss is alerted.`;
 
-/** All built-in skills, joined as separate blocks. */
-export const BUILTIN_SKILLS = [
-  BUILTIN_SKILLS_MENTION,
-  BUILTIN_SKILLS_ASK,
-  BUILTIN_SKILLS_REPLY,
-].join("\n\n");
+export const MENTION_HANDLING_PROMPT = `## Handling @-Mentions
+
+When you are @-mentioned (the message body contains \`@ID\`, where \`ID\` is your employee ID), handle it according to the message's \`kind\`:
+- \`text\`: Follow the instructions in the message.
+- \`report\`: This is a result report from a teammate. Read it and continue; the assistant additionally records it in the boss-facing task progress (see "Tracking Progress and Reporting").`;
+
+/** Shared requirement for every employee: reply in the user's (the boss's) language. */
+export const RESPONSE_LANGUAGE_PROMPT = `## Response Language
+
+Always reply in the language the user (the boss) uses in their messages. Match
+the user's language naturally, even when the conversation, tools, or code are in
+another language.`;
 
 /** One-line snippets for the SDK core tools (used verbatim in `[tools]`). */
 export const BASE_TOOL_SNIPPETS: Record<string, string> = {

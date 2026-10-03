@@ -47,13 +47,14 @@ import { wakeAgent } from "./session-queue";
  *
  * The tool set is role-based: the assistant (employee id 0) gets the
  * orchestration tools (`imb_set_employees`, `imb_create_chat`,
- * `imb_list_employees`, `imb_notify`, `imb_progress`) plus `imb_send_message`,
- * `imb_read_chat`, `imb_ask` and `imb_answer`; a participant employee gets
- * `imb_send_message`, `imb_read_chat`, `imb_ask` and `imb_answer`, plus
- * `imb_set_cronjob` and/or `imb_remove_cronjob` when the employee opted in via
- * their "Linked MCP" list. The two cron tools are deliberately NOT part of the
- * assistant's tool set, and `imb_progress` is assistant-only. All agent runs are
- * serialized per (employee, chat) via the session queue.
+ * `imb_list_employees`, `imb_notify`, `imb_progress`, `imb_ask`) plus
+ * `imb_send_message` and `imb_read_chat`; a participant employee gets
+ * `imb_send_message` and `imb_read_chat`, plus `imb_set_cronjob` and/or
+ * `imb_remove_cronjob` when the employee opted in via their "Linked MCP" list.
+ * The cron tools are deliberately NOT part of the assistant's tool set, and
+ * `imb_progress` and `imb_ask` are assistant-only: employees exchange questions
+ * and answers as plain text messages. All agent runs are serialized per
+ * (employee, chat) via the session queue.
  * `createTeamToolDefinitions` captures the calling agent's identity so
  * `imb_read_chat` knows who is reading and internal sends know who is sending.
  */
@@ -452,12 +453,14 @@ function sendMessageTool(env: AgentEnvironment): AnyPiTool {
     description:
       "Send a message into a chat as one of the active participants, with optional file-path attachments " +
       "(at most 5; pass `attachmentTotal` when more files were produced) and notifications to other " +
-      "participants. Use `kind` `report` to report a finished task's result.",
+      "participants. `kind` is `text` (the default) or `report` to report a finished task's result.",
     promptSnippet: "post to a chat",
     parameters: Type.Object({
       senderEmployeeId: Type.Integer({ minimum: 0 }),
       chatId: Type.Integer({ minimum: 1 }),
-      kind: Type.Optional(Type.String({ maxLength: 64 })),
+      kind: Type.Optional(
+        Type.Union([Type.Literal("text"), Type.Literal("report")]),
+      ),
       content: Type.String({ minLength: 1, maxLength: 100000 }),
       attachments: Type.Optional(
         Type.Array(Type.String(), { maxItems: MAX_TOOL_ATTACHMENTS }),
@@ -473,7 +476,7 @@ function sendMessageTool(env: AgentEnvironment): AnyPiTool {
       const input = params as {
         senderEmployeeId: number;
         chatId: number;
-        kind?: string;
+        kind?: "text" | "report";
         content: string;
         attachments?: string[];
         attachmentTotal?: number;
@@ -482,7 +485,7 @@ function sendMessageTool(env: AgentEnvironment): AnyPiTool {
       const message = await performSendMessage(env, {
         senderEmployeeId: input.senderEmployeeId,
         chatId: input.chatId,
-        kind: input.kind,
+        kind: input.kind ?? "text",
         content: input.content,
         attachments: input.attachments,
         attachmentTotal: input.attachmentTotal,
@@ -768,19 +771,27 @@ function addParticipantTool(env: AgentEnvironment): AnyPiTool {
   };
 }
 
-/** `imb_ask` — post a structured question set into a chat, notifying respondents. */
+/**
+ * `imb_ask` — assistant-only: post a structured question set for the boss.
+ *
+ * Reserved for decisions only the boss can make. The sender is always the
+ * assistant (id 0) and there is no `notify` — the boss is a human, not an
+ * employee. The assistant alerts the boss with a separate `imb_notify` call
+ * after posting. The boss answers through the AskCard UI, which appends a
+ * `kind:"answer"` message and wakes the assistant.
+ */
 function askTool(env: AgentEnvironment): AnyPiTool {
   return {
     name: "imb_ask",
-    label: "Ask a question",
+    label: "Ask the boss",
     description:
-      "Post a question set into a chat as one of the active participants and notify the specified " +
-      "employees to answer. Each question offers candidate options (single or multiple) and/or a " +
-      "free-form answer; the message body is the JSON serialization of the question set. " +
+      "Post a question set for the boss into a chat. Each question offers candidate options " +
+      "(single or multiple) and/or a free-form answer; the message body is the JSON serialization " +
+      "of the question set. The boss answers through the question card, delivered back as an " +
+      "`answer` message; call `imb_notify` afterwards so the boss is alerted. " +
       "Attachments are capped at 5; pass `attachmentTotal` when more files were produced.",
-    promptSnippet: "post a question set",
+    promptSnippet: "ask the boss a question set",
     parameters: Type.Object({
-      senderEmployeeId: Type.Integer({ minimum: 0 }),
       chatId: Type.Integer({ minimum: 1 }),
       questions: Type.Object({
         questions: Type.Array(
@@ -799,10 +810,6 @@ function askTool(env: AgentEnvironment): AnyPiTool {
           { minItems: 1, maxItems: 32 },
         ),
       }),
-      notify: Type.Array(Type.Integer({ minimum: 0 }), {
-        minItems: 1,
-        maxItems: 64,
-      }),
       attachments: Type.Optional(
         Type.Array(Type.String(), { maxItems: MAX_TOOL_ATTACHMENTS }),
       ),
@@ -812,7 +819,6 @@ function askTool(env: AgentEnvironment): AnyPiTool {
     }),
     execute: async (_toolCallId, params) => {
       const input = params as {
-        senderEmployeeId: number;
         chatId: number;
         questions: {
           questions: {
@@ -822,83 +828,16 @@ function askTool(env: AgentEnvironment): AnyPiTool {
             options?: string[];
           }[];
         };
-        notify: number[];
         attachments?: string[];
         attachmentTotal?: number;
       };
       const message = await performSendMessage(env, {
-        senderEmployeeId: input.senderEmployeeId,
+        senderEmployeeId: ASSISTANT_ID,
         chatId: input.chatId,
         kind: "ask",
         content: JSON.stringify(input.questions),
         attachments: input.attachments,
         attachmentTotal: input.attachmentTotal,
-        notify: input.notify,
-      });
-      return toolResult({ id: message.id });
-    },
-  };
-}
-
-/** `imb_answer` — post an answer to a question set into a chat, notifying others. */
-function answerTool(env: AgentEnvironment): AnyPiTool {
-  return {
-    name: "imb_answer",
-    label: "Answer a question",
-    description:
-      "Post an answer to a previous question set into a chat as one of the active participants and " +
-      "notify the specified employees. The message body is the JSON serialization of the answers. " +
-      "Attachments are capped at 5; pass `attachmentTotal` when more files were produced.",
-    promptSnippet: "post an answer",
-    parameters: Type.Object({
-      senderEmployeeId: Type.Integer({ minimum: 0 }),
-      chatId: Type.Integer({ minimum: 1 }),
-      answers: Type.Object({
-        answers: Type.Array(
-          Type.Object({
-            questionId: Type.String({ minLength: 1, maxLength: 128 }),
-            selected: Type.Optional(
-              Type.Array(Type.String(), { maxItems: 64 }),
-            ),
-            text: Type.Optional(Type.String({ maxLength: 4000 })),
-          }),
-          { minItems: 1, maxItems: 32 },
-        ),
-      }),
-      notify: Type.Array(Type.Integer({ minimum: 0 }), {
-        minItems: 1,
-        maxItems: 64,
-      }),
-      attachments: Type.Optional(
-        Type.Array(Type.String(), { maxItems: MAX_TOOL_ATTACHMENTS }),
-      ),
-      attachmentTotal: Type.Optional(
-        Type.Integer({ minimum: 0, maximum: MAX_ATTACHMENT_TOTAL }),
-      ),
-    }),
-    execute: async (_toolCallId, params) => {
-      const input = params as {
-        senderEmployeeId: number;
-        chatId: number;
-        answers: {
-          answers: {
-            questionId: string;
-            selected?: string[];
-            text?: string;
-          }[];
-        };
-        notify: number[];
-        attachments?: string[];
-        attachmentTotal?: number;
-      };
-      const message = await performSendMessage(env, {
-        senderEmployeeId: input.senderEmployeeId,
-        chatId: input.chatId,
-        kind: "answer",
-        content: JSON.stringify(input.answers),
-        attachments: input.attachments,
-        attachmentTotal: input.attachmentTotal,
-        notify: input.notify,
       });
       return toolResult({ id: message.id });
     },
@@ -916,11 +855,11 @@ void addParticipantTool;
  *
  * - Assistant (id 0): orchestration tools — `imb_set_employees`,
  *   `imb_create_chat`, `imb_read_chat`, `imb_list_employees`, `imb_notify`,
- *   `imb_progress`; plus `imb_send_message`, `imb_ask` and `imb_answer`. No
- *   cron tools.
- * - Participant employee: `imb_send_message`, `imb_read_chat`, `imb_ask`,
- *   `imb_answer`; plus `imb_set_cronjob` / `imb_remove_cronjob` when the
- *   corresponding opt-in marker is present in `mcp`.
+ *   `imb_progress`, `imb_ask`; plus `imb_send_message`. No cron tools.
+ * - Participant employee: `imb_send_message`, `imb_read_chat`; plus
+ *   `imb_set_cronjob` / `imb_remove_cronjob` when the corresponding opt-in
+ *   marker is present in `mcp`. Employees have no structured ask/answer
+ *   tools — they exchange questions and answers as plain text messages.
  */
 export function createTeamToolDefinitions(
   options: TeamToolOptions,
@@ -937,6 +876,9 @@ export function createTeamToolDefinitions(
     // Progress cards are assistant-only: the tool hardcodes the sender to the
     // assistant and participants have no way to post one (they lack `steps`).
     tools.push(progressTool(env));
+    // `imb_ask` is assistant-only (it asks the boss); employees exchange
+    // questions and answers as plain text messages.
+    tools.push(askTool(env));
     // `imb_set_cronjob` / `imb_remove_cronjob` are intentionally NOT given to
     // the assistant; they remain opt-in for participant employees only.
   } else {
@@ -951,8 +893,6 @@ export function createTeamToolDefinitions(
   }
   tools.push(sendMessageTool(env));
   tools.push(readChatTool(employeeId));
-  tools.push(askTool(env));
-  tools.push(answerTool(env));
   // add_participant is intentionally disabled for all roles (see plan §10.1);
   // kept in the file for reference and updated if re-enabled.
   // tools.push(addParticipantTool(env));

@@ -1,8 +1,8 @@
 import {
   ASSISTANT_REPORT_PROMPT,
   buildEmployeeRolePrompt,
-  BUILTIN_SKILLS,
   EMPLOYEE_REPORT_PROMPT,
+  MENTION_HANDLING_PROMPT,
   RESPONSE_LANGUAGE_PROMPT,
   TOOLS_GUIDELINES,
 } from "@shared/constants/prompts";
@@ -86,7 +86,7 @@ export function buildEmployeeSystemPrompt({
     roleBlock,
     persona,
     reportBlock,
-    BUILTIN_SKILLS,
+    MENTION_HANDLING_PROMPT,
     RESPONSE_LANGUAGE_PROMPT,
     toolsBlock,
     metaBlock,

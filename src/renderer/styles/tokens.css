@@ -102,6 +102,10 @@
     --imb-bubble-self: #4caf50;
     --imb-bubble-text: #f7f7f7;
   }
+
+  .imb-self {
+    --imb-muted: #ccc;
+  }
 }
 
 :root[data-theme-mode="dark"] {
@@ -115,6 +119,10 @@
   --imb-border-soft: var(--imb-border);
   --imb-bubble-self: #4caf50;
   --imb-bubble-text: #f7f7f7;
+
+  .imb-self {
+    --imb-muted: #ccc;
+  }
 }
 
 /* Explicit light override (wins over the media query). */
