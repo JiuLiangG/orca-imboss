@@ -51,6 +51,10 @@
   color: var(--imb-text-2);
 }
 
+.imb-progress-tag.imb-pending {
+  color: var(--imb-muted);
+}
+
 .imb-status-dot {
   display: inline-block;
   margin-right: 4px;

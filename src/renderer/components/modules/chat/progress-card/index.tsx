@@ -1,7 +1,14 @@
 import { t } from "@shared/l10n";
-import type { MessageStep } from "@shared/types";
+import type { MessageStep, StepStatus } from "@shared/types";
 import { cls } from "reactutils";
 import "./index.css";
+
+/** Translation key per step status; rendered through `t()` for locale switches. */
+const STEP_LABEL_KEYS: Record<StepStatus, string> = {
+  pending: "Pending",
+  busy: "In progress",
+  done: "Done",
+};
 
 export interface ProgressCardProps {
   title: string;
@@ -23,7 +30,7 @@ export function ProgressCard({
           </span>
           <span className={cls("imb-progress-tag", `imb-${step.status}`)}>
             <span className="imb-status-dot" aria-hidden="true" />
-            {step.status === "done" ? t("Done") : t("In progress")}
+            {t(STEP_LABEL_KEYS[step.status] ?? step.status)}
           </span>
         </div>
       ))}

@@ -47,11 +47,12 @@ import { wakeAgent } from "./session-queue";
  *
  * The tool set is role-based: the assistant (employee id 0) gets the
  * orchestration tools (`imb_set_employees`, `imb_create_chat`,
- * `imb_send_message`, `imb_read_chat`, `imb_list_employees`, `imb_notify`);
- * a participant employee gets `imb_send_message`, `imb_read_chat`, `imb_ask`
- * and `imb_answer`, plus `imb_set_cronjob` and/or `imb_remove_cronjob` when
- * the employee opted in via their "Linked MCP" list. The two cron tools are
- * deliberately NOT part of the assistant's tool set. All agent runs are
+ * `imb_list_employees`, `imb_notify`, `imb_progress`) plus `imb_send_message`,
+ * `imb_read_chat`, `imb_ask` and `imb_answer`; a participant employee gets
+ * `imb_send_message`, `imb_read_chat`, `imb_ask` and `imb_answer`, plus
+ * `imb_set_cronjob` and/or `imb_remove_cronjob` when the employee opted in via
+ * their "Linked MCP" list. The two cron tools are deliberately NOT part of the
+ * assistant's tool set, and `imb_progress` is assistant-only. All agent runs are
  * serialized per (employee, chat) via the session queue.
  * `createTeamToolDefinitions` captures the calling agent's identity so
  * `imb_read_chat` knows who is reading and internal sends know who is sending.
@@ -444,31 +445,20 @@ function createChatTool(
 }
 
 /** `imb_send_message` — post as an active participant, optionally notifying others. */
-function sendMessageTool(env: AgentEnvironment, employeeId: number): AnyPiTool {
+function sendMessageTool(env: AgentEnvironment): AnyPiTool {
   return {
     name: "imb_send_message",
     label: "Send message",
     description:
       "Send a message into a chat as one of the active participants, with optional file-path attachments " +
       "(at most 5; pass `attachmentTotal` when more files were produced) and notifications to other " +
-      "participants. Use `kind` `report` to report a finished task's result; " +
-      "the assistant may post `kind` `progress` with `steps` to publish a progress card.",
+      "participants. Use `kind` `report` to report a finished task's result.",
     promptSnippet: "post to a chat",
     parameters: Type.Object({
       senderEmployeeId: Type.Integer({ minimum: 0 }),
       chatId: Type.Integer({ minimum: 1 }),
       kind: Type.Optional(Type.String({ maxLength: 64 })),
       content: Type.String({ minLength: 1, maxLength: 100000 }),
-      steps: Type.Optional(
-        Type.Array(
-          Type.Object({
-            name: Type.String({ minLength: 1, maxLength: 256 }),
-            role: Type.String({ maxLength: 256 }),
-            status: Type.Union([Type.Literal("done"), Type.Literal("busy")]),
-          }),
-          { maxItems: 64 },
-        ),
-      ),
       attachments: Type.Optional(
         Type.Array(Type.String(), { maxItems: MAX_TOOL_ATTACHMENTS }),
       ),
@@ -485,30 +475,71 @@ function sendMessageTool(env: AgentEnvironment, employeeId: number): AnyPiTool {
         chatId: number;
         kind?: string;
         content: string;
-        steps?: MessageStep[];
         attachments?: string[];
         attachmentTotal?: number;
         notify?: number[];
       };
-      // `steps` only make sense for a progress card, which is assistant-only.
-      if (input.steps !== undefined && input.kind !== "progress") {
-        throw new Error("`steps` is only valid with kind `progress`.");
-      }
-      if (
-        (input.kind === "progress" || input.steps !== undefined) &&
-        employeeId !== ASSISTANT_ID
-      ) {
-        throw new Error("Only the assistant can post task progress.");
-      }
       const message = await performSendMessage(env, {
         senderEmployeeId: input.senderEmployeeId,
         chatId: input.chatId,
         kind: input.kind,
         content: input.content,
-        steps: input.steps,
         attachments: input.attachments,
         attachmentTotal: input.attachmentTotal,
         notify: input.notify,
+      });
+      return toolResult({ id: message.id });
+    },
+  };
+}
+
+/**
+ * `imb_progress` — assistant-only: post a task-progress card into a chat.
+ *
+ * Split out of `imb_send_message` so publishing progress has a dedicated,
+ * typed tool: the sender is always the assistant (id 0) and the card neither
+ * notifies anyone nor carries attachments. Registered only for the assistant
+ * in `createTeamToolDefinitions`; the shared send pipeline keeps its
+ * participant check, which the assistant satisfies in every chat it posts to.
+ */
+function progressTool(env: AgentEnvironment): AnyPiTool {
+  return {
+    name: "imb_progress",
+    label: "Post progress",
+    description:
+      "Post a task-progress card into a chat as the assistant. `content` is the card title and " +
+      "`steps` is the full, current step list (one step per employee, `status` `pending` before " +
+      "work is assigned, `busy` once it is assigned and running, `done` when finished). Always " +
+      "resend the whole list on every update; no participant is notified.",
+    promptSnippet: "post a progress card",
+    parameters: Type.Object({
+      chatId: Type.Integer({ minimum: 1 }),
+      content: Type.String({ minLength: 1, maxLength: 100000 }),
+      steps: Type.Array(
+        Type.Object({
+          name: Type.String({ minLength: 1, maxLength: 256 }),
+          role: Type.String({ maxLength: 256 }),
+          status: Type.Union([
+            Type.Literal("done"),
+            Type.Literal("busy"),
+            Type.Literal("pending"),
+          ]),
+        }),
+        { minItems: 1, maxItems: 64 },
+      ),
+    }),
+    execute: async (_toolCallId, params) => {
+      const input = params as {
+        chatId: number;
+        content: string;
+        steps: MessageStep[];
+      };
+      const message = await performSendMessage(env, {
+        senderEmployeeId: ASSISTANT_ID,
+        chatId: input.chatId,
+        kind: "progress",
+        content: input.content,
+        steps: input.steps,
       });
       return toolResult({ id: message.id });
     },
@@ -738,7 +769,7 @@ function addParticipantTool(env: AgentEnvironment): AnyPiTool {
 }
 
 /** `imb_ask` — post a structured question set into a chat, notifying respondents. */
-function imbAskTool(env: AgentEnvironment): AnyPiTool {
+function askTool(env: AgentEnvironment): AnyPiTool {
   return {
     name: "imb_ask",
     label: "Ask a question",
@@ -810,7 +841,7 @@ function imbAskTool(env: AgentEnvironment): AnyPiTool {
 }
 
 /** `imb_answer` — post an answer to a question set into a chat, notifying others. */
-function imbAnswerTool(env: AgentEnvironment): AnyPiTool {
+function answerTool(env: AgentEnvironment): AnyPiTool {
   return {
     name: "imb_answer",
     label: "Answer a question",
@@ -884,8 +915,9 @@ void addParticipantTool;
  * Build the role-based tool set for the calling agent.
  *
  * - Assistant (id 0): orchestration tools — `imb_set_employees`,
- *   `imb_create_chat`, `imb_read_chat`, `imb_list_employees`, `imb_notify`;
- *   plus `imb_send_message`, `imb_ask` and `imb_answer`. No cron tools.
+ *   `imb_create_chat`, `imb_read_chat`, `imb_list_employees`, `imb_notify`,
+ *   `imb_progress`; plus `imb_send_message`, `imb_ask` and `imb_answer`. No
+ *   cron tools.
  * - Participant employee: `imb_send_message`, `imb_read_chat`, `imb_ask`,
  *   `imb_answer`; plus `imb_set_cronjob` / `imb_remove_cronjob` when the
  *   corresponding opt-in marker is present in `mcp`.
@@ -902,6 +934,9 @@ export function createTeamToolDefinitions(
     tools.push(createChatTool(env, chatId));
     tools.push(listEmployeesTool());
     tools.push(notifyTool());
+    // Progress cards are assistant-only: the tool hardcodes the sender to the
+    // assistant and participants have no way to post one (they lack `steps`).
+    tools.push(progressTool(env));
     // `imb_set_cronjob` / `imb_remove_cronjob` are intentionally NOT given to
     // the assistant; they remain opt-in for participant employees only.
   } else {
@@ -914,10 +949,10 @@ export function createTeamToolDefinitions(
       tools.push(removeCronjobTool(employeeId));
     }
   }
-  tools.push(sendMessageTool(env, employeeId));
+  tools.push(sendMessageTool(env));
   tools.push(readChatTool(employeeId));
-  tools.push(imbAskTool(env));
-  tools.push(imbAnswerTool(env));
+  tools.push(askTool(env));
+  tools.push(answerTool(env));
   // add_participant is intentionally disabled for all roles (see plan §10.1);
   // kept in the file for reference and updated if re-enabled.
   // tools.push(addParticipantTool(env));

@@ -6,7 +6,7 @@ An Electron desktop application for running an **AI agent as your "one man compa
 
 ## Highlights
 
-- **Chat-first experience** — interact by chatting, like a desktop messaging app (WeChat-style design tokens, light/dark/system theme + 12 accent colors).
+- **Chat-first experience** — interact by chatting, like a desktop messaging app (WeChat-style design tokens, light/dark/system theme + 18 accent colors).
 - **Single window, single instance** — one instance, one window, always.
 - **Multi-language** — English (default) + Simplified Chinese (`zh-CN`). Language defaults to the system locale and can be changed in settings (stored in the database).
 - **SQLite data layer** (`better-sqlite3`) — WAL mode: concurrent reads, serial writes.

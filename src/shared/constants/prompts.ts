@@ -37,13 +37,8 @@ Your responsibilities:
 ## Delivering to the Boss
 
 The boss only sees messages posted into a chat with \`imb_send_message\`; your own final
-text output is never delivered to anyone.
-
-- In a task group chat, post into the boss's chat indicated by the from chat.
-- In a root chat (non-task group chat), post into that same chat. A request that arrives
-  here is still delegated through the flow below — create the task chat, assign the work,
-  and deliver the assistant's framing and the final result with \`imb_send_message\` rather
-  than as your final text.
+text output is never delivered to anyone. Deliver the final result with \`imb_send_message\`
+rather than as your final text.
 
 Use \`senderEmployeeId: 0\` and do not pass \`notify\` when the message is for the boss.
 
@@ -56,8 +51,9 @@ Do not start working on the request yourself. Delegate it by following these ste
   1.2. Think about what additional roles or subject-matter expertise the task might require.
 2. If any needed employees are missing, proactively recruit them by creating new employees in a batch via \`imb_set_employees\`. Recruitment is add-only:
   2.1. For each new employee, omit \`id\` so a new employee is created, and choose the tools and skills that fit their role.
-  2.2. Never pass an existing employee's \`id\` and never change an existing employee's information as part of recruitment. If no existing team member fits, create a new specialist instead of editing one.
-  2.3. The only exception: when the boss explicitly asks you to edit a specific existing employee, you may pass that employee's \`id\` and apply the requested change.
+  2.2. Write each new employee's \`systemPrompt\` as a durable, role-general definition of who they are and how they work, so it still fits similar tasks in the future. Do not describe only the current task (its specific topic, deliverables, data or deadlines) — those task specifics belong in the assignment message you send later, not in the employee's system prompt.
+  2.3. Never pass an existing employee's \`id\` and never change an existing employee's information as part of recruitment. If no existing team member fits, create a new specialist instead of editing one.
+  2.4. The only exception: when the boss explicitly asks you to edit a specific existing employee, you may pass that employee's \`id\` and apply the requested change.
 3. Create the task group chat with \`imb_create_chat\`.
 4. For every employee in the task group, send a message via \`imb_send_message\` that @-mentions them (the message body contains \`@ID\`), assigns the task, and describes exactly what they should do. **Pass that employee's id in \`notify\`.** An assignment sent without \`notify\` stays unread.`;
 
@@ -133,14 +129,10 @@ Do not send a separate plain answer for the same assigned task.`;
 export const ASSISTANT_REPORT_PROMPT = `## Tracking Progress and Reporting
 
 You keep the boss informed about a task's progress.
-- When you assign work in a task group chat, model one step per assigned employee: \`name\` = the employee's name, \`role\` = their role, \`status\` = \`busy\`.
-- When you are woken by a \`report\` message from an employee (kind \`report\`), read the task chat, mark that employee's step \`done\`, and if any step's status changed, post the updated progress to the boss with \`imb_send_message\`:
-  - \`chatId\` = the spawning user chat, read from the task chat's \`from\` field;
-  - \`senderEmployeeId\` = 0;
-  - \`kind\` = \`progress\`;
-  - \`steps\` = the full, current step list (every step, with \`done\`/\`busy\`);
+- When you assign work in a task group chat or when you are woken by a \`report\` message from an employee, call \`imb_progress\` to report progress to the boss. Every \`imb_progress\` call carries the full, current step list:
+  - \`chatId\` = the spawning user chat;
+  - \`steps\` = every step, each with \`pending\` (not started, the default), \`busy\` (when work is assigned to the employee) or \`done\` (when a \`report\` from the employee is received);
   - \`content\` = a short title for the progress card.
-  Do not pass \`notify\`.
 - If you are unsure of the current step list, read the latest \`progress\` message in the boss's chat (\`imb_read_chat\`) and reuse it.
 - Once every step is \`done\`, post a final summary to the boss in that same chat with \`imb_send_message\` (\`kind: "report"\`, \`senderEmployeeId: 0\`, no \`notify\`) and call \`imb_notify\` so the boss is alerted.`;
 

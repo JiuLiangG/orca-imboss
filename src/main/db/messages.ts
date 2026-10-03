@@ -38,7 +38,7 @@ const MAX_ATTACH_NAME_LENGTH = 256;
 const MAX_ATTACH_TYPE_LENGTH = 128;
 const MAX_ATTACH_PATH_LENGTH = 4096;
 const MAX_ATTACH_SIZE = 50 * 1024 * 1024; // metadata only
-const STEP_STATUSES: StepStatus[] = ["done", "busy"];
+const STEP_STATUSES: StepStatus[] = ["done", "busy", "pending"];
 
 const MAX_SEARCH_QUERY_LENGTH = 200;
 const MAX_SEARCH_RESULTS = 50;
@@ -280,14 +280,14 @@ function parseSteps(raw: string | null): MessageStep[] | null {
     if (
       typeof record["name"] !== "string" ||
       typeof record["role"] !== "string" ||
-      (record["status"] !== "done" && record["status"] !== "busy")
+      !STEP_STATUSES.includes(record["status"] as StepStatus)
     ) {
       continue;
     }
     result.push({
       name: record["name"],
       role: record["role"],
-      status: record["status"],
+      status: record["status"] as StepStatus,
     });
   }
   return result;
@@ -376,7 +376,7 @@ function validateSteps(
       throw new Error("Progress step role is too long.");
     }
     if (!STEP_STATUSES.includes(step.status)) {
-      throw new Error("Progress step status must be done or busy.");
+      throw new Error("Progress step status must be done, busy, or pending.");
     }
     result.push({ name, role, status: step.status });
   }
