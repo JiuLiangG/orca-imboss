@@ -1,9 +1,10 @@
 import { t } from "@shared/l10n";
 import type { Message } from "@shared/types";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cls } from "reactutils";
 import { EmployeeAvatar } from "../../../employee-avatar";
 import { Markdown } from "../../../markdown";
+import { type AnswerItem, parseAnswer } from "../ask-answer";
 import { MessageBubble } from "../message-bubble";
 import "./index.css";
 
@@ -13,6 +14,11 @@ export interface AskCardProps {
   readonly?: boolean;
   /** Called after a successful answer so the chat thread can reload. */
   onAnswered: () => void;
+  /**
+   * The answer message folded into this card, when the question has already
+   * been answered. Seeds the retained options/text and marks the card answered.
+   */
+  answer?: Message;
 }
 
 interface AskQuestion {
@@ -42,18 +48,31 @@ export function AskCard({
   message,
   readonly = false,
   onAnswered,
+  answer,
 }: AskCardProps): React.JSX.Element {
   const self = message.senderEmployeeId === null;
   const payload = parseAsk(message.content);
+  const persisted = useMemo(
+    () => (answer ? parseAnswer(answer.content) : null),
+    [answer],
+  );
   const [selectedByQuestion, setSelectedByQuestion] = useState<
     Record<string, string[]>
-  >({});
+  >(() => (persisted ? seedSelected(persisted.answers) : {}));
   const [textByQuestion, setTextByQuestion] = useState<Record<string, string>>(
-    {},
+    () => (persisted ? seedText(persisted.answers) : {}),
   );
-  const [submitted, setSubmitted] = useState(false);
+  const [submitted, setSubmitted] = useState(persisted !== null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Rehydrate when the folded answer arrives after mount (thread reload).
+  useEffect(() => {
+    if (!persisted) return;
+    setSelectedByQuestion(seedSelected(persisted.answers));
+    setTextByQuestion(seedText(persisted.answers));
+    setSubmitted(true);
+  }, [persisted]);
 
   if (!payload) {
     return (
@@ -244,6 +263,28 @@ function parseAsk(content: string): AskPayload | null {
 /** A question is free-form when it declares `free` or provides no candidates. */
 function isFreeForm(q: AskQuestion): boolean {
   return q.type === "free" || !q.options || q.options.length === 0;
+}
+
+/** Seed the selected-option state from a persisted answer's items. */
+function seedSelected(answers: AnswerItem[]): Record<string, string[]> {
+  const result: Record<string, string[]> = {};
+  for (const item of answers) {
+    if (item.selected !== undefined && item.selected.length > 0) {
+      result[item.questionId] = [...item.selected];
+    }
+  }
+  return result;
+}
+
+/** Seed the free-text state from a persisted answer's items. */
+function seedText(answers: AnswerItem[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const item of answers) {
+    if (item.text !== undefined && item.text.length > 0) {
+      result[item.questionId] = item.text;
+    }
+  }
+  return result;
 }
 
 /** Build the `{ answers: [...] }` payload from the current UI state. */

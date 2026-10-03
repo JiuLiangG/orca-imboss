@@ -13,6 +13,8 @@ export interface MessageItemProps {
   readonly?: boolean;
   /** Called after a successful ask-card answer (interactive mode only). */
   onAnswered?: () => void;
+  /** The answer message folded into this ask card, when one exists. */
+  askAnswer?: Message;
 }
 
 /**
@@ -23,6 +25,7 @@ export function MessageItem({
   message,
   readonly = false,
   onAnswered,
+  askAnswer,
 }: MessageItemProps): React.JSX.Element {
   switch (message.kind) {
     case "ask":
@@ -31,6 +34,7 @@ export function MessageItem({
           message={message}
           readonly={readonly}
           onAnswered={onAnswered ?? (() => undefined)}
+          answer={askAnswer}
         />
       );
     case "answer":

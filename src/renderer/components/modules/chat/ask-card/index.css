@@ -39,8 +39,73 @@
   cursor: pointer;
 }
 
+/* Custom-drawn control: the native control ignores `accent-color` when
+   disabled, which made an answered (disabled) choice look grey and unclear in
+   dark mode. Drawing it ourselves keeps the selected option legible. */
 .imb-ask-option input {
-  accent-color: var(--imb-accent);
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: none;
+  margin: 0;
+  position: relative;
+  cursor: pointer;
+  background: var(--imb-surface);
+  border: 1.5px solid var(--imb-border);
+  border-radius: var(--imb-radius-pill);
+  transition:
+    border-color var(--imb-motion-fast) var(--imb-ease-standard),
+    background-color var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-ask-option input[type="checkbox"] {
+  border-radius: var(--imb-radius-sm);
+}
+
+.imb-ask-option input:checked {
+  background: var(--imb-accent);
+  border-color: var(--imb-accent);
+}
+
+.imb-ask-option input::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--imb-radius-pill);
+  background: var(--imb-accent-on);
+  transform: scale(0);
+  transition: transform var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-ask-option input:checked::after {
+  transform: scale(1);
+}
+
+.imb-ask-option input[type="checkbox"]::after {
+  width: 3px;
+  height: 7px;
+  border: solid var(--imb-accent-on);
+  border-width: 0 2px 2px 0;
+  border-radius: 0;
+  background: transparent;
+  transform: rotate(45deg) scale(0);
+}
+
+.imb-ask-option input[type="checkbox"]:checked::after {
+  transform: rotate(45deg) scale(1);
+}
+
+.imb-ask-option input:disabled {
+  cursor: default;
+}
+
+.imb-ask-option input:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
 }
 
 .imb-ask-other {

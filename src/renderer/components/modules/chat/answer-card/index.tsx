@@ -2,21 +2,12 @@ import { t } from "@shared/l10n";
 import type { Message } from "@shared/types";
 import { cls } from "reactutils";
 import { EmployeeAvatar } from "../../../employee-avatar";
+import { parseAnswer } from "../ask-answer";
 import { MessageBubble } from "../message-bubble";
 import "./index.css";
 
 export interface AnswerCardProps {
   message: Message;
-}
-
-interface AnswerItem {
-  questionId: string;
-  selected?: string[];
-  text?: string;
-}
-
-interface AnswerPayload {
-  answers: AnswerItem[];
 }
 
 /**
@@ -62,37 +53,4 @@ export function AnswerCard({ message }: AnswerCardProps): React.JSX.Element {
       </div>
     </div>
   );
-}
-
-/** Defensive parse of the answer payload; returns null on any invalid shape. */
-function parseAnswer(content: string): AnswerPayload | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    return null;
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return null;
-  }
-  const record = parsed as Record<string, unknown>;
-  const answers = record["answers"];
-  if (!Array.isArray(answers) || answers.length === 0) return null;
-  const result: AnswerItem[] = [];
-  for (const item of answers) {
-    if (typeof item !== "object" || item === null) continue;
-    const a = item as Record<string, unknown>;
-    if (typeof a["questionId"] !== "string" || a["questionId"].length === 0) {
-      continue;
-    }
-    const selected = a["selected"];
-    result.push({
-      questionId: a["questionId"],
-      selected: Array.isArray(selected)
-        ? selected.filter((s): s is string => typeof s === "string")
-        : undefined,
-      text: typeof a["text"] === "string" ? a["text"] : undefined,
-    });
-  }
-  return result.length > 0 ? { answers: result } : null;
 }

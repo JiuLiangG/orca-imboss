@@ -38,12 +38,24 @@ export function registerMessageHandlers(): void {
     (_event, chatId: unknown, askMessageId: unknown, answers: unknown) => {
       const safeChatId = assertInteger(chatId, "chat id");
       const safeAskId = assertInteger(askMessageId, "ask message id");
-      const safeAnswers = JSON.stringify(assertObject(answers, "answers"));
-      const message = dbMessages.appendMessage(safeChatId, null, safeAnswers, {
-        kind: "answer",
-      });
       const ask = dbMessages.getMessageById(safeAskId);
-      if (ask && ask.senderEmployeeId != null) {
+      if (!ask || ask.chatId !== safeChatId || ask.kind !== "ask") {
+        throw new Error("Ask message does not exist.");
+      }
+      // Stamp the answer with the ask it replies to so the card can rehydrate
+      // its retained options/text after a reload. Set after the spread so a
+      // renderer-supplied `askMessageId` can never override it.
+      const payload = {
+        ...assertObject(answers, "answers"),
+        askMessageId: safeAskId,
+      };
+      const message = dbMessages.appendMessage(
+        safeChatId,
+        null,
+        JSON.stringify(payload),
+        { kind: "answer" },
+      );
+      if (ask.senderEmployeeId != null) {
         // `wakeAgent` redirects the assistant (id 0) from a task group chat to
         // its root-chat session.
         void wakeAgent(ask.senderEmployeeId, safeChatId, READ_CHAT_PROMPT);

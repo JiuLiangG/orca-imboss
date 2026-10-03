@@ -8,7 +8,7 @@ import type {
   PageQuery,
   PageResult,
 } from "@shared/types";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appStore, useApp } from "../../../../app-store";
 import { useInfiniteList } from "../../../../hooks/use-infinite-list";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
@@ -22,6 +22,7 @@ import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
 import { Modal } from "../../../modal";
 import { SearchInput } from "../../../search-input";
+import { pairAskAnswers } from "../ask-answer";
 import { ChatInputBar } from "../chat-input-bar";
 import { MessageItem } from "../message-item";
 import { formatChatTime, previewText } from "../relative-time";
@@ -241,6 +242,15 @@ export function ChatModule(): React.JSX.Element {
   const selectedRunStatus =
     selectedId !== null ? runStatus.get(selectedId) : undefined;
 
+  // Pair answered asks with their answer so the ask card can retain the chosen
+  // options/text; folded answers are hidden from the thread.
+  const pairing = useMemo(() => pairAskAnswers(messages), [messages]);
+  const visibleMessages = useMemo(
+    () =>
+      messages.filter((message) => !pairing.foldedAnswerIds.has(message.id)),
+    [messages, pairing],
+  );
+
   // Scroll to bottom when messages change or the run indicator appears.
   useEffect(() => {
     const el = threadRef.current;
@@ -398,11 +408,12 @@ export function ChatModule(): React.JSX.Element {
         <div className="imb-chat-title">{displayTitle(selected.title)}</div>
       </div>
       <div className="imb-thread" ref={threadRef}>
-        {messages.map((message) => (
+        {visibleMessages.map((message) => (
           <MessageItem
             key={`${message.chatId}-${message.id}`}
             message={message}
             onAnswered={() => void loadMessages(message.chatId)}
+            askAnswer={pairing.answerByAskId.get(message.id)}
           />
         ))}
         {selectedRunStatus !== undefined && (
