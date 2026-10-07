@@ -42,3 +42,105 @@
   color: var(--imb-fg);
   text-align: right;
 }
+
+.imb-about-version-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--imb-space-2);
+}
+
+.imb-about-version {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: default;
+}
+
+.imb-about-version.imb-is-clickable {
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.imb-about-version.imb-is-clickable:hover {
+  color: var(--imb-accent);
+}
+
+.imb-about-new {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--imb-radius-pill);
+  background: var(--imb-accent);
+  color: var(--imb-accent-on);
+  font-family: var(--imb-font-body);
+  font-size: var(--imb-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.imb-about-new:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.imb-about-update {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--imb-space-3);
+  margin-top: var(--imb-space-6);
+}
+
+.imb-update-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--imb-space-2);
+  width: 100%;
+  max-width: 420px;
+}
+
+.imb-update-progress-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--imb-text-sm);
+  color: var(--imb-muted);
+}
+
+.imb-update-percent {
+  font-family: var(--imb-font-mono);
+  color: var(--imb-fg);
+}
+
+.imb-progress-track {
+  height: 6px;
+  width: 100%;
+  border-radius: var(--imb-radius-pill);
+  background: var(--imb-fg-soft);
+  overflow: hidden;
+}
+
+.imb-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--imb-accent);
+  transition: width var(--imb-motion-base) var(--imb-ease-standard);
+}
+
+.imb-update-actions {
+  display: flex;
+  gap: var(--imb-space-2);
+}
+
+.imb-update-status {
+  margin: 0;
+  font-size: var(--imb-text-sm);
+  color: var(--imb-muted);
+}

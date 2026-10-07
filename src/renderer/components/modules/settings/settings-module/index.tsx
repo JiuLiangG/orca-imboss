@@ -1,5 +1,5 @@
 import { t } from "@shared/l10n";
-import { useState } from "react";
+import { appStore, useApp, type SettingsSection } from "../../../../app-store";
 import { ModuleView } from "../../../app-shell";
 import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
@@ -7,8 +7,6 @@ import "../../module-common.css";
 import { SettingsAbout } from "../settings-about";
 import { SettingsGeneral } from "../settings-general";
 import { SettingsTheme } from "../settings-theme";
-
-type SettingsSection = "general" | "theme" | "about";
 
 const SECTIONS: Array<{
   id: SettingsSection;
@@ -25,26 +23,28 @@ const SECTIONS: Array<{
 ];
 
 export function SettingsModule(): React.JSX.Element {
-  const [section, setSection] = useState<SettingsSection>("general");
+  const { settingsSection } = useApp();
 
   const list = (
     <ListPane title={t("Settings")}>
       {SECTIONS.map((item) => (
         <ListRow
           key={item.id}
-          active={section === item.id}
+          active={settingsSection === item.id}
           name={t(item.labelKey)}
           sub={t(item.descKey)}
-          onClick={() => setSection(item.id)}
+          onClick={() => {
+            appStore.settingsSection = item.id;
+          }}
         />
       ))}
     </ListPane>
   );
 
   const detail =
-    section === "theme" ? (
+    settingsSection === "theme" ? (
       <SettingsTheme />
-    ) : section === "about" ? (
+    ) : settingsSection === "about" ? (
       <SettingsAbout />
     ) : (
       <SettingsGeneral />

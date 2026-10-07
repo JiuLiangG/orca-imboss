@@ -9,3 +9,4 @@ export * from "./paged_lists";
 export * from "./providers";
 export * from "./sessions";
 export * from "./themes";
+export * from "./updater";

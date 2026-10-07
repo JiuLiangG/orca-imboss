@@ -11,7 +11,7 @@ import { initDatabase } from "./db";
 import { purgeDisabledEmployees } from "./db/employees";
 import { unlinkSessionFile } from "./db/sessions";
 import { registerIpcHandlers } from "./ipc";
-import { getResolvedLocale } from "./locale";
+import { getResolvedLocale, initLocale } from "./locale";
 import { setMainWindow } from "./notifications";
 import { initTheme } from "./theme";
 import { initUpdater } from "./updater";
@@ -65,6 +65,9 @@ app.whenReady().then(() => {
   app.setAppUserModelId("com.orcastudio.imboss");
 
   initDatabase();
+  // Localize main-process strings (native dialogs, OS notifications) from the
+  // stored/system locale. Must run after the database is available.
+  initLocale();
   // Generate the app's built-in Skills (hidden from the Skills module) so the
   // assistant's sessions can load them. Best-effort: a failure is logged and
   // never blocks startup.
@@ -80,7 +83,9 @@ app.whenReady().then(() => {
 
   void refreshModelStore(new AbortController().signal);
 
-  if (app.isPackaged) initUpdater();
+  // Always initialize the updater: the automatic startup check is packaged-only
+  // (inside `initUpdater`), but the renderer's manual check also works in dev.
+  initUpdater();
 });
 
 /**

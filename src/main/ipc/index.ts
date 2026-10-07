@@ -8,6 +8,7 @@ import { registerSessionHandlers } from "./session";
 import { registerSettingsHandlers } from "./settings";
 import { registerSkillHandlers } from "./skill";
 import { registerThemeHandlers } from "./theme";
+import { registerUpdaterHandlers } from "./updater";
 import { registerWindowHandlers } from "./window";
 import { registerWorkdirHandlers } from "./workdir";
 
@@ -17,6 +18,7 @@ export function registerIpcHandlers(): void {
   registerWorkdirHandlers();
   registerThemeHandlers();
   registerWindowHandlers();
+  registerUpdaterHandlers();
   registerChatHandlers();
   registerMessageHandlers();
   registerProviderHandlers();

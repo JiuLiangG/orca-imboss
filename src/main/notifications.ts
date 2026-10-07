@@ -18,6 +18,15 @@ export function sendToRenderer(channel: string, payload: unknown): void {
   }
 }
 
+/** Restore, show and focus the main window (used by notification clicks). */
+export function focusMainWindow(): void {
+  const target = resolveTargetWindow();
+  if (!target) return;
+  if (target.isMinimized()) target.restore();
+  target.show();
+  target.focus();
+}
+
 /**
  * Bump a chat's unread counter by `delta` (clamped >= 0), mirror the new count
  * to the renderer, and — when the app window is not focused — show an OS

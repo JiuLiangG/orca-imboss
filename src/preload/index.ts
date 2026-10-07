@@ -21,6 +21,7 @@ import type {
   ProviderModelsQuery,
   ProviderUpsert,
   ThemeState,
+  UpdaterState,
   WorkDirState,
 } from "@shared/types";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
@@ -38,6 +39,10 @@ const api = {
       ipcRenderer.invoke("settings:get", key) as Promise<string | null>,
     set: (key: string, value: string) =>
       ipcRenderer.invoke("settings:set", key, value) as Promise<void>,
+    /** Fired when main asks the renderer to open a Settings section (e.g. an
+     *  update-notification click jumps to "about"). */
+    onFocusSection: (cb: (section: string) => void) =>
+      on<string>("settings:focus", cb),
   },
 
   workdir: {
@@ -63,6 +68,18 @@ const api = {
   },
 
   getVersion: () => ipcRenderer.invoke("app:getVersion") as Promise<string>,
+
+  updater: {
+    getState: () =>
+      ipcRenderer.invoke("updater:getState") as Promise<UpdaterState>,
+    check: () => ipcRenderer.invoke("updater:check") as Promise<UpdaterState>,
+    download: () =>
+      ipcRenderer.invoke("updater:download") as Promise<UpdaterState>,
+    cancel: () => ipcRenderer.invoke("updater:cancel") as Promise<void>,
+    install: () => ipcRenderer.invoke("updater:install") as Promise<void>,
+    onState: (cb: (state: UpdaterState) => void) =>
+      on<UpdaterState>("updater:state", cb),
+  },
 
   windowControls: {
     minimize: () => ipcRenderer.invoke("window:minimize"),

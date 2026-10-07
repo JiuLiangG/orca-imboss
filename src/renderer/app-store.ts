@@ -6,6 +6,7 @@ import type {
   McpServer,
   ProviderInfo,
   ThemeState,
+  UpdaterState,
 } from "@shared/types";
 import { createRef } from "react";
 import { proxy, useSnapshot } from "valtio";
@@ -29,6 +30,9 @@ export interface OpenedChat {
   title: string;
   participants: number[];
 }
+
+/** Sections of the Settings module. Lifted here so main can deep-link to one. */
+export type SettingsSection = "general" | "theme" | "about";
 
 /** True when running on macOS (native traffic lights stay, no custom buttons). */
 export const IS_MAC = imb.platform === "darwin";
@@ -67,6 +71,19 @@ export const appStore = proxy({
   // Pending chat to select when the chat module is mounted (set by an OS
   // notification click). Cleared once consumed.
   focusChatId: null as number | null,
+
+  // Active Settings section. Lifted out of `SettingsModule` so main can
+  // deep-link to a section (the update notification opens "about").
+  settingsSection: "general" as SettingsSection,
+
+  // Auto-update state mirrored from main (see `initUpdater`).
+  updater: {
+    status: "idle",
+    version: null,
+    progress: null,
+    error: null,
+    checkedAt: null,
+  } as UpdaterState,
 
   // Centralized collections loaded lazily on first visit and kept in sync by
   // the modules after each mutation (see ensureChats/ensureProviders).
@@ -418,6 +435,32 @@ export const appStore = proxy({
     await imb.settings.set(SettingKeys.Module, "chat");
   },
 
+  /** Open the Settings module on a section (persists the active module). */
+  async openSettings(section: SettingsSection): Promise<void> {
+    appStore.settingsSection = section;
+    appStore.module = "settings";
+    await imb.settings.set(SettingKeys.Module, "settings");
+  },
+
+  // --- Auto-update ------------------------------------------------------------
+  setUpdaterState(next: UpdaterState): void {
+    appStore.updater = next;
+  },
+  async checkForUpdates(): Promise<UpdaterState> {
+    const next = await imb.updater.check();
+    appStore.setUpdaterState(next);
+    return next;
+  },
+  async downloadUpdate(): Promise<void> {
+    await imb.updater.download();
+  },
+  async cancelDownload(): Promise<void> {
+    await imb.updater.cancel();
+  },
+  async installUpdate(): Promise<void> {
+    await imb.updater.install();
+  },
+
   // --- Opened group chats (Nav "chats" section) -------------------------------
   /** Open (or focus) a group chat linked by a `chat`-kind card. */
   openChat(chat: ChatSummary): void {
@@ -523,6 +566,25 @@ export async function initAppStore(): Promise<void> {
   // OS notification click → switch to the chat module and select the chat.
   imb.chats.onFocus((chatId) => {
     void appStore.focusChat(chatId);
+  });
+
+  // Updater state is pushed by main on every transition. Fetch once as well in
+  // case the startup check completed before the renderer subscribed.
+  imb.updater.onState((state) => {
+    appStore.setUpdaterState(state);
+  });
+  void imb.updater
+    .getState()
+    .then((state) => appStore.setUpdaterState(state))
+    .catch((err) => {
+      console.error("[updater:getState]", err);
+    });
+
+  // Update notification click → Settings → About (validate the IPC string).
+  imb.settings.onFocusSection((section) => {
+    if (section === "general" || section === "theme" || section === "about") {
+      void appStore.openSettings(section);
+    }
   });
 }
 

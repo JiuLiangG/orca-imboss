@@ -10,4 +10,5 @@ export const SettingKeys = {
   NavCollapse: "ui.navCollapsed",
   Module: "ui.module",
   WindowState: "ui.window",
+  UpdateNotifiedVersion: "app.updateNotifiedVersion",
 };

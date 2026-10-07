@@ -181,6 +181,9 @@ function NavButton({ item, collapsed }: NavButtonProps): React.JSX.Element {
   const { module } = useApp();
 
   async function setModule(value: AppModule): Promise<void> {
+    // Entering Settings via the nav opens its default section; the updater's
+    // notification click deep-links to About through `appStore.openSettings`.
+    if (value === "settings") appStore.settingsSection = "general";
     appStore.module = value;
     await imb.settings.set(SettingKeys.Module, value);
   }
