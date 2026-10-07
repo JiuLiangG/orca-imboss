@@ -22,13 +22,13 @@
     "dev": "electron-vite dev",
     "build": "pnpm run typecheck && electron-vite build",
     "postinstall": "electron-builder install-app-deps",
-    "dist:local": "pnpm run build && electron-builder --dir",
+    "dist:local": "pnpm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --dir && codesign --force --deep --sign DevSelfSign 'dist/mac-arm64/imboss.app'",
     "dist:win": "pnpm run build && electron-builder --win",
     "dist:mac": "pnpm run build && electron-builder --mac",
     "dist:linux": "pnpm run build && electron-builder --linux"
   },
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "^1.0.0",
+    "@earendil-works/pi-coding-agent": "^1.0.4",
     "better-sqlite3": "^13.0.3",
     "croner": "^10.0.1",
     "electron-updater": "^6.8.9",

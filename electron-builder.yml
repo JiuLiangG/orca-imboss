@@ -10,28 +10,39 @@ files:
   - "!**/*.{ttf,woff}"
 asar: true
 asarUnpack:
-  - "**/*.{node,dll,dylib,so,so.*}"
+  - "**/*.{wasm,node,dll,dylib,so,so.*}"
   - "**/*.wasm"
   - resources/**
 win:
   executableName: orca-imboss
 nsis:
-  artifactName: ${name}-${version}-setup.${ext}
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
+  deleteAppDataOnUninstall: false
+  artifactName: orca-imboss-${version}.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  createStartMenuShortcut: true
 mac:
   icon: resources/icon.png
-  notarize: false
+  publish:
+    provider: github
+    owner: sethyuan
+    repo: orca-imboss
+    releaseType: release
+    channel: latest-${arch}
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: orca-imboss-${version}.${ext}
 linux:
   target:
     - AppImage
-  maintainer: sethyuan@qq.com
+  maintainer: kefroth@outlook.com
   category: Utility
 appImage:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: orca-imboss-${version}.${ext}
 npmRebuild: false
 publish:
   provider: github

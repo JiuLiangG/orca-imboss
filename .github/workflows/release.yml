@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -19,6 +20,8 @@ jobs:
           - macos-latest
           - ubuntu-latest
           - windows-latest
+    env:
+      NODE_OPTIONS: "--max-old-space-size=4096"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,9 +38,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Import signing certificate into Keychain
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.CSC_LINK }}
+          p12-password: ${{ secrets.CSC_KEY_PASSWORD }}
+
       - name: Build and publish
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          # Optional: set for auto-update metadata via electron-builder.
-          # GITHUB_TOKEN is preferred for public repos; GH_TOKEN is explicit.
+          GITHUB_TOKEN: ${{ secrets.PAT }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          SIGN: 1
         run: pnpm run build && npx electron-builder --publish always
