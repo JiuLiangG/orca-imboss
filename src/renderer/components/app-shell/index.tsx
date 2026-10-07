@@ -63,13 +63,17 @@ export function AppShell(): React.JSX.Element {
           layout === "single" && "imb-layout-single",
         )}
       >
-        {layout === "single" ? (
-          <section
-            className="imb-pane imb-contentpane"
-            ref={contentPaneRef}
-            aria-label="Content"
-          />
-        ) : (
+        {/* Always mounted: it hosts the persistent mini-app iframes, which
+            must survive a switch to a list/detail layout without reloading. */}
+        <section
+          className={cls(
+            "imb-pane imb-contentpane",
+            layout !== "single" && "imb-pane-hidden",
+          )}
+          ref={contentPaneRef}
+          aria-label="Content"
+        />
+        {layout !== "single" && (
           <>
             <section
               className="imb-pane imb-listpane"

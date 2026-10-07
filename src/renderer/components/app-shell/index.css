@@ -21,6 +21,12 @@
   grid-template-columns: 1fr;
 }
 
+/* The content pane stays mounted (portaled mini-app iframes live in it) but is
+   removed from the grid while a list/detail module is active. */
+.imb-contentpane.imb-pane-hidden {
+  display: none;
+}
+
 @media (max-width: 920px) {
   .imb-field-row {
     grid-template-columns: 1fr;

@@ -4,15 +4,18 @@
   margin: var(--imb-space-2) 0;
 }
 
-/* Transient run hint (active tool / compaction) appended below the thread.
-   Never persisted, and never an acknowledgement — it only reports progress. */
+/* Reserved run-status slot appended below the thread while a run is active.
+   Never persisted, and never an acknowledgement — it only reports compaction.
+   The fixed height keeps the layout stable whether or not text is shown, so
+   tool calls can no longer make the thread jitter. */
 .imb-run-status {
   align-self: center;
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  height: 22px;
   max-width: 78%;
-  padding: 4px 10px;
+  padding: 0 10px;
   font-size: var(--imb-text-xs);
   color: var(--imb-muted);
   overflow: hidden;

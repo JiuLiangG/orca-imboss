@@ -66,6 +66,11 @@ export const appStore = proxy({
   /** Folder id of the mini app currently open in `module === "miniapp"`. */
   activeMiniAppId: null as string | null,
 
+  // Mini apps visited this session, in first-visit order. Their frames are
+  // kept mounted (hidden when inactive) so switching sidebar modules never
+  // reloads a page. Session-only: deliberately not persisted.
+  visitedMiniAppIds: [] as string[],
+
   // Group chats opened from `chat`-kind link cards, rendered in the Nav
   // "chats" section. Session-only: deliberately not persisted, so a restart
   // starts with none and the app falls back to the chat module.
@@ -307,6 +312,7 @@ export const appStore = proxy({
     try {
       appStore.data.miniapps.items = await imb.miniapps.list();
       appStore.data.miniapps.loaded = true;
+      appStore.pruneVisitedMiniApps();
     } catch (err) {
       console.error(
         "[data:miniapps]",
@@ -331,6 +337,7 @@ export const appStore = proxy({
       appStore.data.miniapps.items = await imb.miniapps.list();
       appStore.data.miniapps.loaded = true;
       appStore.data.miniapps.error = null;
+      appStore.pruneVisitedMiniApps();
     } catch (err) {
       console.error(
         "[data:miniapps]",
@@ -357,13 +364,34 @@ export const appStore = proxy({
         err instanceof Error ? err.message : String(err);
     }
   },
-  /** Open a mini app: switch the module and remember it for the next launch.
-   *  The server is started by the module itself (`imb.miniapps.open`). */
+  /** Open a mini app: switch the module, remember it for the next launch, and
+   *  keep its frame mounted for the rest of the session. The server is started
+   *  by the frame itself (`imb.miniapps.open`). */
   openMiniApp(id: string): void {
+    if (!appStore.visitedMiniAppIds.includes(id)) {
+      appStore.visitedMiniAppIds.push(id);
+    }
     appStore.activeMiniAppId = id;
     appStore.module = "miniapp";
     void imb.settings.set(SettingKeys.MiniAppActive, id);
     void imb.settings.set(SettingKeys.Module, "miniapp");
+  },
+  /** Drop visited apps whose folder is gone; recover the active one to Chat. */
+  pruneVisitedMiniApps(): void {
+    const ids = new Set(appStore.data.miniapps.items.map((app) => app.id));
+    appStore.visitedMiniAppIds = appStore.visitedMiniAppIds.filter((id) =>
+      ids.has(id),
+    );
+    if (
+      appStore.activeMiniAppId !== null &&
+      !ids.has(appStore.activeMiniAppId)
+    ) {
+      appStore.activeMiniAppId = null;
+      if (appStore.module === "miniapp") {
+        appStore.module = "chat";
+        void imb.settings.set(SettingKeys.Module, "chat");
+      }
+    }
   },
 
   // --- Chats (full cache) --------------------------------------------------------
@@ -608,15 +636,17 @@ export async function initAppStore(): Promise<void> {
   // Mini apps back the always-mounted Nav, so load them eagerly, then drop a
   // stale restored app (folder deleted since last launch) back to Chat.
   await appStore.loadMiniApps();
+  appStore.pruneVisitedMiniApps();
   if (
     appStore.module === "miniapp" &&
-    !appStore.data.miniapps.items.some(
+    appStore.activeMiniAppId !== null &&
+    appStore.data.miniapps.items.some(
       (app) => app.id === appStore.activeMiniAppId,
     )
   ) {
-    appStore.activeMiniAppId = null;
-    appStore.module = "chat";
-    void imb.settings.set(SettingKeys.Module, "chat");
+    // Session-only visited set: remount only the restored active app so it
+    // keeps its page for the rest of the session.
+    appStore.visitedMiniAppIds = [appStore.activeMiniAppId];
   }
 
   // Chats / MCP / skills / employees / providers are NOT loaded here. They are

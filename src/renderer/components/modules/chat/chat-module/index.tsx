@@ -42,9 +42,14 @@ function displayTitle(title: string): string {
 
 /** Transient per-chat run status driven by bound agent events. */
 interface ChatRunStatus {
-  toolName?: string;
+  /** A run is in progress (keeps the reserved status slot in the layout). */
+  running: boolean;
+  /** Context compaction is in progress (the only status text shown). */
   compacting: boolean;
 }
+
+/** Distance from the bottom (px) still considered "pinned" for auto-scroll. */
+const PIN_THRESHOLD = 32;
 
 export function ChatModule(): React.JSX.Element {
   const { data, focusChatId } = useApp();
@@ -61,6 +66,9 @@ export function ChatModule(): React.JSX.Element {
   const threadRef = useRef<HTMLDivElement>(null);
   const selectedIdRef = useRef<number | null>(null);
   selectedIdRef.current = selectedId;
+  // Whether the thread is scrolled to (near) the bottom. Auto-scroll only
+  // happens while pinned, so reading history is never interrupted.
+  const pinnedRef = useRef(true);
   const locale = getLocale();
 
   // Hybrid search: an empty query reads the appStore chat cache (root-only,
@@ -101,28 +109,34 @@ export function ChatModule(): React.JSX.Element {
     }
   }, []);
 
-  // Fold a bound agent stream event into the per-chat run status. Events that
-  // do not affect the indicator (message/turn deltas) are ignored without a
-  // state update so streaming stays cheap.
+  // Fold a bound agent stream event into the per-chat run status. Only run
+  // start/end and compaction affect the UI; tool events and streamed deltas are
+  // deliberately ignored, so rapid tool calls can no longer shift the layout
+  // (the old per-tool status line was the source of the thread "jitter").
   const applyAgentEvent = useCallback(
     (chatId: number, event: AgentStreamEvent): void => {
       if (event.type === "error") {
         setError(event.message);
       }
       setRunStatus((prev) => {
-        const current = prev.get(chatId) ?? { compacting: false };
+        const current = prev.get(chatId) ?? {
+          running: false,
+          compacting: false,
+        };
         const next: ChatRunStatus = { ...current };
         switch (event.type) {
+          case "agent_start":
+            next.running = true;
+            break;
           case "agent_end":
-          case "error":
-            next.toolName = undefined;
+            // A retry keeps the run (and the reserved slot) alive.
+            if (event.willRetry) return prev;
+            next.running = false;
             next.compacting = false;
             break;
-          case "tool_execution_start":
-            next.toolName = event.toolName;
-            break;
-          case "tool_execution_end":
-            next.toolName = undefined;
+          case "error":
+            next.running = false;
+            next.compacting = false;
             break;
           case "compaction_start":
             next.compacting = true;
@@ -134,7 +148,7 @@ export function ChatModule(): React.JSX.Element {
             return prev;
         }
         const map = new Map(prev);
-        if (!next.toolName && !next.compacting) {
+        if (!next.running && !next.compacting) {
           map.delete(chatId);
         } else {
           map.set(chatId, next);
@@ -165,6 +179,8 @@ export function ChatModule(): React.JSX.Element {
 
   // Open thread + clear unread whenever the selection changes.
   useEffect(() => {
+    // A freshly selected chat always starts pinned to its newest message.
+    pinnedRef.current = true;
     if (selectedId === null) {
       setMessages([]);
       return;
@@ -251,16 +267,27 @@ export function ChatModule(): React.JSX.Element {
     [messages, pairing],
   );
 
-  // Scroll to bottom when messages change or the run indicator appears.
+  // Auto-scroll to the newest message, but only while the user is pinned to
+  // the bottom. Incoming messages/run events must not yank a user who scrolled
+  // up to read history.
   useEffect(() => {
     const el = threadRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && pinnedRef.current) el.scrollTop = el.scrollHeight;
   }, [messages, selectedRunStatus]);
+
+  const handleThreadScroll = useCallback((): void => {
+    const el = threadRef.current;
+    if (!el) return;
+    pinnedRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight <= PIN_THRESHOLD;
+  }, []);
 
   const handleSend = useCallback(
     async (text: string, attachments: MessageAttachment[]): Promise<void> => {
       if (selectedId === null) return;
       const chatId = selectedId;
+      // Sending always jumps to the bottom, even if the user had scrolled up.
+      pinnedRef.current = true;
       try {
         await imb.chat.send(chatId, text, attachments);
         void loadMessages(chatId);
@@ -407,7 +434,7 @@ export function ChatModule(): React.JSX.Element {
         </div>
         <div className="imb-chat-title">{displayTitle(selected.title)}</div>
       </div>
-      <div className="imb-thread" ref={threadRef}>
+      <div className="imb-thread" ref={threadRef} onScroll={handleThreadScroll}>
         {visibleMessages.map((message) => (
           <MessageItem
             key={`${message.chatId}-${message.id}`}
@@ -417,10 +444,10 @@ export function ChatModule(): React.JSX.Element {
           />
         ))}
         {selectedRunStatus !== undefined && (
+          // Reserved, fixed-height slot: it is present for the whole run, so
+          // toggling the compaction text never shifts the messages above it.
           <div className="imb-run-status" role="status">
-            {selectedRunStatus.compacting
-              ? t("Compacting…")
-              : (selectedRunStatus.toolName ?? "")}
+            {selectedRunStatus.compacting ? t("Compacting…") : ""}
           </div>
         )}
       </div>

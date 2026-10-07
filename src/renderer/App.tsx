@@ -17,7 +17,6 @@ const MODULE_VIEWS: Partial<Record<AppModule, () => React.JSX.Element>> = {
   skills: SkillsModule,
   employees: EmployeesModule,
   settings: SettingsModule,
-  miniapp: MiniAppModule,
 };
 
 export default function App(): React.JSX.Element {
@@ -35,6 +34,8 @@ export default function App(): React.JSX.Element {
     <>
       <AppShell />
       <ActiveModule />
+      {/* Always mounted so visited mini-app iframes survive module switches. */}
+      <MiniAppModule />
     </>
   );
 }
@@ -47,6 +48,10 @@ function ActiveModule(): React.JSX.Element {
   if (module === "group-chat" && activeChatId !== null) {
     return <GroupChatModule key={activeChatId} chatId={activeChatId} />;
   }
+
+  // Mini apps are rendered by the persistent `MiniAppModule` host (so their
+  // pages are never unmounted); the shell still uses the `single` layout here.
+  if (module === "miniapp") return <></>;
 
   const View = MODULE_VIEWS[module];
   if (View) return <View />;
