@@ -1,6 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
-import { getAgentSkillsDir, getBuiltinSkillsDir } from "../data-dir";
+import {
+  getAgentSkillsDir,
+  getBuiltinSkillsDir,
+  getMiniAppsDir,
+} from "../data-dir";
 import { getMcpConfigPath } from "../mcp-store";
 
 /**
@@ -9,10 +13,11 @@ import { getMcpConfigPath } from "../mcp-store";
  * These are ordinary `SKILL.md` folders, but they live in a dedicated dir
  * (`~/.imboss/agent/builtin-skills`, see `getBuiltinSkillsDir`) instead of the
  * user skills dir, so the Skills module — which lists only
- * `~/.imboss/agent/skills` — never shows them. They are generated on disk at
- * startup (and defensively before an assistant session is built) because the
- * Pi SDK advertises a skill by its absolute `SKILL.md` path and the model loads
- * it with the `read` tool; an in-memory skill cannot be read back.
+ * `~/.imboss/agent/skills` — never shows them. They are force-injected into the
+ * assistant's session and cannot be uninstalled. They are generated on disk at
+ * startup (and defensively before a session is built) because the Pi SDK
+ * advertises a skill by its absolute `SKILL.md` path and the model loads it
+ * with the `read` tool; an in-memory skill cannot be read back.
  *
  * Their content is instructions, not an integration: the assistant performs
  * the actual MCP/Skill changes with its existing `read`/`write`/`edit`/`bash`
@@ -26,10 +31,16 @@ import { getMcpConfigPath } from "../mcp-store";
 /** Folder name of a skill's entry file (Agent Skills standard). */
 const SKILL_FILE = "SKILL.md";
 
-/** Names of the built-in skills, in the order they are advertised. */
+/**
+ * Names of the app's built-in skills, in the order they are advertised. They
+ * are force-injected into the assistant's session and deliberately hidden from
+ * the Skills module / employee picker: they are app-owned capabilities, not
+ * user-managed skills.
+ */
 export const BUILTIN_SKILL_NAMES = [
   "mcp-management",
   "skills-management",
+  "mini-app-development",
 ] as const;
 
 export type BuiltinSkillName = (typeof BUILTIN_SKILL_NAMES)[number];
@@ -47,6 +58,10 @@ const MCP_MANAGEMENT_DESCRIPTION =
 const SKILLS_MANAGEMENT_DESCRIPTION =
   "View, add, edit, or delete this app's user-installed Skills. " +
   "Use when the boss asks to manage, inspect, add, change, or remove skills.";
+
+const MINI_APP_DEVELOPMENT_DESCRIPTION =
+  "Build, copy, or debug this app's Mini Apps (local web apps shown in the " +
+  "sidebar). Use when asked to create, modify, run, or debug a mini app.";
 
 interface BuiltinSkillFile {
   name: BuiltinSkillName;
@@ -183,8 +198,136 @@ The app also ships built-in skills under:
 
     ${builtinDir}
 
-Those (currently mcp-management and skills-management) belong to the app. Never
-edit, move or delete them. They are intentionally not listed in the Skills module.
+Those (currently mcp-management, skills-management and mini-app-development)
+belong to the app. Never edit, move or delete them. They are intentionally not
+listed in the Skills module.
+`;
+}
+
+function miniAppDevelopmentSkillBody(): string {
+  const miniAppsDir = getMiniAppsDir();
+  return `# Mini app development
+
+A mini app is a self-contained folder under:
+
+    ${miniAppsDir}
+
+The main app scans that folder at startup, reads each mini app's metadata.json,
+and shows every valid mini app in the sidebar. Clicking one opens its entry URL
+in an embedded frame.
+
+## Folder layout
+
+One folder per mini app, named with the app id (only letters, digits, dot,
+underscore and dash, at most 64 characters):
+
+    ${miniAppsDir}/<id>/metadata.json
+    ${miniAppsDir}/<id>/icon.png          (optional)
+    ${miniAppsDir}/<id>/...               (your source files)
+
+The folder may contain any tech stack. Add a local web server and point the
+metadata at it.
+
+## metadata.json
+
+    {
+      "name": "World Map",
+      "icon": "icon.png",
+      "entry": "http://127.0.0.1:5173",
+      "command": "npm",
+      "args": ["run", "dev"],
+      "cwd": ".",
+      "env": { "PORT": "5173" }
+    }
+
+- "name" (required): display label, 1-100 characters.
+- "entry" (required): the URL the app opens. Must be http(s) and a loopback host
+  (localhost or 127.0.0.1) — mini apps run locally.
+- "icon" (optional): a path relative to the folder. png/jpg/jpeg/gif/webp/svg/
+  ico, at most 256 KB. The app reads it and shows it in the sidebar.
+- "command" (optional): the server executable to run (for example "npm",
+  "node" or "npx"). The app starts it the first time the mini app is opened in
+  a session and keeps it running until the app quits. It is started without a
+  shell, so pass arguments via "args".
+- "args" (optional): a JSON array of strings passed to "command".
+- "cwd" (optional): working directory for "command", relative to the mini app
+  folder (defaults to the folder itself).
+- "env" (optional): extra environment variables for the server process.
+
+A mini app without "command" is still allowed; the app then only embeds
+"entry" (the server must already be running somewhere).
+
+## Sidebar order: index.json
+
+    ${miniAppsDir}/index.json
+    { "order": ["world-map", "another-app"] }
+
+The app maintains this file: a new mini app is appended and a removed one is
+dropped. You may add the id yourself to control placement; otherwise the app
+appends it on the next start. Never list a folder that does not exist.
+
+## Build workflow
+
+1. Pick a short id and create ${miniAppsDir}/<id>/.
+2. Write the app (any stack). Make sure it serves over http on a loopback port.
+3. Write metadata.json as above.
+4. If it needs a server, define "command"/"args" so the app can start it.
+5. Test it with Playwright before reporting done (see Debugging below).
+6. Tell the boss the mini app will appear in the sidebar after hitting \`Cmd/Ctrl+R\`.
+
+## Debugging
+
+A mini app is a normal web app served on a loopback URL. Debug it directly at
+that URL with Playwright (or any browser automation): you run and inspect it
+yourself, not through the app window.
+
+### Run the server for testing
+
+The app starts the "command" server the first time the mini app is opened, and
+reuses it when the port is already serving. For your own testing, start it
+yourself:
+
+1. Install dependencies in the mini app folder (for example "npm install").
+2. Start the server in the background and wait until its entry URL answers
+   (for example "npm run dev &"). Only one process can bind the port; stop your
+   server when you are done, otherwise the app will reuse it when opened.
+3. Quick health check:
+
+       curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5173
+
+### Drive it with Playwright
+
+Install the Chromium browser once if it is not present:
+
+    npx playwright install chromium
+
+Write a small headless script and run it with "node". Capture console output
+and failed requests first — they usually expose the bug before any DOM check:
+
+    const { chromium } = require("playwright");
+
+    (async () => {
+      const browser = await chromium.launch();
+      const page = await browser.newPage();
+      page.on("console", (m) => console.log("console:", m.type(), m.text()));
+      page.on("pageerror", (e) => console.log("pageerror:", e.message));
+      page.on("requestfailed", (r) =>
+        console.log("requestfailed:", r.url(), r.failure() && r.failure().errorText),
+      );
+      await page.goto("http://127.0.0.1:5173", { waitUntil: "networkidle" });
+      await page.screenshot({ path: "screenshot.png", fullPage: true });
+      // Interact and assert, for example:
+      // await page.getByRole("button", { name: "Go" }).click();
+      // await page.waitForSelector("#result");
+      await browser.close();
+    })();
+
+- Use role/text/test-id locators ("page.getByRole", "page.getByText",
+  "page.getByTestId") for stable checks.
+- "page.screenshot(...)" gives you a visual look; the console and requestfailed
+  listeners surface errors.
+- Fix the app, restart or reload the server as needed, and run the script again.
+- Stop any server you started before reporting the work as done.
 `;
 }
 
@@ -199,6 +342,11 @@ function builtinSkillFiles(): BuiltinSkillFile[] {
       name: "skills-management",
       description: SKILLS_MANAGEMENT_DESCRIPTION,
       body: skillsManagementSkillBody(),
+    },
+    {
+      name: "mini-app-development",
+      description: MINI_APP_DEVELOPMENT_DESCRIPTION,
+      body: miniAppDevelopmentSkillBody(),
     },
   ];
 }

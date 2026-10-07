@@ -14,6 +14,7 @@ import type {
   Message,
   MessageAttachment,
   MessageSearchResult,
+  MiniApp,
   ModelOption,
   PageQuery,
   PageResult,
@@ -312,6 +313,15 @@ const api = {
     uninstall: (name: string) =>
       ipcRenderer.invoke("skills:uninstall", name) as Promise<void>,
     onChanged: (cb: () => void) => on("skills:changed", cb),
+  },
+
+  miniapps: {
+    list: () => ipcRenderer.invoke("miniapps:list") as Promise<MiniApp[]>,
+    setOrder: (ids: string[]) =>
+      ipcRenderer.invoke("miniapps:setOrder", ids) as Promise<MiniApp[]>,
+    /** Ensure the app's server is running and reachable, then return it. */
+    open: (id: string) =>
+      ipcRenderer.invoke("miniapps:open", id) as Promise<MiniApp>,
   },
 };
 

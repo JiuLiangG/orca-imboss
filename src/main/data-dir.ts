@@ -45,6 +45,14 @@ export function getAvatarsDir(): string {
   return join(getDataRoot(), "avatars");
 }
 
+/**
+ * Root of the user/AI-authored Mini Apps (`<id>/metadata.json`). Scanned by
+ * `src/main/mini-apps.ts`; the renderer never touches it directly.
+ */
+export function getMiniAppsDir(): string {
+  return join(getDataRoot(), "mini-apps");
+}
+
 /** Path of the Pi provider-credentials file (`auth.json`). Keep 0600. */
 export function getAuthPath(): string {
   return join(getAgentRoot(), "auth.json");
@@ -88,6 +96,7 @@ export function ensureDataDir(): void {
     getBuiltinSkillsDir(),
     getAgentSessionsDir(),
     getWorkDir(),
+    getMiniAppsDir(),
   ];
   for (const dir of dirs) {
     if (!existsSync(dir)) {

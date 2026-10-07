@@ -4,6 +4,7 @@ import type {
   Employee,
   InstalledSkill,
   McpServer,
+  MiniApp,
   ProviderInfo,
   ThemeState,
   UpdaterState,
@@ -21,7 +22,7 @@ export type AppModule =
   | "mcp"
   | "skills"
   | "settings"
-  | "miniapp-worldmap"
+  | "miniapp"
   | "group-chat";
 
 /** A group chat opened from a `chat`-kind card and shown in the Nav. */
@@ -52,7 +53,7 @@ const VALID_MODULES: AppModule[] = [
   "mcp",
   "skills",
   "settings",
-  "miniapp-worldmap",
+  "miniapp",
 ];
 
 /** Global renderer app state (valtio proxy — replaces the former context). */
@@ -61,6 +62,9 @@ export const appStore = proxy({
   theme: { mode: "system", color: "#07C160" } as ThemeState,
   navCollapsed: false,
   module: "chat" as AppModule,
+
+  /** Folder id of the mini app currently open in `module === "miniapp"`. */
+  activeMiniAppId: null as string | null,
 
   // Group chats opened from `chat`-kind link cards, rendered in the Nav
   // "chats" section. Session-only: deliberately not persisted, so a restart
@@ -108,6 +112,12 @@ export const appStore = proxy({
     },
     skills: {
       items: [] as InstalledSkill[],
+      loading: false,
+      loaded: false,
+      error: null as string | null,
+    },
+    miniapps: {
+      items: [] as MiniApp[],
       loading: false,
       loaded: false,
       error: null as string | null,
@@ -287,6 +297,73 @@ export const appStore = proxy({
     } finally {
       appStore.data.skills.loading = false;
     }
+  },
+
+  // --- Mini Apps --------------------------------------------------------------
+  async loadMiniApps(): Promise<void> {
+    if (appStore.data.miniapps.loading) return;
+    appStore.data.miniapps.loading = true;
+    appStore.data.miniapps.error = null;
+    try {
+      appStore.data.miniapps.items = await imb.miniapps.list();
+      appStore.data.miniapps.loaded = true;
+    } catch (err) {
+      console.error(
+        "[data:miniapps]",
+        err instanceof Error ? err.message : err,
+      );
+      appStore.data.miniapps.error =
+        err instanceof Error ? err.message : String(err);
+    } finally {
+      appStore.data.miniapps.loading = false;
+    }
+  },
+  ensureMiniApps(): void {
+    if (!appStore.data.miniapps.loaded && !appStore.data.miniapps.loading) {
+      void appStore.loadMiniApps();
+    }
+  },
+  // Mini apps live on the filesystem (startup scan), so a re-fetch is the most
+  // robust way to reflect an external change.
+  async reloadMiniApps(): Promise<void> {
+    if (!appStore.data.miniapps.loaded) appStore.data.miniapps.loading = true;
+    try {
+      appStore.data.miniapps.items = await imb.miniapps.list();
+      appStore.data.miniapps.loaded = true;
+      appStore.data.miniapps.error = null;
+    } catch (err) {
+      console.error(
+        "[data:miniapps]",
+        err instanceof Error ? err.message : err,
+      );
+      appStore.data.miniapps.error =
+        err instanceof Error ? err.message : String(err);
+    } finally {
+      appStore.data.miniapps.loading = false;
+    }
+  },
+  /** Persist a new sidebar order (drag-and-drop) and apply the result. */
+  async reorderMiniApps(ids: string[]): Promise<void> {
+    try {
+      appStore.data.miniapps.items = await imb.miniapps.setOrder(ids);
+      appStore.data.miniapps.loaded = true;
+      appStore.data.miniapps.error = null;
+    } catch (err) {
+      console.error(
+        "[data:miniapps:reorder]",
+        err instanceof Error ? err.message : err,
+      );
+      appStore.data.miniapps.error =
+        err instanceof Error ? err.message : String(err);
+    }
+  },
+  /** Open a mini app: switch the module and remember it for the next launch.
+   *  The server is started by the module itself (`imb.miniapps.open`). */
+  openMiniApp(id: string): void {
+    appStore.activeMiniAppId = id;
+    appStore.module = "miniapp";
+    void imb.settings.set(SettingKeys.MiniAppActive, id);
+    void imb.settings.set(SettingKeys.Module, "miniapp");
   },
 
   // --- Chats (full cache) --------------------------------------------------------
@@ -514,7 +591,8 @@ export async function initAppStore(): Promise<void> {
     imb.theme.get(),
     imb.settings.get(SettingKeys.NavCollapse),
     imb.settings.get(SettingKeys.Module),
-  ]).then(([theme, collapsed, storedModule]) => {
+    imb.settings.get(SettingKeys.MiniAppActive),
+  ]).then(([theme, collapsed, storedModule, storedMiniApp]) => {
     updateThemeState(theme);
     if (collapsed === "1") {
       appStore.navCollapsed = true;
@@ -522,9 +600,24 @@ export async function initAppStore(): Promise<void> {
     if (storedModule && (VALID_MODULES as string[]).includes(storedModule)) {
       appStore.module = storedModule as AppModule;
     }
+    appStore.activeMiniAppId = storedMiniApp;
   });
   imb.onLocaleChanged(updateLocale);
   imb.theme.onChanged(updateThemeState);
+
+  // Mini apps back the always-mounted Nav, so load them eagerly, then drop a
+  // stale restored app (folder deleted since last launch) back to Chat.
+  await appStore.loadMiniApps();
+  if (
+    appStore.module === "miniapp" &&
+    !appStore.data.miniapps.items.some(
+      (app) => app.id === appStore.activeMiniAppId,
+    )
+  ) {
+    appStore.activeMiniAppId = null;
+    appStore.module = "chat";
+    void imb.settings.set(SettingKeys.Module, "chat");
+  }
 
   // Chats / MCP / skills / employees / providers are NOT loaded here. They are
   // lazy-loaded by their module on first visit (see ensure*), and kept in sync

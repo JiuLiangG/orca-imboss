@@ -4,6 +4,7 @@ import { cpSync, existsSync, mkdirSync, statSync } from "fs";
 import { readdir, readFile, rm } from "fs/promises";
 import { join, resolve } from "path";
 import { getAgentSkillsDir } from "../data-dir";
+import { isBuiltinSkillName } from "./builtin-skills";
 
 /**
  * Install / uninstall of skills under `~/.imboss/agent/skills/<name>/`.
@@ -152,6 +153,9 @@ export async function installSkillsFromFolders(
 export async function uninstallSkill(name: string): Promise<void> {
   if (!isValidSkillName(name)) {
     throw new Error("Invalid skill name.");
+  }
+  if (isBuiltinSkillName(name)) {
+    throw new Error("Built-in skills cannot be removed.");
   }
   const root = resolve(getAgentSkillsDir());
   const dest = resolve(root, name);

@@ -1,0 +1,68 @@
+.imb-miniapp {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.imb-miniapp-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--imb-space-3);
+  padding: 0 14px 10px;
+  border-bottom: 1px solid var(--imb-border);
+  flex: none;
+}
+
+.imb-miniapp-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: var(--imb-text-base);
+  color: var(--imb-fg);
+}
+
+.imb-miniapp-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: var(--imb-bg);
+}
+
+.imb-miniapp-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: #fff;
+}
+
+.imb-miniapp-status {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--imb-space-3);
+  padding: var(--imb-space-6);
+  text-align: center;
+  background: var(--imb-bg);
+}
+
+.imb-miniapp-status-title {
+  margin: 0;
+  color: var(--imb-text-2);
+}
+
+.imb-miniapp-error {
+  margin: 0;
+  max-width: 520px;
+  font-size: var(--imb-text-sm);
+  color: var(--imb-danger, #d9534f);
+  word-break: break-word;
+}

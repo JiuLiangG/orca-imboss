@@ -3,6 +3,7 @@ import { registerChatHandlers } from "./chat";
 import { registerEmployeeHandlers } from "./employee";
 import { registerMcpHandlers } from "./mcp";
 import { registerMessageHandlers } from "./message";
+import { registerMiniAppHandlers } from "./miniapps";
 import { registerProviderHandlers } from "./provider";
 import { registerSessionHandlers } from "./session";
 import { registerSettingsHandlers } from "./settings";
@@ -24,6 +25,7 @@ export function registerIpcHandlers(): void {
   registerProviderHandlers();
   registerSkillHandlers();
   registerMcpHandlers();
+  registerMiniAppHandlers();
   registerAgentSessionHandlers();
   registerEmployeeHandlers();
   registerSessionHandlers();

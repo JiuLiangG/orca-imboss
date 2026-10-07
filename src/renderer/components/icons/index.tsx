@@ -84,6 +84,18 @@ export function IconWorld(props: IconProps): React.JSX.Element {
   );
 }
 
+/** Generic app/grid icon used by mini apps without a custom icon. */
+export function IconApp(props: IconProps): React.JSX.Element {
+  return (
+    <svg {...base(props)}>
+      <rect x="3.5" y="3.5" width="7" height="7" rx="1.6" />
+      <rect x="13.5" y="3.5" width="7" height="7" rx="1.6" />
+      <rect x="3.5" y="13.5" width="7" height="7" rx="1.6" />
+      <rect x="13.5" y="13.5" width="7" height="7" rx="1.6" />
+    </svg>
+  );
+}
+
 export function IconChatProduct(props: IconProps): React.JSX.Element {
   return (
     <svg {...base(props)}>

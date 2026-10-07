@@ -10,5 +10,7 @@ export const SettingKeys = {
   NavCollapse: "ui.navCollapsed",
   Module: "ui.module",
   WindowState: "ui.window",
+  /** Folder id of the last opened mini app (restored on next launch). */
+  MiniAppActive: "ui.miniAppActive",
   UpdateNotifiedVersion: "app.updateNotifiedVersion",
 };

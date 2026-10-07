@@ -5,6 +5,7 @@ export * from "./cron";
 export * from "./employees";
 export * from "./mcp";
 export * from "./messages";
+export * from "./miniapps";
 export * from "./paged_lists";
 export * from "./providers";
 export * from "./sessions";

@@ -7,6 +7,7 @@ import { BrandLogo } from "../brand-logo";
 import { ContextMenu, type ContextMenuState } from "../context-menu";
 import { GroupAvatar } from "../group-avatar";
 import {
+  IconApp,
   IconChat,
   IconCollapse,
   IconEmployees,
@@ -14,7 +15,6 @@ import {
   IconMcp,
   IconModels,
   IconSkills,
-  IconWorld,
 } from "../icons";
 import { Tooltip } from "../tooltip";
 import "./index.css";
@@ -53,12 +53,6 @@ const NAV_ITEMS: NavItem[] = [
     section: "main",
   },
   {
-    module: "miniapp-worldmap",
-    labelKey: "World Map",
-    icon: IconWorld,
-    section: "miniapp",
-  },
-  {
     module: "settings",
     labelKey: "Settings",
     icon: IconGear,
@@ -79,12 +73,24 @@ interface NavChat {
 }
 
 export function Nav({ collapsed, onToggle }: NavProps): React.JSX.Element {
-  const { openedChats, module, activeChatId } = useApp();
+  const { openedChats, module, activeChatId, activeMiniAppId, data } = useApp();
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
 
   const main = NAV_ITEMS.filter((i) => i.section === "main");
-  const miniapp = NAV_ITEMS.filter((i) => i.section === "miniapp");
   const bottom = NAV_ITEMS.filter((i) => i.section === "bottom");
+  const miniApps = data.miniapps.items;
+
+  /** Move `fromId` to `toId`'s position and persist the new order. */
+  function reorderMiniApps(fromId: string, toId: string): void {
+    if (fromId === toId) return;
+    const ids = miniApps.map((app) => app.id);
+    const from = ids.indexOf(fromId);
+    const to = ids.indexOf(toId);
+    if (from < 0 || to < 0) return;
+    ids.splice(to, 0, ...ids.splice(from, 1));
+    void appStore.reorderMiniApps(ids);
+  }
 
   return (
     <>
@@ -103,20 +109,29 @@ export function Nav({ collapsed, onToggle }: NavProps): React.JSX.Element {
         </div>
         <div className="imb-nav-divider" />
         <div className="imb-scroll">
-          {miniapp.length > 0 && (
+          {miniApps.length > 0 && (
             <div className="imb-nav-items">
-              {miniapp.map((item) => (
-                <NavButton
-                  key={item.module}
-                  item={item}
+              {miniApps.map((app) => (
+                <NavMiniAppButton
+                  key={app.id}
+                  app={app}
                   collapsed={collapsed}
+                  active={module === "miniapp" && activeMiniAppId === app.id}
+                  dragging={dragId === app.id}
+                  onClick={() => appStore.openMiniApp(app.id)}
+                  onDragStart={() => setDragId(app.id)}
+                  onDragEnd={() => setDragId(null)}
+                  onDrop={() => {
+                    if (dragId) reorderMiniApps(dragId, app.id);
+                    setDragId(null);
+                  }}
                 />
               ))}
             </div>
           )}
           {openedChats.length > 0 && (
             <>
-              {miniapp.length > 0 && <div className="imb-nav-divider" />}
+              {miniApps.length > 0 && <div className="imb-nav-divider" />}
               <div className="imb-nav-items">
                 {openedChats.map((chat) => (
                   <NavChatButton
@@ -235,6 +250,69 @@ function NavChatButton({
       >
         <GroupAvatar participants={chat.participants} size={24} />
         <span className="imb-nav-label">{chat.title}</span>
+      </button>
+    </Tooltip>
+  );
+}
+
+/** Read-only shape of a registered mini app (valtio snapshots are readonly). */
+interface NavMiniApp {
+  readonly id: string;
+  readonly name: string;
+  readonly iconUrl: string | null;
+}
+
+type NavMiniAppButtonProps = {
+  app: NavMiniApp;
+  collapsed: boolean;
+  active: boolean;
+  dragging: boolean;
+  onClick: () => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onDrop: () => void;
+};
+
+/** Nav entry for a registered mini app; draggable to reorder the sidebar. */
+function NavMiniAppButton({
+  app,
+  collapsed,
+  active,
+  dragging,
+  onClick,
+  onDragStart,
+  onDragEnd,
+  onDrop,
+}: NavMiniAppButtonProps): React.JSX.Element {
+  return (
+    <Tooltip content={app.name} placement="right">
+      <button
+        type="button"
+        className={cls(
+          "imb-nav-item",
+          active && "imb-is-active",
+          dragging && "imb-is-dragging",
+        )}
+        aria-current={active ? "page" : undefined}
+        aria-label={collapsed ? app.name : undefined}
+        draggable
+        onClick={onClick}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={onDrop}
+      >
+        {app.iconUrl !== null ? (
+          <img
+            className="imb-nav-appicon"
+            src={app.iconUrl}
+            alt=""
+            draggable={false}
+          />
+        ) : (
+          <IconApp className="imb-icon" />
+        )}
+        <span className="imb-nav-label">{app.name}</span>
       </button>
     </Tooltip>
   );

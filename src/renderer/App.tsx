@@ -5,10 +5,7 @@ import { ChatModule } from "./components/modules/chat/chat-module";
 import { EmployeesModule } from "./components/modules/employees/employees-module";
 import { GroupChatModule } from "./components/modules/group-chat/group-chat-module";
 import { McpModule } from "./components/modules/mcp/mcp-module";
-import {
-  isPlaceholderModule,
-  PlaceholderModule,
-} from "./components/modules/placeholder/placeholder-module";
+import { MiniAppModule } from "./components/modules/miniapp/miniapp-module";
 import { ProvidersModule } from "./components/modules/providers/providers-module";
 import { SettingsModule } from "./components/modules/settings/settings-module";
 import { SkillsModule } from "./components/modules/skills/skills-module";
@@ -20,6 +17,7 @@ const MODULE_VIEWS: Partial<Record<AppModule, () => React.JSX.Element>> = {
   skills: SkillsModule,
   employees: EmployeesModule,
   settings: SettingsModule,
+  miniapp: MiniAppModule,
 };
 
 export default function App(): React.JSX.Element {
@@ -52,6 +50,5 @@ function ActiveModule(): React.JSX.Element {
 
   const View = MODULE_VIEWS[module];
   if (View) return <View />;
-  if (isPlaceholderModule(module)) return <PlaceholderModule />;
   return <ChatModule />;
 }

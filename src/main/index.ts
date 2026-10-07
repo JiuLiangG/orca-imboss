@@ -12,6 +12,7 @@ import { purgeDisabledEmployees } from "./db/employees";
 import { unlinkSessionFile } from "./db/sessions";
 import { registerIpcHandlers } from "./ipc";
 import { getResolvedLocale, initLocale } from "./locale";
+import { stopAllMiniAppServers, syncMiniAppIndex } from "./mini-apps";
 import { setMainWindow } from "./notifications";
 import { initTheme } from "./theme";
 import { initUpdater } from "./updater";
@@ -53,6 +54,7 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   cron.stopAll();
+  stopAllMiniAppServers();
   void disposeAll();
 });
 
@@ -76,6 +78,9 @@ app.whenReady().then(() => {
   initTheme();
 
   createWindow();
+
+  // Keep `index.json` in sync (append new apps, prune stale ids).
+  void syncMiniAppIndex();
 
   cron.initCron();
 
