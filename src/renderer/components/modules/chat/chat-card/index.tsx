@@ -6,8 +6,12 @@ import { EmployeeAvatar } from "../../../employee-avatar";
 import { GroupAvatar } from "../../../group-avatar";
 import "./index.css";
 
-/** Resolved target-chat summaries, keyed by chat id (null = missing). */
-const summaryCache = new Map<number, ChatSummary | null>();
+/**
+ * Resolved target-chat summaries, keyed by chat id. Only successful lookups are
+ * cached: a missing chat (`null`) is never stored, so it cannot become a
+ * permanent negative cache that later masks a chat created under a reused id.
+ */
+const summaryCache = new Map<number, ChatSummary>();
 
 /**
  * One-time binding that drops shared cache entries for cascade-deleted chats,
@@ -53,10 +57,12 @@ export function ChatCard({ message }: ChatCardProps): React.JSX.Element {
     void (async () => {
       try {
         const result = await imb.chats.summary(chatId);
-        summaryCache.set(chatId, result);
+        // Cache only successful lookups. A missing chat must be re-checked on
+        // the next mount instead of staying a permanent negative entry that a
+        // reused id would inherit.
+        if (result !== null) summaryCache.set(chatId, result);
         if (!ignore) setSummary(result);
       } catch {
-        summaryCache.set(chatId, null);
         if (!ignore) setSummary(null);
       }
     })();

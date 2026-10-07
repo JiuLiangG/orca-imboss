@@ -34,8 +34,9 @@ const MIGRATIONS: Array<(db: Database) => void> = [
     ).run();
 
     db.exec(`
+      -- AUTOINCREMENT keeps ids monotonic. Renderer state keyed by chat id.
       CREATE TABLE IF NOT EXISTS chats (
-        id              INTEGER PRIMARY KEY,
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
         title           TEXT NOT NULL DEFAULT '',
         participants    TEXT NOT NULL DEFAULT '[]',
         unread          INTEGER NOT NULL DEFAULT 0,
@@ -52,7 +53,7 @@ const MIGRATIONS: Array<(db: Database) => void> = [
         ON chats(from_chat_id);
 
       CREATE TABLE IF NOT EXISTS messages (
-        id                 INTEGER PRIMARY KEY,
+        id                 INTEGER PRIMARY KEY AUTOINCREMENT,
         chat_id            INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
         sender_employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
         kind               TEXT NOT NULL DEFAULT 'text',
@@ -129,12 +130,6 @@ const MIGRATIONS: Array<(db: Database) => void> = [
         next_run_at  INTEGER
       );
     `);
-  },
-  // 1 — MCP server configuration moved out of SQLite into the app's
-  // `~/.imboss/agent/mcp.json` (managed by `src/main/mcp-store.ts` and read by
-  // the Pi SDK MCP extension). Existing rows are intentionally not migrated.
-  (db) => {
-    db.exec("DROP TABLE IF EXISTS mcp_servers;");
   },
 ];
 
