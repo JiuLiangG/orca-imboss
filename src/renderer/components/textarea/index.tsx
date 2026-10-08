@@ -1,4 +1,10 @@
-import { useEffect, useRef, type TextareaHTMLAttributes } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  type Ref,
+  type TextareaHTMLAttributes,
+} from "react";
 import { cls } from "reactutils";
 import { useComposition } from "../../hooks/use-composition";
 import "./index.css";
@@ -12,9 +18,12 @@ export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElemen
   maxHeight?: number;
   /** Fires when the value is committed — never mid-IME composition. */
   onValueCommit?: (value: string) => void;
+  /** Optional external ref to the underlying textarea (merged with autosize). */
+  ref?: Ref<HTMLTextAreaElement>;
 }
 
 export function Textarea({
+  ref,
   invalid = false,
   mono = false,
   autosize = false,
@@ -30,11 +39,25 @@ export function Textarea({
   onCompositionEnd,
   ...rest
 }: TextareaProps): React.JSX.Element {
-  const ref = useRef<HTMLTextAreaElement>(null);
+  const innerRef = useRef<HTMLTextAreaElement>(null);
+  // Merge the autosize ref with any externally supplied ref. Passing the
+  // external ref through `...rest` would clobber the autosize ref (it is
+  // spread after `ref`), so it is applied here instead.
+  const setRef = useCallback(
+    (node: HTMLTextAreaElement | null): void => {
+      innerRef.current = node;
+      if (typeof ref === "function") {
+        ref(node);
+      } else if (ref) {
+        ref.current = node;
+      }
+    },
+    [ref],
+  );
   const composition = useComposition();
 
   function resize(): void {
-    const el = ref.current;
+    const el = innerRef.current;
     if (!el) return;
     el.style.height = "auto";
     const next = Math.min(Math.max(el.scrollHeight, minHeight), maxHeight);
@@ -50,7 +73,7 @@ export function Textarea({
 
   return (
     <textarea
-      ref={ref}
+      ref={setRef}
       className={cls(
         "imb-textarea",
         invalid && "imb-is-invalid",

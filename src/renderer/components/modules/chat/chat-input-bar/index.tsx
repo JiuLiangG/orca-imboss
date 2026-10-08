@@ -1,7 +1,7 @@
 import { MAX_USER_ATTACHMENTS } from "@shared/constants/attachments";
 import { t } from "@shared/l10n";
 import type { MessageAttachment } from "@shared/types";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useClickOutside } from "../../../../hooks/use-click-outside";
 import { useEscapeKey } from "../../../../hooks/use-escape-key";
 import { IconAttach, IconFile, IconImage, IconSend } from "../../../icons";
@@ -10,11 +10,18 @@ import "./index.css";
 
 export interface ChatInputBarProps {
   disabled?: boolean;
+  /**
+   * Bumped by the parent when a new chat is created. A non-zero change resets
+   * the composer and focuses the textarea; `0` (the initial value) never
+   * steals focus on mount.
+   */
+  focusToken?: number;
   onSend: (text: string, attachments: MessageAttachment[]) => void;
 }
 
 export function ChatInputBar({
   disabled = false,
+  focusToken = 0,
   onSend,
 }: ChatInputBarProps): React.JSX.Element {
   const [text, setText] = useState("");
@@ -22,8 +29,21 @@ export function ChatInputBar({
   const [notice, setNotice] = useState<string | null>(null);
   const [popupOpen, setPopupOpen] = useState(false);
   const popupRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // A new chat resets the composer (draft/attachments) and lands the caret in
+  // the input. `focusToken` starts at `0`, so mounting with an existing chat
+  // never steals focus.
+  useEffect(() => {
+    if (focusToken === 0) return;
+    setText("");
+    setAttachments([]);
+    setNotice(null);
+    setPopupOpen(false);
+    textareaRef.current?.focus();
+  }, [focusToken]);
 
   useClickOutside(popupRef, () => setPopupOpen(false), popupOpen);
   useEscapeKey(() => setPopupOpen(false), popupOpen);
@@ -106,6 +126,7 @@ export function ChatInputBar({
         )}
         {notice !== null && <div className="imb-attach-notice">{notice}</div>}
         <Textarea
+          ref={textareaRef}
           className="imb-chat-input-textarea"
           rows={1}
           value={text}

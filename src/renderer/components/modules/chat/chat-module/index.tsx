@@ -56,6 +56,9 @@ export function ChatModule(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [query, setQuery] = useState("");
+  // Bumped on chat creation so the composer resets and focuses (see
+  // `ChatInputBar`). Starts at 0 so ordinary selections never steal focus.
+  const [focusToken, setFocusToken] = useState(0);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteIds, setDeleteIds] = useState<number[]>([]);
@@ -309,7 +312,12 @@ export function ChatModule(): React.JSX.Element {
       // new chat explicitly and clear any stale multi-selection.
       await appStore.reloadChats();
       clearSelection();
+      // Clear any active search so the new chat is present in the (unfiltered)
+      // list and its detail/input can be rendered.
+      setQuery("");
       setSelectedId(chat.id);
+      // Reset the composer and focus the new chat's input.
+      setFocusToken((token) => token + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -451,7 +459,7 @@ export function ChatModule(): React.JSX.Element {
           </div>
         )}
       </div>
-      <ChatInputBar onSend={handleSend} />
+      <ChatInputBar focusToken={focusToken} onSend={handleSend} />
     </>
   ) : null;
 
