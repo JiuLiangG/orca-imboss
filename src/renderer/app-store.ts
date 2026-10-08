@@ -1,4 +1,6 @@
+import { ASSISTANT_ID } from "@shared/constants/employees";
 import { SettingKeys } from "@shared/constants/settings";
+import { t } from "@shared/l10n";
 import type {
   ChatSummary,
   Employee,
@@ -23,13 +25,40 @@ export type AppModule =
   | "skills"
   | "settings"
   | "miniapp"
-  | "group-chat";
+  | "group-chat"
+  | "agent-session";
 
 /** A group chat opened from a `chat`-kind card and shown in the Nav. */
 export interface OpenedChat {
   id: number;
   title: string;
   participants: number[];
+}
+
+/** An employee/assistant agent session opened from a chat avatar, shown in the Nav. */
+export interface OpenedSession {
+  employeeId: number;
+  chatId: number;
+  /** Snapshot of the chat title at open time; employee names resolve live. */
+  chatTitle: string;
+}
+
+/** Stable key for an opened `(employee, chat)` agent session. */
+export function sessionKey(employeeId: number, chatId: number): string {
+  return `${employeeId}/${chatId}`;
+}
+
+/** Parse a `sessionKey` back into its ids, or `null` when malformed. */
+export function parseSessionKey(
+  key: string,
+): { employeeId: number; chatId: number } | null {
+  const [employeePart, chatPart] = key.split("/");
+  const employeeId = Number(employeePart);
+  const chatId = Number(chatPart);
+  if (!Number.isSafeInteger(employeeId) || !Number.isSafeInteger(chatId)) {
+    return null;
+  }
+  return { employeeId, chatId };
 }
 
 /** Sections of the Settings module. Lifted here so main can deep-link to one. */
@@ -76,6 +105,12 @@ export const appStore = proxy({
   // starts with none and the app falls back to the chat module.
   openedChats: [] as OpenedChat[],
   activeChatId: null as number | null,
+
+  // Agent sessions opened from a chat avatar, rendered in the Nav "sessions"
+  // section. Session-only: deliberately not persisted, so a restart starts
+  // with none and the app falls back to the chat module.
+  openedSessions: [] as OpenedSession[],
+  activeSessionKey: null as string | null,
 
   // Pending chat to select when the chat module is mounted (set by an OS
   // notification click). Cleared once consumed.
@@ -485,6 +520,12 @@ export const appStore = proxy({
     for (const chat of [...appStore.openedChats]) {
       if (deleted.has(chat.id)) appStore.closeChat(chat.id);
     }
+    // Close agent sessions bound to deleted chats.
+    for (const session of [...appStore.openedSessions]) {
+      if (deleted.has(session.chatId)) {
+        appStore.closeSession(sessionKey(session.employeeId, session.chatId));
+      }
+    }
   },
   setChatUnread(chatId: number, unread: number): void {
     const chat = appStore.data.chats.items.find((c) => c.id === chatId);
@@ -607,6 +648,83 @@ export const appStore = proxy({
       appStore.module = "chat";
     }
   },
+
+  // --- Opened agent sessions (Nav "sessions" section) -------------------------
+  /**
+   * Open (or focus) an employee's agent session for a chat. The assistant has
+   * no session in task group chats (it runs in its root chat), so its requests
+   * are redirected to the resolved root chat.
+   */
+  async openAgentSession(employeeId: number, chatId: number): Promise<void> {
+    if (!Number.isSafeInteger(employeeId) || !Number.isSafeInteger(chatId)) {
+      return;
+    }
+    if (employeeId < 0 || chatId <= 0) return;
+
+    let targetChatId = chatId;
+    if (employeeId === ASSISTANT_ID) {
+      try {
+        targetChatId = await imb.chats.rootId(chatId);
+      } catch (err) {
+        console.error(
+          "[agent-session:rootId]",
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+
+    const key = sessionKey(employeeId, targetChatId);
+    const chatTitle = await resolveChatTitle(targetChatId);
+    const existing = appStore.openedSessions.find(
+      (s) => sessionKey(s.employeeId, s.chatId) === key,
+    );
+    if (existing) {
+      existing.chatTitle = chatTitle;
+    } else {
+      appStore.openedSessions.push({
+        employeeId,
+        chatId: targetChatId,
+        chatTitle,
+      });
+    }
+    appStore.activeSessionKey = key;
+    appStore.module = "agent-session";
+    // Needed by the Nav entry (avatar + label) and the session header.
+    appStore.ensureEmployees();
+  },
+
+  /** Focus an already-opened agent session (Nav item click). */
+  activateSession(key: string): void {
+    if (
+      !appStore.openedSessions.some(
+        (s) => sessionKey(s.employeeId, s.chatId) === key,
+      )
+    ) {
+      return;
+    }
+    appStore.activeSessionKey = key;
+    appStore.module = "agent-session";
+  },
+
+  /** Close an opened agent session; fall back to a neighbour or the chat module. */
+  closeSession(key: string): void {
+    const index = appStore.openedSessions.findIndex(
+      (s) => sessionKey(s.employeeId, s.chatId) === key,
+    );
+    if (index < 0) return;
+    appStore.openedSessions.splice(index, 1);
+    if (appStore.activeSessionKey !== key) return;
+    const next =
+      appStore.openedSessions[index] ??
+      appStore.openedSessions[index - 1] ??
+      null;
+    if (next) {
+      appStore.activeSessionKey = sessionKey(next.employeeId, next.chatId);
+    } else {
+      appStore.activeSessionKey = null;
+      appStore.module = "chat";
+    }
+  },
 });
 
 /** One-time app-state bootstrap (theme/locale subscriptions + persisted prefs). */
@@ -721,4 +839,22 @@ function sortChats(): void {
   appStore.data.chats.items.sort(
     (a, b) => b.lastMessageAt - a.lastMessageAt || b.id - a.id,
   );
+}
+
+/** Best-effort chat title for a Nav session label (root or group chat). */
+async function resolveChatTitle(chatId: number): Promise<string> {
+  const cached = appStore.data.chats.items.find((c) => c.id === chatId);
+  if (cached && cached.title.trim().length > 0) return cached.title.trim();
+  const opened = appStore.openedChats.find((c) => c.id === chatId);
+  if (opened && opened.title.trim().length > 0) return opened.title.trim();
+  try {
+    const summary = await imb.chats.summary(chatId);
+    if (summary && summary.title.trim().length > 0) return summary.title.trim();
+  } catch (err) {
+    console.error(
+      "[agent-session:title]",
+      err instanceof Error ? err.message : err,
+    );
+  }
+  return t("New Chat");
 }

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { appStore, useApp } from "../../app-store";
 import { Avatar } from "../avatar";
 import { employeeAvatarSrc, USER_AVATAR } from "./avatar-src";
+import "./index.css";
 
 export interface EmployeeAvatarProps {
   /** Employee id; `null` renders the current user (boss) avatar. */
@@ -10,6 +11,11 @@ export interface EmployeeAvatarProps {
   alt?: boolean;
   active?: boolean;
   className?: string;
+  /**
+   * When provided, the avatar becomes a button. In the chat thread this opens
+   * the employee's agent session for the current chat.
+   */
+  onClick?: () => void;
 }
 
 /**
@@ -23,6 +29,7 @@ export function EmployeeAvatar({
   alt,
   active,
   className,
+  onClick,
 }: EmployeeAvatarProps): React.JSX.Element {
   const { data } = useApp();
 
@@ -32,8 +39,14 @@ export function EmployeeAvatar({
     appStore.ensureEmployees();
   }, []);
 
-  if (employeeId === null) {
-    return (
+  const employee =
+    employeeId === null
+      ? null
+      : (data.employees.items.find((e) => e.id === employeeId) ?? null);
+  const name = employeeId === null ? "User" : employee?.name;
+
+  const avatar =
+    employeeId === null ? (
       <Avatar
         src={USER_AVATAR}
         name="User"
@@ -42,19 +55,28 @@ export function EmployeeAvatar({
         active={active}
         className={className}
       />
+    ) : (
+      <Avatar
+        src={employee ? employeeAvatarSrc(employee) : null}
+        letter={employee?.name.slice(0, 1)}
+        name={employee?.name}
+        size={size}
+        alt={alt}
+        active={active}
+        className={className}
+      />
     );
-  }
 
-  const employee = data.employees.items.find((e) => e.id === employeeId);
+  if (!onClick) return avatar;
   return (
-    <Avatar
-      src={employee ? employeeAvatarSrc(employee) : null}
-      letter={employee?.name.slice(0, 1)}
-      name={employee?.name}
-      size={size}
-      alt={alt}
-      active={active}
-      className={className}
-    />
+    <button
+      type="button"
+      className="imb-avatar-button"
+      onClick={onClick}
+      aria-label={name}
+      title={name}
+    >
+      {avatar}
+    </button>
   );
 }

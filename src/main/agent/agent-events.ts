@@ -1,6 +1,7 @@
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { AgentStreamEvent, AgentStreamPayload } from "@shared/types";
 import type { WebContents } from "electron";
+import { formatToolArgsDetail, summarizeToolArgs } from "./tool-args";
 
 /**
  * Map raw Pi `AgentSessionEvent`s to the small, serializable DTOs the
@@ -35,6 +36,19 @@ export function toStreamEvent(
         dto.contentIndex = partial.contentIndex;
       } else if ("contentIndex" in partial) {
         dto.contentIndex = partial.contentIndex;
+      }
+      // Tool-call identity + a capped argument summary/detail for inline
+      // placement (arguments are capped in main; tool results are never sent).
+      if (partial.type === "toolcall_end") {
+        dto.toolCallId = partial.toolCall.id;
+        dto.toolName = partial.toolCall.name;
+        const summary = summarizeToolArgs(
+          partial.toolCall.name,
+          partial.toolCall.arguments,
+        );
+        if (summary.length > 0) dto.toolArgsSummary = summary;
+        const detail = formatToolArgsDetail(partial.toolCall.arguments);
+        if (detail !== undefined) dto.toolArgsDetail = detail;
       }
       return dto;
     }

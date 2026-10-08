@@ -1,8 +1,20 @@
 import { ipcMain } from "electron";
+import { readSessionView } from "../agent/session-view";
 import { deleteSession, getSession, setSession } from "../db/sessions";
 import { assertInteger, assertString } from "./helpers";
 
 export function registerSessionHandlers(): void {
+  // Projected, read-only view of a persistent `(employee, chat)` agent
+  // session. Never exposes system prompts / tool args / tool results.
+  ipcMain.handle(
+    "sessions:entries",
+    (_event, employeeId: unknown, chatId: unknown) => {
+      const safeEmployee = assertInteger(employeeId, "employee id");
+      const safeChat = assertInteger(chatId, "chat id");
+      return readSessionView(safeEmployee, safeChat);
+    },
+  );
+
   ipcMain.handle(
     "sessions:get",
     (_event, employeeId: unknown, chatId: unknown) => {

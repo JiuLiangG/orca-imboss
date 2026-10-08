@@ -1,0 +1,242 @@
+/* Read-only agent-session transcript styles. Layout reuses `thread.css`
+   (`.imb-thread`); these rules cover the session-specific blocks. */
+
+.imb-session-heading {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.imb-session-subtitle {
+  color: var(--imb-muted);
+  font-size: var(--imb-text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imb-session-thread {
+  user-select: text;
+}
+
+/* User prompt delivered to the session (task text / wake prompt). */
+.imb-session-user {
+  flex: none;
+  align-self: flex-end;
+  max-width: 82%;
+  padding: 10px 14px;
+  border-radius: var(--imb-radius-lg);
+  border-top-right-radius: 4px;
+  background: var(--imb-bubble-self);
+  color: var(--imb-bubble-text);
+  font-size: var(--imb-text-base);
+  line-height: var(--imb-leading-body);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Assistant free-form text: styled like the group-chat "other" message bubble. */
+.imb-session-text {
+  flex: none;
+  align-self: flex-start;
+  max-width: 82%;
+  padding: 10px 14px;
+  border-radius: var(--imb-radius-lg);
+  border-top-left-radius: 4px;
+  background: var(--imb-surface);
+  color: var(--imb-fg);
+  font-size: var(--imb-text-base);
+  line-height: var(--imb-leading-body);
+  word-break: break-word;
+  min-width: 0;
+  box-shadow: var(--imb-elev-raised);
+  user-select: text;
+}
+
+/* Collapsible reasoning. */
+.imb-session-thinking {
+  /* `overflow: hidden` zeroes the flex item's automatic minimum size, so
+     without `flex: none` the thread's column flex would shrink this block to a
+     sliver (the shared chat thread is a flex column). */
+  flex: none;
+  align-self: flex-start;
+  max-width: 82%;
+  border: 1px dashed var(--imb-border);
+  border-radius: var(--imb-radius-md);
+  background: var(--imb-surface);
+  overflow: hidden;
+  margin-bottom: calc(-1 * var(--imb-space-3));
+}
+
+.imb-session-thinking-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 10px 2px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--imb-muted);
+  font: inherit;
+  font-size: var(--imb-text-xs);
+  cursor: pointer;
+  text-align: left;
+}
+
+.imb-session-thinking-head:hover {
+  color: var(--imb-fg-2);
+}
+
+.imb-session-thinking-head .imb-icon {
+  transition: transform var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-session-thinking.imb-is-open .imb-session-thinking-head .imb-icon {
+  transform: rotate(180deg);
+}
+
+.imb-session-thinking-body {
+  padding: 0 12px 10px;
+  color: var(--imb-muted);
+  font-size: var(--imb-text-sm);
+  line-height: var(--imb-leading-body);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Tool call: name + compact argument summary + expandable args detail. */
+.imb-session-tool {
+  flex: none;
+  align-self: flex-start;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  max-width: 82%;
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-pill);
+  background: var(--imb-surface);
+  font-size: var(--imb-text-xs);
+  color: var(--imb-fg-2);
+  overflow: hidden;
+}
+
+.imb-session-tool.imb-is-open {
+  border-radius: var(--imb-radius-md);
+}
+
+.imb-session-tool-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 10px;
+}
+
+button.imb-session-tool-head {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.imb-session-tool-head:hover {
+  background: var(--imb-fg-soft);
+}
+
+.imb-session-tool-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--imb-muted);
+}
+
+.imb-session-tool.imb-is-ok .imb-session-tool-dot {
+  background: var(--imb-success);
+}
+
+.imb-session-tool.imb-is-error .imb-session-tool-dot {
+  background: var(--imb-danger);
+}
+
+.imb-session-tool.imb-is-running .imb-session-tool-dot {
+  animation: imb-session-pulse 1s ease-in-out infinite;
+}
+
+.imb-session-tool-name {
+  font-weight: 600;
+  color: var(--imb-fg);
+  flex: none;
+}
+
+/* Discriminating arguments (path/command/…); truncates to keep the pill short. */
+.imb-session-tool-args {
+  color: var(--imb-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imb-session-tool-status {
+  color: var(--imb-muted);
+  flex: none;
+}
+
+.imb-session-tool-detail {
+  margin: 0;
+  padding: 8px 10px;
+  border-top: 1px solid var(--imb-border-soft);
+  background: var(--imb-bg);
+  color: var(--imb-fg-2);
+  font-family: var(--imb-font-mono);
+  font-size: var(--imb-text-xs);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 280px;
+  overflow: auto;
+}
+
+/* Compaction marker. */
+.imb-session-compaction {
+  flex: none;
+  align-self: stretch;
+  margin: var(--imb-space-2) 0;
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-md);
+  background: var(--imb-surface-warm);
+  overflow: hidden;
+}
+
+.imb-session-compaction-head {
+  padding: 5px 12px;
+  font-size: var(--imb-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--imb-muted);
+  border-bottom: 1px solid var(--imb-border-soft);
+}
+
+.imb-session-compaction-body {
+  padding: 8px 12px;
+  max-height: 220px;
+  overflow-y: auto;
+  color: var(--imb-fg-2);
+  font-size: var(--imb-text-sm);
+}
+
+@keyframes imb-session-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.3;
+  }
+}

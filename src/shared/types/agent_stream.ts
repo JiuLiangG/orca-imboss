@@ -16,6 +16,13 @@ export type AgentStreamEvent =
       subType: string;
       delta?: string;
       contentIndex?: number;
+      /** Set on `toolcall_end`: the completed tool call's identity. */
+      toolCallId?: string;
+      toolName?: string;
+      /** Set on `toolcall_end`: capped one-line argument summary. */
+      toolArgsSummary?: string;
+      /** Set on `toolcall_end`: capped pretty-printed arguments JSON. */
+      toolArgsDetail?: string;
     }
   | { type: "tool_execution_start"; toolCallId: string; toolName: string }
   | {

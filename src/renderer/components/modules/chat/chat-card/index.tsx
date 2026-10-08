@@ -30,6 +30,8 @@ function bindSummaryCacheCleanup(): void {
 export interface ChatCardProps {
   /** A `kind="chat"` message whose content is the linked chat's id. */
   message: Message;
+  /** Click handler for the sender avatar (opens the agent session). */
+  onAvatarClick?: () => void;
 }
 
 /**
@@ -38,7 +40,10 @@ export interface ChatCardProps {
  * opens the group conversation as a Nav entry. A missing/invalid link renders
  * a disabled placeholder instead of navigation.
  */
-export function ChatCard({ message }: ChatCardProps): React.JSX.Element {
+export function ChatCard({
+  message,
+  onAvatarClick,
+}: ChatCardProps): React.JSX.Element {
   const chatId = parseChatId(message.content);
   const [summary, setSummary] = useState<ChatSummary | null | undefined>(() =>
     chatId === null ? null : summaryCache.get(chatId),
@@ -87,7 +92,11 @@ export function ChatCard({ message }: ChatCardProps): React.JSX.Element {
 
   return (
     <div className="imb-msg imb-other">
-      <EmployeeAvatar employeeId={message.senderEmployeeId} size={34} />
+      <EmployeeAvatar
+        employeeId={message.senderEmployeeId}
+        size={34}
+        onClick={onAvatarClick}
+      />
       {summary ? (
         <button
           type="button"

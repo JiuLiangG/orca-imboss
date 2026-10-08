@@ -2,9 +2,10 @@ import { SettingKeys } from "@shared/constants/settings";
 import { t } from "@shared/l10n";
 import { useState } from "react";
 import { cls } from "reactutils";
-import { appStore, useApp, type AppModule } from "../../app-store";
+import { appStore, sessionKey, useApp, type AppModule } from "../../app-store";
 import { BrandLogo } from "../brand-logo";
 import { ContextMenu, type ContextMenuState } from "../context-menu";
+import { EmployeeAvatar } from "../employee-avatar";
 import { GroupAvatar } from "../group-avatar";
 import {
   IconApp,
@@ -73,7 +74,15 @@ interface NavChat {
 }
 
 export function Nav({ collapsed, onToggle }: NavProps): React.JSX.Element {
-  const { openedChats, module, activeChatId, activeMiniAppId, data } = useApp();
+  const {
+    openedChats,
+    openedSessions,
+    module,
+    activeChatId,
+    activeSessionKey,
+    activeMiniAppId,
+    data,
+  } = useApp();
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
 
@@ -156,6 +165,49 @@ export function Nav({ collapsed, onToggle }: NavProps): React.JSX.Element {
                     }}
                   />
                 ))}
+              </div>
+            </>
+          )}
+          {openedSessions.length > 0 && (
+            <>
+              {(miniApps.length > 0 || openedChats.length > 0) && (
+                <div className="imb-nav-divider" />
+              )}
+              <div className="imb-nav-items">
+                {openedSessions.map((session) => {
+                  const key = sessionKey(session.employeeId, session.chatId);
+                  const employee = data.employees.items.find(
+                    (e) => e.id === session.employeeId,
+                  );
+                  const name = employee?.name ?? t("Unnamed");
+                  const label = `${name} · ${session.chatTitle}`;
+                  return (
+                    <NavSessionButton
+                      key={key}
+                      employeeId={session.employeeId}
+                      label={label}
+                      collapsed={collapsed}
+                      active={
+                        module === "agent-session" && activeSessionKey === key
+                      }
+                      onClick={() => appStore.activateSession(key)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setCtxMenu({
+                          x: e.clientX,
+                          y: e.clientY,
+                          items: [
+                            {
+                              key: "close",
+                              label: t("Close"),
+                              onSelect: () => appStore.closeSession(key),
+                            },
+                          ],
+                        });
+                      }}
+                    />
+                  );
+                })}
               </div>
             </>
           )}
@@ -254,6 +306,41 @@ function NavChatButton({
     </Tooltip>
   );
 }
+
+/** Nav entry for an opened employee agent session. */
+function NavSessionButton({
+  employeeId,
+  label,
+  collapsed,
+  active,
+  onClick,
+  onContextMenu,
+}: NavSessionButtonProps): React.JSX.Element {
+  return (
+    <Tooltip content={label} placement="right">
+      <button
+        type="button"
+        className={cls("imb-nav-item", active && "imb-is-active")}
+        aria-current={active ? "page" : undefined}
+        aria-label={collapsed ? label : undefined}
+        onClick={onClick}
+        onContextMenu={onContextMenu}
+      >
+        <EmployeeAvatar employeeId={employeeId} size={24} />
+        <span className="imb-nav-label">{label}</span>
+      </button>
+    </Tooltip>
+  );
+}
+
+type NavSessionButtonProps = {
+  employeeId: number;
+  label: string;
+  collapsed: boolean;
+  active: boolean;
+  onClick: () => void;
+  onContextMenu: (event: React.MouseEvent) => void;
+};
 
 /** Read-only shape of a registered mini app (valtio snapshots are readonly). */
 interface NavMiniApp {

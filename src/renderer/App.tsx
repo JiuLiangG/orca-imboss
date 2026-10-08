@@ -1,6 +1,7 @@
 import { useEffect } from "react";
-import { useApp, type AppModule } from "./app-store";
+import { parseSessionKey, useApp, type AppModule } from "./app-store";
 import { AppShell } from "./components/app-shell";
+import { AgentSessionModule } from "./components/modules/agent-session/agent-session-module";
 import { ChatModule } from "./components/modules/chat/chat-module";
 import { EmployeesModule } from "./components/modules/employees/employees-module";
 import { GroupChatModule } from "./components/modules/group-chat/group-chat-module";
@@ -41,12 +42,27 @@ export default function App(): React.JSX.Element {
 }
 
 function ActiveModule(): React.JSX.Element {
-  const { module, activeChatId } = useApp();
+  const { module, activeChatId, activeSessionKey } = useApp();
 
   // Group chats opened from `chat`-kind cards render in a dedicated
   // single-pane view; the key resets the view when switching chats.
   if (module === "group-chat" && activeChatId !== null) {
     return <GroupChatModule key={activeChatId} chatId={activeChatId} />;
+  }
+
+  // Agent sessions opened from a chat avatar render in a dedicated single-pane
+  // view; the key resets the view (and its live binding) when switching.
+  if (module === "agent-session" && activeSessionKey !== null) {
+    const target = parseSessionKey(activeSessionKey);
+    if (target) {
+      return (
+        <AgentSessionModule
+          key={activeSessionKey}
+          employeeId={target.employeeId}
+          chatId={target.chatId}
+        />
+      );
+    }
   }
 
   // Mini apps are rendered by the persistent `MiniAppModule` host (so their

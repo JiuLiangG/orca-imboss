@@ -1,5 +1,6 @@
 import { DEFAULT_LOCALE } from "@shared/constants/locales";
 import type {
+  AgentSessionViewEntry,
   AgentStreamPayload,
   Chat,
   ChatParticipantUpdate,
@@ -153,6 +154,8 @@ const api = {
       >,
     summary: (id: number) =>
       ipcRenderer.invoke("chats:summary", id) as Promise<ChatSummary | null>,
+    rootId: (id: number) =>
+      ipcRenderer.invoke("chats:rootId", id) as Promise<number>,
     addUnread: (id: number, delta: number) =>
       ipcRenderer.invoke("chats:addUnread", id, delta) as Promise<number>,
     markRead: (id: number) =>
@@ -259,6 +262,11 @@ const api = {
   },
 
   sessions: {
+    /** Projected, read-only session view (no system prompt / tool args / results). */
+    entries: (employeeId: number, chatId: number) =>
+      ipcRenderer.invoke("sessions:entries", employeeId, chatId) as Promise<
+        AgentSessionViewEntry[]
+      >,
     get: (employeeId: number, chatId: number) =>
       ipcRenderer.invoke(
         "sessions:get",

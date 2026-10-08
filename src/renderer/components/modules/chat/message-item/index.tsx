@@ -1,5 +1,6 @@
 import { t } from "@shared/l10n";
 import type { Message } from "@shared/types";
+import { appStore } from "../../../../app-store";
 import { EmployeeAvatar } from "../../../employee-avatar";
 import { AnswerCard } from "../answer-card";
 import { AskCard } from "../ask-card";
@@ -27,6 +28,14 @@ export function MessageItem({
   onAnswered,
   askAnswer,
 }: MessageItemProps): React.JSX.Element {
+  // Clicking an employee/assistant avatar opens that sender's agent session for
+  // this chat. The user (null sender) has no session avatar.
+  const sender = message.senderEmployeeId;
+  const openSession =
+    sender === null
+      ? undefined
+      : () => void appStore.openAgentSession(sender, message.chatId);
+
   switch (message.kind) {
     case "ask":
       return (
@@ -35,22 +44,24 @@ export function MessageItem({
           readonly={readonly}
           onAnswered={onAnswered ?? (() => undefined)}
           answer={askAnswer}
+          onAvatarClick={openSession}
         />
       );
     case "answer":
-      return <AnswerCard message={message} />;
+      return <AnswerCard message={message} onAvatarClick={openSession} />;
     case "progress":
       return (
         <div className="imb-msg imb-other">
           <EmployeeAvatar
             employeeId={message.senderEmployeeId ?? 0}
             size={34}
+            onClick={openSession}
           />
           <ProgressCard title={message.content} steps={message.steps ?? []} />
         </div>
       );
     case "chat":
-      return <ChatCard message={message} />;
+      return <ChatCard message={message} onAvatarClick={openSession} />;
     case "ack":
       // App-generated receipt: stored content is empty, the label is localized
       // at render time so it follows locale switches.
@@ -62,7 +73,11 @@ export function MessageItem({
           attachments={null}
           attachmentsTotal={null}
           avatar={
-            <EmployeeAvatar employeeId={message.senderEmployeeId} size={34} />
+            <EmployeeAvatar
+              employeeId={message.senderEmployeeId}
+              size={34}
+              onClick={openSession}
+            />
           }
         />
       );
@@ -76,7 +91,11 @@ export function MessageItem({
           attachmentsTotal={message.attachmentsTotal}
           markdown={message.kind === "text" || message.kind === "report"}
           avatar={
-            <EmployeeAvatar employeeId={message.senderEmployeeId} size={34} />
+            <EmployeeAvatar
+              employeeId={message.senderEmployeeId}
+              size={34}
+              onClick={openSession}
+            />
           }
         />
       );

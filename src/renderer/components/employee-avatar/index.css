@@ -1,0 +1,16 @@
+/* Clickable avatar wrapper: keeps the avatar's own sizing/styling intact while
+   providing a real button hit target and focus ring. */
+.imb-avatar-button {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 50%;
+  line-height: 0;
+  cursor: pointer;
+}
+
+.imb-avatar-button:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+}

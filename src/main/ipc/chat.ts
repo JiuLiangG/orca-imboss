@@ -23,6 +23,13 @@ export function registerChatHandlers(): void {
     dbChats.getChatSummary(assertInteger(id, "chat id")),
   );
 
+  // Root (user) chat of a chat, resolved by walking `from_chat_id` upward.
+  // Used by the session view to redirect the assistant from a task group chat
+  // to the root-chat session it actually runs in.
+  ipcMain.handle("chats:rootId", (_event, id: unknown) =>
+    dbChats.getRootChatId(assertInteger(id, "chat id")),
+  );
+
   // Renderer-initiated unread delta (delegates to notifyUnread).
   ipcMain.handle(
     "chats:addUnread",

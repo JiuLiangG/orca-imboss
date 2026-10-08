@@ -119,13 +119,3 @@ The agent is powered by the **Pi SDK** (`@earendil-works/pi-coding-agent`) and r
 | Linux    | AppImage                                |
 
 Packaging is configured in `electron-builder.yml`.
-
----
-
-## Deferred / TODO
-
-These areas are scoped for upcoming iterations and are intentionally left as stubs or extension points:
-
-- **Mini Apps (世界地图)** — the nav entry exists as a "暂未开放" placeholder page.
-- **Notification rules** — which events trigger OS notifications in the background.
-- **Auto-update UI feedback** — progress + install prompts over IPC.

@@ -8,6 +8,8 @@ import "./index.css";
 
 export interface AnswerCardProps {
   message: Message;
+  /** Click handler for the sender avatar (opens the agent session). */
+  onAvatarClick?: () => void;
 }
 
 /**
@@ -15,7 +17,10 @@ export interface AnswerCardProps {
  * JSON answer set and renders each answer's question ref + chosen options +
  * free text. A parse failure or an empty set degrades to the generic bubble.
  */
-export function AnswerCard({ message }: AnswerCardProps): React.JSX.Element {
+export function AnswerCard({
+  message,
+  onAvatarClick,
+}: AnswerCardProps): React.JSX.Element {
   const self = message.senderEmployeeId === null;
   const payload = parseAnswer(message.content);
 
@@ -28,7 +33,11 @@ export function AnswerCard({ message }: AnswerCardProps): React.JSX.Element {
         attachments={message.attachments}
         attachmentsTotal={message.attachmentsTotal}
         avatar={
-          <EmployeeAvatar employeeId={message.senderEmployeeId} size={34} />
+          <EmployeeAvatar
+            employeeId={message.senderEmployeeId}
+            size={34}
+            onClick={onAvatarClick}
+          />
         }
       />
     );
@@ -36,7 +45,11 @@ export function AnswerCard({ message }: AnswerCardProps): React.JSX.Element {
 
   return (
     <div className={cls("imb-msg", self ? "imb-self" : "imb-other")}>
-      <EmployeeAvatar employeeId={message.senderEmployeeId} size={34} />
+      <EmployeeAvatar
+        employeeId={message.senderEmployeeId}
+        size={34}
+        onClick={onAvatarClick}
+      />
       <div className="imb-answer-card">
         <div className="imb-answer-card-title">{t("Answer")}</div>
         {payload.answers.map((a) => (

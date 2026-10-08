@@ -19,6 +19,8 @@ export interface AskCardProps {
    * been answered. Seeds the retained options/text and marks the card answered.
    */
   answer?: Message;
+  /** Click handler for the sender avatar (opens the agent session). */
+  onAvatarClick?: () => void;
 }
 
 interface AskQuestion {
@@ -49,6 +51,7 @@ export function AskCard({
   readonly = false,
   onAnswered,
   answer,
+  onAvatarClick,
 }: AskCardProps): React.JSX.Element {
   const self = message.senderEmployeeId === null;
   const payload = parseAsk(message.content);
@@ -83,7 +86,11 @@ export function AskCard({
         attachments={message.attachments}
         attachmentsTotal={message.attachmentsTotal}
         avatar={
-          <EmployeeAvatar employeeId={message.senderEmployeeId} size={34} />
+          <EmployeeAvatar
+            employeeId={message.senderEmployeeId}
+            size={34}
+            onClick={onAvatarClick}
+          />
         }
       />
     );
@@ -115,7 +122,11 @@ export function AskCard({
 
   return (
     <div className={cls("imb-msg", self ? "imb-self" : "imb-other")}>
-      <EmployeeAvatar employeeId={message.senderEmployeeId} size={34} />
+      <EmployeeAvatar
+        employeeId={message.senderEmployeeId}
+        size={34}
+        onClick={onAvatarClick}
+      />
       <div className="imb-ask-card">
         <div className="imb-ask-card-title">{t("Question")}</div>
         {payload.questions.map((q) => (
