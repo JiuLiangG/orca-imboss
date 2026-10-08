@@ -6,6 +6,7 @@ import {
   getMiniAppsDir,
 } from "../data-dir";
 import { getMcpConfigPath } from "../mcp-store";
+import { getResolvedLocale } from "../locale";
 
 /**
  * The app's built-in (code-shipped) Agent Skills.
@@ -204,8 +205,32 @@ listed in the Skills module.
 `;
 }
 
+/**
+ * Whether `locale` denotes Simplified Chinese (the boss's locale). Accepts the
+ * BCP-47/underscore spellings Electron may return ("zh-CN", "zh-Hans-CN",
+ * "zh_CN") and treats only Traditional-Chinese markers as false, so an
+ * unknown `zh-*` variant still falls back to the mainland mirror.
+ */
+function isSimplifiedChineseLocale(locale: string): boolean {
+  const l = locale.trim().toLowerCase().replaceAll("_", "-");
+  if (!l.startsWith("zh")) return false;
+  return !/^(zh-(hant|cht)|zh-(tw|hk|mo)(-|$))/.test(l);
+}
+
 function miniAppDevelopmentSkillBody(): string {
   const miniAppsDir = getMiniAppsDir();
+  // The default Playwright CDN is often unreachable/slow from mainland China,
+  // so the boss's locale decides which install command the skill advertises.
+  const zhCn = isSimplifiedChineseLocale(getResolvedLocale());
+  const installChromium = zhCn
+    ? 'PLAYWRIGHT_DOWNLOAD_HOST="https://npmmirror.com/mirrors/playwright/" ' +
+      "npx playwright install chromium"
+    : "npx playwright install chromium";
+  const installChromiumNote = zhCn
+    ? "The mirror host is required here (the default Playwright CDN is " +
+      "unreachable from the boss's network); run the command exactly as " +
+      "written."
+    : "Run the command exactly as written.";
   return `# Mini app development
 
 A mini app is a self-contained folder under:
@@ -299,7 +324,9 @@ yourself:
 
 Install the Chromium browser once if it is not present:
 
-    npx playwright install chromium
+    ${installChromium}
+
+${installChromiumNote}
 
 Write a small headless script and run it with "node". Capture console output
 and failed requests first — they usually expose the bug before any DOM check:
