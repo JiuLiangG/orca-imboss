@@ -879,8 +879,8 @@ export function createTeamToolDefinitions(
     // `imb_ask` is assistant-only (it asks the boss); employees exchange
     // questions and answers as plain text messages.
     tools.push(askTool(env));
-    // `imb_set_cronjob` / `imb_remove_cronjob` are intentionally NOT given to
-    // the assistant; they remain opt-in for participant employees only.
+    tools.push(setCronjobTool(employeeId));
+    tools.push(removeCronjobTool(employeeId));
   } else {
     // Cron tools are opt-in: registered only when the employee selected the
     // corresponding marker in their "Linked MCP" list.
