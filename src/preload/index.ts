@@ -4,6 +4,7 @@ import type {
   Chat,
   ChatParticipantUpdate,
   ChatSummary,
+  CronJobInfo,
   Employee,
   EmployeeDeleteResult,
   EmployeeInput,
@@ -129,6 +130,17 @@ const api = {
      *  `imb_set_employees`), so the renderer cache can re-fetch. */
     onChanged: (cb: (payload: { ids: number[] }) => void) =>
       on<{ ids: number[] }>("employees:changed", cb),
+  },
+
+  cron: {
+    /** Cron jobs owned by an employee, with chat titles resolved (id 0 = assistant). */
+    listByEmployee: (employeeId: number) =>
+      ipcRenderer.invoke("cron:listByEmployee", employeeId) as Promise<
+        CronJobInfo[]
+      >,
+    /** Remove a job (stops the live scheduler handle + deletes the row). */
+    remove: (id: string) =>
+      ipcRenderer.invoke("cron:remove", id) as Promise<boolean>,
   },
 
   chats: {

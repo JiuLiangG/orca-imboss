@@ -1,5 +1,6 @@
 import type {
   CronJob,
+  CronJobInfo,
   CronJobInput,
   CronJobRow,
   ParsedCronJobId,
@@ -15,6 +16,24 @@ export function listEnabledJobs(): CronJob[] {
       )
       .all() as CronJobRow[]
   ).map(toCronJob);
+}
+
+/**
+ * Every job owned by an employee, with the owning chat's title resolved for
+ * display. The chat FK cascades, so the JOIN always finds a chat. Ordered so
+ * the Employees detail list is stable (creation order).
+ */
+export function listByEmployee(employeeId: number): CronJobInfo[] {
+  const rows = getDB()
+    .prepare(
+      `SELECT cj.*, c.title AS chat_title
+         FROM cron_jobs cj
+         JOIN chats c ON c.id = cj.chat_id
+        WHERE cj.employee_id = ?
+        ORDER BY cj.created_at ASC, cj.id ASC`,
+    )
+    .all(employeeId) as Array<CronJobRow & { chat_title: string }>;
+  return rows.map((row) => ({ ...toCronJob(row), chatTitle: row.chat_title }));
 }
 
 export function getJob(id: string): CronJob | null {

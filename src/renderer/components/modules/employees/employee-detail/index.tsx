@@ -18,6 +18,7 @@ import { Modal } from "../../../modal";
 import { MultiSelect, type MultiSelectOption } from "../../../multi-select";
 import { Select, type SelectOption } from "../../../select";
 import { Textarea } from "../../../textarea";
+import { EmployeeCronJobs } from "../employee-cron-jobs";
 import "./index.css";
 
 export interface EmployeeDetailProps {
@@ -298,6 +299,8 @@ export function EmployeeDetail({
             }
           />
         </Field>
+
+        <EmployeeCronJobs employeeId={employee.id} />
       </DetailBody>
 
       {!isAssistant && (

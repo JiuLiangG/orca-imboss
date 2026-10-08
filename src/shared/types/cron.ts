@@ -21,6 +21,16 @@ export interface CronJob {
   nextRunAt: number | null;
 }
 
+/**
+ * A cron job enriched for display in the Employees detail pane: the owning
+ * chat's title is resolved in main (the renderer chat cache is root-only and
+ * cannot resolve spawned group chats).
+ */
+export interface CronJobInfo extends CronJob {
+  /** `chats.title` of the job's chat (may be empty for an untitled chat). */
+  chatTitle: string;
+}
+
 export interface CronJobInput {
   id: string;
   chatId: number;
