@@ -1,4 +1,4 @@
-import type { CronJob, CronJobInput } from "@shared/types";
+import type { CronJob, CronJobInput, ParsedCronJobId } from "@shared/types";
 import { Cron } from "croner";
 import { wakeAgent } from "./agent/session-queue";
 import * as dbCron from "./db/cron";
@@ -42,6 +42,50 @@ export function setJob(input: CronJobInput): CronJob {
 export function removeJob(id: string): boolean {
   stopJob(id);
   return dbCron.deleteJob(id);
+}
+
+/**
+ * Stop every live Cron handle whose job belongs to one of the given chats.
+ *
+ * The `cron_jobs.chat_id` FK cascade removes the rows when the chats are
+ * deleted, but it does NOT touch these in-process handles. Call this BEFORE
+ * deleting the chats so no job fires into a chat that is being torn down.
+ * Scans the in-memory registry, so it is independent of whether the DB rows
+ * still exist. Returns the number of handles stopped.
+ */
+export function stopJobsForChats(chatIds: number[]): number {
+  const targets = new Set(chatIds);
+  if (targets.size === 0) return 0;
+  return stopJobsMatching((parsed) => targets.has(parsed.chatId));
+}
+
+/**
+ * Stop every live Cron handle owned by an employee. Used when an employee row
+ * is hard-deleted (the `cron_jobs.employee_id` FK cascade removes the rows but
+ * leaves the live handles running). Returns the number stopped.
+ */
+export function stopJobsForEmployee(employeeId: number): number {
+  return stopJobsMatching((parsed) => parsed.employeeId === employeeId);
+}
+
+/** Stop and forget every live handle matching the predicate (best-effort). */
+function stopJobsMatching(
+  predicate: (parsed: ParsedCronJobId) => boolean,
+): number {
+  let stopped = 0;
+  // Snapshot the keys: `stopJob` mutates the Map during iteration.
+  for (const id of [...jobs.keys()]) {
+    let parsed: ParsedCronJobId;
+    try {
+      parsed = dbCron.parseCronJobId(id);
+    } catch {
+      continue; // Defensive: an unparseable key has no manageable handle.
+    }
+    if (!predicate(parsed)) continue;
+    stopJob(id);
+    stopped += 1;
+  }
+  return stopped;
 }
 
 /** Stop every live Cron handle (best-effort on app quit). */

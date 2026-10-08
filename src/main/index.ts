@@ -192,6 +192,9 @@ async function purgeDisabledEmployeesOnStartup(): Promise<void> {
   try {
     const purged = purgeDisabledEmployees();
     for (const entry of purged) {
+      // The employee row (and its `cron_jobs` via FK cascade) is already gone;
+      // stop the corresponding live Cron handles so they cannot keep firing.
+      cron.stopJobsForEmployee(entry.employeeId);
       await Promise.all(entry.sessionPaths.map(unlinkSessionFile));
       deleteAvatarFiles(entry.employeeId);
     }

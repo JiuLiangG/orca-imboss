@@ -2,6 +2,7 @@ import type { Employee, EmployeeInput } from "@shared/types";
 import { ipcMain } from "electron";
 import { disposeForEmployee } from "../agent/session-queue";
 import { deleteAvatarFiles, saveAvatar } from "../avatars";
+import * as cron from "../cron";
 import * as dbEmployees from "../db/employees";
 import { listByEmployee, unlinkSessionFile } from "../db/sessions";
 import { sendToRenderer } from "../notifications";
@@ -48,6 +49,9 @@ export function registerEmployeeHandlers(): void {
     // Only a hard delete removes disk artifacts; a soft delete (employee still
     // a chat participant) keeps the session/avatar state intact.
     if (result === "deleted") {
+      // The `cron_jobs.employee_id` FK cascade removed the rows, but the live
+      // in-process Cron handles must be stopped explicitly.
+      cron.stopJobsForEmployee(safeId);
       await Promise.all(records.map((r) => unlinkSessionFile(r.session)));
       deleteAvatarFiles(safeId);
     }

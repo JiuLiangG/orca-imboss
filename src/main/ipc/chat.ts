@@ -3,6 +3,7 @@ import type { ChatParticipantUpdate, MessageAttachment } from "@shared/types";
 import { ipcMain } from "electron";
 import { deliver, disposeForChat } from "../agent/session-queue";
 import { maybeGenerateChatTitle } from "../agent/title-gen";
+import * as cron from "../cron";
 import * as dbChats from "../db/chats";
 import * as dbMessages from "../db/messages";
 import { listByChat, unlinkSessionFile } from "../db/sessions";
@@ -80,6 +81,10 @@ export function registerChatHandlers(): void {
     // spawn further chats, so delete the whole descendant tree.
     const chatIds = dbChats.listChatTreeIds(safeId);
     if (chatIds.length === 0) return false;
+    // Stop the live timers first: the FK cascade removes the `cron_jobs` rows
+    // when the chats are deleted, but the in-process Cron handles would
+    // otherwise keep firing into a now-deleted chat.
+    cron.stopJobsForChats(chatIds);
     // Capture disk session file paths BEFORE the FK cascade wipes the rows.
     const records = chatIds.flatMap((chatId) => listByChat(chatId));
     // Tear down any warm agent sessions for these chats before files go away.

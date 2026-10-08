@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "fs/promises";
 import { dirname, join } from "path";
 import { getAgentSessionsDir } from "../data-dir";
+import * as dbChats from "../db/chats";
 import * as dbSessions from "../db/sessions";
 import { loadPiSdk } from "./pi-sdk";
 import { resolveWorkDir } from "./workdir";
@@ -65,6 +66,12 @@ export async function ensureSessionFile(
   chatId: number,
 ): Promise<void> {
   if (dbSessions.getSession(employeeId, chatId)) return;
+  // Guard: never materialize a session (and its directory) for a chat that no
+  // longer exists. A racing cron tick after chat deletion would otherwise
+  // re-create the orphan session files that `chats:delete` just removed.
+  if (!dbChats.getChat(chatId)) {
+    throw new Error("Chat does not exist.");
+  }
   const path = sessionPathFor(chatId, employeeId);
   try {
     await materializeSessionFile(path);

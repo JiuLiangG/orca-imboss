@@ -75,6 +75,9 @@ export async function wakeAgent(
   chatId: number,
   fallbackText: string,
 ): Promise<void> {
+  // Guard: a cron tick can race with chat deletion. If the chat is already
+  // gone, drop the wake instead of materializing an orphan session for it.
+  if (!dbChats.getChat(chatId)) return;
   let targetChatId = chatId;
   let text = fallbackText;
   if (employeeId === ASSISTANT_ID) {
