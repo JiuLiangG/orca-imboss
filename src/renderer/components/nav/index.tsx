@@ -35,6 +35,12 @@ const NAV_ITEMS: NavItem[] = [
     section: "main",
   },
   {
+    module: "employees",
+    labelKey: "Employees",
+    icon: IconEmployees,
+    section: "main",
+  },
+  {
     module: "providers",
     labelKey: "Providers",
     icon: IconModels,
@@ -45,12 +51,6 @@ const NAV_ITEMS: NavItem[] = [
     module: "skills",
     labelKey: "Skills",
     icon: IconSkills,
-    section: "main",
-  },
-  {
-    module: "employees",
-    labelKey: "Employees",
-    icon: IconEmployees,
     section: "main",
   },
   {
