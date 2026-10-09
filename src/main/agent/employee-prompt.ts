@@ -18,8 +18,8 @@ import { BuildEmployeeSystemPromptArgs } from "@shared/types";
  * order). The exact template shape:
  *
  * ```
- * This is your working session as employee {ID} in chat {chatId}.
- * [This chat was created from chat {fromChatId}.  — only when fromChatId is set]
+ * This is your working session as employee {ID} in chat {chatId}[, the boss's chat].
+ * [This task group chat was created from chat {fromChatId}, the boss's chat.  — only when fromChatId is set]
  * [role: generated for non-assistants; baked into ASSISTANT_SYSTEM_PROMPT for the assistant]
  * [employeePrompt: persona]
  * [report skill: assistant aggregation/progress/summary OR employee result report]
@@ -59,15 +59,18 @@ export function buildEmployeeSystemPrompt({
   ].join("\n");
 
   // Leading identity block: which employee this session is and which chat it
-  // runs in. The spawning-chat line is added only for group chats (root chats
-  // have no `from`). The old standalone `Employee ID: {ID}` line is merged in
-  // here, so the prompt states the id exactly once.
+  // runs in. The assistant's session lives in the boss's root chat, so label
+  // its `chatId` as such — otherwise the model cannot connect the wake prompt's
+  // task-group id to the boss-facing `chatId` it must post to. For an employee
+  // group session, the spawning chat (`fromChatId`) is likewise the boss's chat.
   const identityLines = [
-    `This is your working session as employee ${employeeId} in chat ${chatId}.`,
+    isAssistant
+      ? `This is your working session as employee ${employeeId} in chat ${chatId}, the boss's chat.`
+      : `This is your working session as employee ${employeeId} in chat ${chatId}.`,
   ];
   if (fromChatId != null) {
     identityLines.push(
-      `This task group chat was created from chat ${fromChatId}.`,
+      `This task group chat was created from chat ${fromChatId}, the boss's chat.`,
     );
   }
   const identityBlock = identityLines.join("\n");
