@@ -143,4 +143,5 @@
   margin: 0;
   font-size: var(--imb-text-sm);
   color: var(--imb-muted);
+  user-select: text;
 }

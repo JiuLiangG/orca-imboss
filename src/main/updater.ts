@@ -3,6 +3,7 @@ import { t } from "@shared/l10n";
 import type { UpdaterState } from "@shared/types";
 import { app, Notification } from "electron";
 import electronUpdater from "electron-updater";
+import { basename } from "path";
 import { getSetting, setSetting } from "./db/settings";
 import { focusMainWindow, sendToRenderer } from "./notifications";
 
@@ -35,6 +36,28 @@ let notifyNextResult = false;
 /** Current updater state (also pushed to the renderer on every transition). */
 export function getUpdaterState(): UpdaterState {
   return state;
+}
+
+/**
+ * True when `error` is the ENOENT raised while electron-updater reads its
+ * update config (`<resources>/app-update.yml` in packaged builds,
+ * `dev-app-update.yml` during development). A build without that file cannot
+ * self-update at all, so the raw filesystem error must never reach the UI.
+ */
+function isMissingUpdateConfigError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const { code, path } = error as { code?: unknown; path?: unknown };
+  if (code !== "ENOENT" || typeof path !== "string") return false;
+  const file = basename(path);
+  return file === "app-update.yml" || file === "dev-app-update.yml";
+}
+
+/** Normalize any updater failure into a user-facing, localized message. */
+function describeUpdaterError(error: unknown): string {
+  if (isMissingUpdateConfigError(error)) {
+    return t("Automatic updates are unavailable in this build.");
+  }
+  return error instanceof Error ? error.message : String(error);
 }
 
 /**
@@ -110,7 +133,7 @@ export function initUpdater(): void {
     setState({
       status: "error",
       progress: null,
-      error: error instanceof Error ? error.message : String(error),
+      error: describeUpdaterError(error),
       checkedAt: Date.now(),
     });
   });
@@ -156,7 +179,7 @@ async function runCheck(): Promise<UpdaterState> {
     setState({
       status: "error",
       progress: null,
-      error: error instanceof Error ? error.message : String(error),
+      error: describeUpdaterError(error),
       checkedAt: Date.now(),
     });
     return state;
@@ -185,7 +208,7 @@ export async function downloadUpdate(): Promise<UpdaterState> {
       setState({
         status: "error",
         progress: null,
-        error: error instanceof Error ? error.message : String(error),
+        error: describeUpdaterError(error),
       });
     }
     return state;

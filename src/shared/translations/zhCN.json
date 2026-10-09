@@ -29,6 +29,7 @@
   "At least one model ID is required.": "至少需要一个模型 ID。",
   "Attach": "添加附件",
   "Authorization=Bearer xxx": "Authorization=Bearer xxx",
+  "Automatic updates are unavailable in this build.": "此版本不支持自动更新。",
   "Base URL must be a valid http(s) URL.": "接口地址必须是有效的 http(s) 地址。",
   "Base URL": "接口地址",
   "Bot token": "Bot Token",
