@@ -180,7 +180,7 @@ export function SettingsAbout(): React.JSX.Element {
         <div className="imb-about-update">
           <Button
             variant="secondary"
-            style={{ fontSize: "var(--imb-text-base)" }}
+            style={{ fontSize: "var(--imb-text-sm)" }}
             onClick={() => void checkNow()}
             loading={updater.status === "checking"}
             disabled={busy}
