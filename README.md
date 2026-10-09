@@ -1,65 +1,108 @@
-# orca-imboss
+[简体中文](README.zh.md) · [Website](https://orca-studio.com/imboss/)
 
-An Electron desktop application for running an **AI agent as your "one man company"**, with a chat-based (WeChat–style) interface. You chat with your **assistant**, who coordinates **employees** (sub-agents) to complete work, collects feedback, and reports progress back to you.
+# imboss
 
----
+**Run a one-man company with AI employees — from a single chat window.**
 
-## Highlights
-
-- **Chat-first experience** — interact by chatting, like a desktop messaging app (WeChat-style design tokens, light/dark/system theme + 18 accent colors).
-- **Single window, single instance** — one instance, one window, always.
-- **Multi-language** — English (default) + Simplified Chinese (`zh-CN`). Language defaults to the system locale and can be changed in settings (stored in the database).
-- **SQLite data layer** (`better-sqlite3`) — WAL mode: concurrent reads, serial writes.
-- **Agent via the Pi SDK** — embedded, isolated environment that never touches your system Pi agent.
-- **Automatic updates** — `electron-updater` against GitHub; multi-platform packaging via GitHub Actions.
+imboss is a desktop app where you chat with an AI **Assistant** who acts as your chief of staff. Tell it what you need, and it assembles a team of AI **Employees**, hands out the work in group chats, keeps you posted on progress, and reports back with the result.
 
 ---
 
-## Architecture
+## How it works
 
-The app follows the standard Electron process model, with the **data layer and agent living only in the main process** for security and native-module support.
-
-```
-┌────────────────────────── Renderer (React) ──────────────────────────┐
-│  App shell (nav 208px | list 300px | detail 1fr)                     │
-│  modules: chat · employees · models · mcp · skills · settings        │
-└───────────────▲───────────────────────────────────▲──────────────────┘
-        IPC │ (invoke / events)             IPC │ (invoke / events)
-┌───────────────┴───────────────────────────────────┴──────────────────┐
-│                        Preload (contextBridge)                       │
-│             imb: locale, settings, agents, events                    │
-└───────────────┬───────────────────────────────────┬──────────────────┘
-         invoke │                                   │ push events
-┌───────────────┴───────────────────────────────────┴──────────────────┐
-│                         Main process (Node)                          │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌────────────────────┐  │
-│  │  SQLite (WAL)    │  │  Pi Agent SDK    │  │  Update / Notify   │  │
-│  │  SQLite schema   │  │  (~/.imboss)     │  │  electron-updater  │  │
-│  └──────────────────┘  └──────────────────┘  └────────────────────┘  │
-└──────────────────────────────────────────────────────────────────────┘
-```
-
-**Data flow**
-
-- The **renderer never touches SQLite directly**; it goes through IPC.
-- Data is read/written in the main process by services (`src/main/db/*`).
-- **Agent events** stream from the Pi session (in main) to the renderer over IPC.
+1. **You talk to the Assistant.** Chat naturally, like messaging a colleague — no prompt engineering required.
+2. **The Assistant plans and staffs the job.** It breaks your request into tasks, checks who is already on the team, recruits specialists when the right expertise is missing, and opens a task group chat.
+3. **Employees do the work.** Each employee has its own role, persona, model, tools, skills and MCP servers. They research, write, run commands and produce real deliverables.
+4. **The team coordinates itself.** Employees @-mention each other, ask questions and report results, while the Assistant keeps the task moving and unblocks them.
+5. **You stay in control.** Follow progress in the chat, answer questions when a decision is genuinely needed, and receive the finished result.
 
 ---
 
-## Tech stack
+## Features
 
-| Concern         | Choice                                                               |
-| --------------- | -------------------------------------------------------------------- |
-| Runtime         | Electron 44                                                          |
-| Build           | `@desirecore/electron-vite` (Vite 7)                                 |
-| UI              | React 19 + TypeScript (hand-written components + CSS, no UI library) |
-| Package manager | pnpm                                                                 |
-| Data layer      | `better-sqlite3` (WAL, synchronous, atomic writes)                   |
-| Agent           | `@earendil-works/pi-coding-agent` (Pi SDK)                           |
-| Localization    | `src/shared/l10n.ts`                                                 |
-| Auto-update     | `electron-updater` + GitHub releases                                 |
-| Packaging       | `electron-builder` (DMG / NSIS / AppImage)                           |
+### Chat-first workspace
+
+- A WeChat-style messaging UI: conversation list, message bubbles, avatars, unread badges and read state.
+- Attachments (images and files), rich Markdown rendering with syntax highlighting and KaTeX math.
+- Dedicated **ask cards** collect structured answers from you, while **progress cards** show the live step-by-step status of a task.
+- One window, one instance — always.
+
+### An Assistant that manages the team
+
+- A built-in Assistant (the team's orchestrator) plots the plan, recruits employees, creates task chats, assigns work and reports to you.
+- You can edit its persona and system prompt, and tune how it works, from the assistant's detail page.
+
+### A team of employees
+
+- **Recruit** specialists with a name, role and persona; pick an avatar and a system prompt that defines who they are and how they work.
+- Give each employee their own **model** and **thinking level**, or let them follow the app default.
+- Equip employees with **skills**, **MCP servers**, and optional **scheduled tasks**.
+- Employees reply in the same language you use, and report their results back to whoever assigned the task.
+
+### Task group chats
+
+- The Assistant opens a **group chat** per task and @-mentions the employees who own each part.
+- Group chats are readable from your chat list, showing the full back-and-forth between your employees.
+- Questions, answers and reports flow through the same messaging model, so you can audit how any result was produced.
+
+### Model providers
+
+- Connect providers through a curated list (Anthropic, OpenAI, DeepSeek, Google, Groq, MiniMax, Moonshot AI, OpenRouter, xAI, Xiaomi, Z.ai, GitHub Copilot, and more) or add a **custom** provider.
+- Supports OpenAI-compatible completions/responses, Anthropic Messages and Google Generative AI APIs.
+- Fetch available models with one click, and keep API keys masked behind an explicit reveal.
+
+### MCP servers
+
+- Register [Model Context Protocol](https://modelcontextprotocol.io) servers over **stdio** or **streamable HTTP**.
+- Assign servers per employee, so each session only connects the tools it actually needs.
+- Per-server environment variables, plus app-wide environment variables shared with tools and servers.
+
+### Skills
+
+- Install [Agent Skills](https://agentskills.io) from local folders (`SKILL.md` is the source of truth) and uninstall them when done.
+- Choose exactly which skills each employee can use.
+- The Assistant ships with built-in skills that let it manage MCP servers, manage skills and build mini apps on your behalf.
+
+### Mini Apps
+
+- Run local web apps directly in the sidebar next to your chats.
+- A mini app is just a folder with a `metadata.json`; it can be a static page or a process you start (with command, args, cwd and env).
+- Mini apps keep running while you move between modules, and the Assistant can create and debug them for you.
+
+### Scheduled tasks
+
+- Give an employee a cron schedule to wake it up automatically — e.g. a daily digest or a periodic check.
+- See the next run time and toggle tasks on or off per employee.
+- Tasks run while the app is open (in-process scheduler, not an OS service).
+
+### Messaging integrations
+
+- Bridge imboss to your real messaging apps so you can work from your phone:
+  - **WeChat** via the official iLink Bot (QR-code login).
+  - **QQ** via the official QQ Bot platform.
+  - **Telegram** via a @BotFather bot.
+- Owner accounts are whitelisted: messages you send are treated as yours, and the Assistant's replies are delivered back to that conversation.
+- Inbound images and files are imported into the chat; outbound messages are forwarded natively.
+
+### Notifications
+
+- Native desktop notifications when an agent posts while the window is in the background — click to jump straight to the chat.
+- Unread counters and a notification sound keep you aware of new activity.
+
+### Appearance and language
+
+- Light, dark and system themes with **18 accent colors**.
+- English and Simplified Chinese, defaulting to your system locale.
+
+### Private and local by design
+
+- Everything lives in a single folder in your home directory: **`~/.imboss`** — database, avatars, agent environment, sessions and mini apps.
+- imboss manages its own isolated Pi agent environment, so it never touches a system-wide Pi installation.
+- API keys are stored locally with restrictive file permissions.
+
+### Automatic updates
+
+- Built-in updates from GitHub releases: get notified, download and restart to apply.
 
 ---
 
@@ -69,53 +112,33 @@ The app follows the standard Electron process model, with the **data layer and a
 
 - Node.js >= 22
 - pnpm >= 9
-- For native modules: build tools (Xcode CLT on macOS, MSVC on Windows, `build-essential` on Linux)
+- Build tools for native modules (Xcode CLT on macOS, MSVC on Windows, `build-essential` on Linux)
 
-**Install & run**
+**Install and run**
 
 ```bash
-pnpm install            # installs deps and rebuilds native modules for Electron
-pnpm dev                # start electron-vite dev (with HMR)
+pnpm install            # install deps and rebuild native modules for Electron
+pnpm dev                # start the app with hot reload
+```
+
+On first launch, add a model provider in **Providers**, then say hello to your Assistant in **Chats**.
+
+---
+
+## Building
+
+```bash
+pnpm build              # typecheck + build
+pnpm dist:mac           # macOS (DMG + ZIP)
+pnpm dist:win           # Windows (NSIS installer)
+pnpm dist:linux         # Linux (AppImage)
 ```
 
 ---
 
-## Localization (i18n)
+## Under the hood
 
-- **English is the source of truth**: English text is passed directly to `t("...")`, so an English dictionary file is **not** required. When the active locale has no translation, `t()` returns the key (English) as-is.
-- Only the **`zh-CN`** dictionary is shipped (`src/shared/translations/zhCN.json`), mapping English keys to Simplified Chinese.
-- `src/shared/l10n.ts` exposes `setupL10N(locale, translations)`, `t(key, args?, locale?)`, and `getLocale()`.
-
----
-
-## Data layer
-
-The app uses **`better-sqlite3`** with **WAL mode** (`journal_mode = WAL`) for concurrent reads while writes remain serialized. The database lives in the main process only, at **`~/.imboss/db/imboss.db`** — inside the app's dedicated data folder (see below).
-
-- A lightweight migration runner (`src/main/db/migrations.ts`) tracks schema version via `PRAGMA user_version`. While unreleased, the schema is maintained directly in migration 0 (with a defensive "ensure columns" pass for dev-era databases).
-
----
-
-## Agent (Pi SDK)
-
-The agent is powered by the **Pi SDK** (`@earendil-works/pi-coding-agent`) and runs **in the main process**.
-
-- The app maintains its **own** Pi environment under **`~/.imboss/agent`** (`src/main/agent/environment.ts`): `auth.json` (provider API keys, 0600), `models.json` (custom providers/models), `skills/` and `sessions/` — so it **never touches your system Pi agent** (`~/.pi/agent`).
-- **Model providers** are managed in the models module (curated list or custom base URL + API key); configuration files are the source of truth, exclusively managed in the main process. API keys are masked in the UI (last 4 chars) and only revealed on explicit user action.
-- **Skills** can be imported from a local folder (`SKILL.md` is the source of truth) and uninstalled from the skills module; the UI is read-only for skill metadata.
-- **MCP servers** are configured in **`~/.imboss/agent/mcp.json`** (the SDK's `mcpServers` format, managed in the mcp module) and connected by the Pi SDK's built-in MCP extension; `src/main/agent/mcp.ts` builds the per-session `loadConfig` so each employee session only connects its assigned servers. `stdio` and `http` (streamable HTTP) transports are supported. stdio servers are spawned with `{ ...process.env, ...userEnv, ...serverEnv }`.
-- **User env vars** (Settings → General → “Environment variables”) reach every subprocess: the bash / PowerShell tools inject them via `spawnHook`, and stdio MCP servers get the merged env. Values support `$VAR` / `${VAR}` expansion against the app's own environment; precedence is process env → user env → per-server env.
-
-> **Current state:** `chat:send` runs a real per-message Pi session (`createAgentSession`) with the env-aware tools + the assistant's MCP servers, and persists the final assistant reply. Streaming events to the renderer and persistent per-chat sessions are still deferred.
-
----
-
-## Build & packaging targets
-
-| Platform | Target                                  |
-| -------- | --------------------------------------- |
-| macOS    | DMG (+ a companion ZIP for auto-update) |
-| Windows  | NSIS installer                          |
-| Linux    | AppImage                                |
-
-Packaging is configured in `electron-builder.yml`.
+- **Runtime** — Electron 44, React 19 + TypeScript, `electron-vite`.
+- **Data** — `better-sqlite3` in WAL mode, kept in the main process behind IPC.
+- **Agent** — the [Pi SDK](https://github.com/earendil-works/pi-coding-agent), isolated under `~/.imboss/agent`.
+- **Updates & packaging** — `electron-updater` and `electron-builder`.
