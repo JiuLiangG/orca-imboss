@@ -242,3 +242,13 @@ export function IconCopy(props: IconProps): React.JSX.Element {
     </svg>
   );
 }
+
+export function IconHelp(props: IconProps): React.JSX.Element {
+  return (
+    <svg {...base(props)} strokeWidth={1.8}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.35-1 .9-1 1.7v.3" />
+      <line x1="12" y1="17" x2="12" y2="17" />
+    </svg>
+  );
+}

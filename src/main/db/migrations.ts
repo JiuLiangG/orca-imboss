@@ -42,7 +42,13 @@ const MIGRATIONS: Array<(db: Database) => void> = [
         unread          INTEGER NOT NULL DEFAULT 0,
         created_at      INTEGER NOT NULL DEFAULT (CAST(strftime('%s', 'now') AS INTEGER)),
         last_message_at INTEGER NOT NULL DEFAULT 0,
-        from_chat_id    INTEGER
+        from_chat_id    INTEGER,
+        -- IM integration binding: which platform this conversation came from,
+        -- its stable platform conversation id, and the per-conversation reply
+        -- credential (e.g. the iLink context_token). All NULL for local chats.
+        source          TEXT,
+        source_session  TEXT,
+        source_context  TEXT
       );
 
       CREATE INDEX IF NOT EXISTS idx_chats_created_id
@@ -51,6 +57,14 @@ const MIGRATIONS: Array<(db: Database) => void> = [
       -- Link a group chat to the user chat that spawned it (from chat link).
       CREATE INDEX IF NOT EXISTS idx_chats_from
         ON chats(from_chat_id);
+
+      -- One app chat per (platform, session). NULL (local) chats are exempt.
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_chats_source_session
+        ON chats(source, source_session)
+        WHERE source IS NOT NULL AND source_session IS NOT NULL;
+
+      CREATE INDEX IF NOT EXISTS idx_chats_source
+        ON chats(source);
 
       CREATE TABLE IF NOT EXISTS messages (
         id                 INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -2,6 +2,7 @@ import { registerAgentSessionHandlers } from "./agent_session";
 import { registerChatHandlers } from "./chat";
 import { registerCronHandlers } from "./cron";
 import { registerEmployeeHandlers } from "./employee";
+import { registerIntegrationHandlers } from "./integrations";
 import { registerMcpHandlers } from "./mcp";
 import { registerMessageHandlers } from "./message";
 import { registerMiniAppHandlers } from "./miniapps";
@@ -31,4 +32,5 @@ export function registerIpcHandlers(): void {
   registerAgentSessionHandlers();
   registerEmployeeHandlers();
   registerSessionHandlers();
+  registerIntegrationHandlers();
 }

@@ -399,11 +399,9 @@ function createChatTool(
       // together. The assistant is deliberately skipped — it has no session in
       // a task group chat and reads it from its root-chat session instead.
       const { chat, sessionRecords } = db.transaction(() => {
-        const chat = dbChats.createChat(
-          input.title,
-          participants,
-          callingChatId,
-        );
+        const chat = dbChats.createChat(input.title, participants, {
+          fromChatId: callingChatId,
+        });
         const records: EmployeeSession[] = [];
         for (const pid of chat.participants) {
           if (pid === ASSISTANT_ID) continue;

@@ -2,6 +2,7 @@ import { ASSISTANT_ID } from "@shared/constants/employees";
 import type { ChatParticipantUpdate, MessageAttachment } from "@shared/types";
 import { ipcMain } from "electron";
 import { deliver, disposeForChat } from "../agent/session-queue";
+import { integrationManager } from "../integrations";
 import { maybeGenerateChatTitle } from "../agent/title-gen";
 import * as cron from "../cron";
 import * as dbChats from "../db/chats";
@@ -64,7 +65,16 @@ export function registerChatHandlers(): void {
 
   ipcMain.handle("chats:update", (_event, id: unknown, title: unknown) => {
     const safeId = assertInteger(id, "chat id");
-    return dbChats.updateChatTitle(safeId, assertString(title, "title"));
+    const updated = dbChats.updateChatTitle(
+      safeId,
+      assertString(title, "title"),
+    );
+    if (updated !== null) {
+      // Manual rename: keep every window's chat cache (list + header) in sync,
+      // mirroring the auto title-generation notification in `title-gen`.
+      sendToRenderer("chats:changed", { chatId: safeId });
+    }
+    return updated;
   });
 
   ipcMain.handle(
@@ -92,6 +102,10 @@ export function registerChatHandlers(): void {
     const removed = dbChats.deleteChats(chatIds) > 0;
     if (removed) {
       await Promise.all(records.map((r) => unlinkSessionFile(r.session)));
+      // Drop any platform media downloaded for these bridged chats.
+      await Promise.all(
+        chatIds.map((chatId) => integrationManager.deleteChatMedia(chatId)),
+      );
       // Keep every window in sync: chat caches + opened group-chat entries.
       sendToRenderer("chats:deleted", { chatIds });
     }

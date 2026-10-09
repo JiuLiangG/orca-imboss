@@ -10,6 +10,7 @@ import { getAgentRoot } from "./data-dir";
 import { initDatabase } from "./db";
 import { purgeDisabledEmployees } from "./db/employees";
 import { unlinkSessionFile } from "./db/sessions";
+import { initIntegrations, shutdownIntegrations } from "./integrations";
 import { registerIpcHandlers } from "./ipc";
 import { getResolvedLocale, initLocale } from "./locale";
 import { stopAllMiniAppServers, syncMiniAppIndex } from "./mini-apps";
@@ -56,6 +57,7 @@ app.on("before-quit", () => {
   cron.stopAll();
   stopAllMiniAppServers();
   void disposeAll();
+  void shutdownIntegrations();
 });
 
 app.on("activate", () => {
@@ -76,6 +78,9 @@ app.whenReady().then(() => {
   materializeBuiltinSkills();
   registerIpcHandlers();
   initTheme();
+
+  // Start enabled IM integrations (WeChat / QQ / Telegram) in the background.
+  void initIntegrations();
 
   createWindow();
 

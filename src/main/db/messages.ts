@@ -38,6 +38,39 @@ const MAX_ATTACH_NAME_LENGTH = 256;
 const MAX_ATTACH_TYPE_LENGTH = 128;
 const MAX_ATTACH_PATH_LENGTH = 4096;
 const MAX_ATTACH_SIZE = 50 * 1024 * 1024; // metadata only
+
+/**
+ * Synchronous observers notified after every successful `appendMessage`.
+ * Used by the IM integrations manager to forward agent output to a linked
+ * platform. Listeners must never throw and must not block the insert path —
+ * asynchronous work is the listener's responsibility (fire-and-forget).
+ */
+type MessageAppendedListener = (message: Message) => void;
+const appendedListeners = new Set<MessageAppendedListener>();
+
+/** Register an append observer; returns an unsubscribe function. */
+export function onMessageAppended(
+  listener: MessageAppendedListener,
+): () => void {
+  appendedListeners.add(listener);
+  return () => {
+    appendedListeners.delete(listener);
+  };
+}
+
+function emitMessageAppended(message: Message): void {
+  for (const listener of appendedListeners) {
+    try {
+      listener(message);
+    } catch (err) {
+      console.error(
+        "[messages] append listener failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+}
+
 const STEP_STATUSES: StepStatus[] = ["done", "busy", "pending"];
 
 const MAX_SEARCH_QUERY_LENGTH = 200;
@@ -179,7 +212,7 @@ export function appendMessage(
     root: chatRow.fromChatId === null,
   });
 
-  return toMessage({
+  const message = toMessage({
     id: Number(result.lastInsertRowid),
     chat_id: chatId,
     sender_employee_id: senderEmployeeId,
@@ -189,6 +222,8 @@ export function appendMessage(
     attachments: attachmentsJson,
     created_at: createdAt,
   });
+  emitMessageAppended(message);
+  return message;
 }
 
 /**

@@ -58,7 +58,7 @@ export function listChatSummaries(): ChatSummary[] {
   const rows = getDB()
     .prepare(
       `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
-              c.last_message_at,
+              c.source, c.last_message_at,
               (SELECT m.content FROM messages m
                WHERE m.chat_id = c.id AND m.kind <> 'ack'
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
@@ -81,7 +81,7 @@ export function getChatSummary(id: number): ChatSummary | null {
   const row = getDB()
     .prepare(
       `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
-              c.last_message_at,
+              c.source, c.last_message_at,
               (SELECT m.content FROM messages m
                WHERE m.chat_id = c.id AND m.kind <> 'ack'
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
@@ -150,7 +150,7 @@ export function listChatSummariesPage(
   const rows = db
     .prepare(
       `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
-              c.last_message_at,
+              c.source, c.last_message_at,
               (SELECT m.content FROM messages m
                WHERE m.chat_id = c.id AND m.kind <> 'ack'
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
@@ -204,6 +204,17 @@ export function addUnread(id: number, delta: number): number {
   return row?.unread ?? 0;
 }
 
+export interface CreateChatOptions {
+  /** Id of the chat that spawned this one; `null`/omitted = root chat. */
+  fromChatId?: number | null;
+  /** Platform this conversation is bridged to (IM integrations). */
+  source?: string | null;
+  /** Platform conversation id, stable per (source, session). */
+  sourceSession?: string | null;
+  /** Per-conversation reply credential (e.g. iLink `context_token`). */
+  sourceContext?: string | null;
+}
+
 /**
  * Create a group chat. Participants referencing unknown employees are
  * dropped defensively (participants is a JSON column, not FK-enforced).
@@ -211,8 +222,9 @@ export function addUnread(id: number, delta: number): number {
 export function createChat(
   title: string,
   participants: number[],
-  fromChatId?: number | null,
+  options: CreateChatOptions = {},
 ): Chat {
+  const { fromChatId } = options;
   const db = getDB();
   const safeTitle = title.trim();
   if (safeTitle.length > 200) throw new Error("Chat title is too long.");
@@ -229,6 +241,20 @@ export function createChat(
     fromChatId != null && Number.isSafeInteger(fromChatId) && fromChatId > 0
       ? fromChatId
       : null;
+  const safeSource =
+    typeof options.source === "string" && options.source.length > 0
+      ? options.source
+      : null;
+  const safeSession =
+    safeSource !== null &&
+    typeof options.sourceSession === "string" &&
+    options.sourceSession.length > 0
+      ? options.sourceSession
+      : null;
+  const safeContext =
+    safeSource !== null && typeof options.sourceContext === "string"
+      ? options.sourceContext
+      : null;
 
   // Guard against `lastInsertRowid` ever handing out our reserved-ish
   // sequence unexpectedly: chats start at 1 (assistant id 0 lives elsewhere).
@@ -237,10 +263,19 @@ export function createChat(
   // sorts to the top of the recency-ordered list.
   const result = db
     .prepare(
-      "INSERT INTO chats (title, participants, from_chat_id, created_at, last_message_at) " +
-        "VALUES (?, ?, ?, ?, ?)",
+      "INSERT INTO chats (title, participants, from_chat_id, source, source_session, source_context, created_at, last_message_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
-    .run(safeTitle, stringifyArray(unique), safeFrom, createdAt, createdAt);
+    .run(
+      safeTitle,
+      stringifyArray(unique),
+      safeFrom,
+      safeSource,
+      safeSession,
+      safeContext,
+      createdAt,
+      createdAt,
+    );
   return getChat(Number(result.lastInsertRowid)) as Chat;
 }
 
@@ -335,7 +370,15 @@ function toChat(row: ChatRow): Chat {
     unread: row.unread ?? 0,
     createdAt: row.created_at,
     fromChatId: row.from_chat_id ?? null,
+    source: normalizeSource(row.source),
   };
+}
+
+/** Coerce a stored `source` string to a known platform, else null. */
+function normalizeSource(value: string | null): Chat["source"] {
+  return value === "wechat" || value === "qq" || value === "telegram"
+    ? value
+    : null;
 }
 
 function toChatSummary(row: ChatSummaryRow): ChatSummary {

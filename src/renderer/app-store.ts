@@ -5,6 +5,9 @@ import type {
   ChatSummary,
   Employee,
   InstalledSkill,
+  IntegrationConfigPatch,
+  IntegrationPlatform,
+  IntegrationState,
   McpServer,
   MiniApp,
   ProviderInfo,
@@ -62,7 +65,7 @@ export function parseSessionKey(
 }
 
 /** Sections of the Settings module. Lifted here so main can deep-link to one. */
-export type SettingsSection = "general" | "theme" | "about";
+export type SettingsSection = "general" | "theme" | "integrations" | "about";
 
 /** True when running on macOS (native traffic lights stay, no custom buttons). */
 export const IS_MAC = imb.platform === "darwin";
@@ -164,6 +167,12 @@ export const appStore = proxy({
     },
     employees: {
       items: [] as Employee[],
+      loading: false,
+      loaded: false,
+      error: null as string | null,
+    },
+    integrations: {
+      state: null as IntegrationState | null,
       loading: false,
       loaded: false,
       error: null as string | null,
@@ -297,6 +306,66 @@ export const appStore = proxy({
     if (index >= 0) {
       appStore.data.employees.items.splice(index, 1);
     }
+  },
+
+  // --- Integrations -----------------------------------------------------------
+  async loadIntegrations(): Promise<void> {
+    if (appStore.data.integrations.loading) return;
+    appStore.data.integrations.loading = true;
+    appStore.data.integrations.error = null;
+    try {
+      appStore.data.integrations.state = await imb.integrations.getState();
+      appStore.data.integrations.loaded = true;
+    } catch (err) {
+      console.error(
+        "[data:integrations]",
+        err instanceof Error ? err.message : err,
+      );
+      appStore.data.integrations.error =
+        err instanceof Error ? err.message : String(err);
+    } finally {
+      appStore.data.integrations.loading = false;
+    }
+  },
+  ensureIntegrations(): void {
+    if (
+      !appStore.data.integrations.loaded &&
+      !appStore.data.integrations.loading
+    ) {
+      void appStore.loadIntegrations();
+    }
+  },
+  setIntegrationState(state: IntegrationState): void {
+    appStore.data.integrations.state = state;
+    appStore.data.integrations.loaded = true;
+    appStore.data.integrations.error = null;
+  },
+  async setIntegrationConfig(
+    platform: IntegrationPlatform,
+    patch: IntegrationConfigPatch,
+  ): Promise<void> {
+    appStore.setIntegrationState(
+      await imb.integrations.setConfig(platform, patch),
+    );
+  },
+  async setIntegrationEnabled(
+    platform: IntegrationPlatform,
+    enabled: boolean,
+  ): Promise<void> {
+    appStore.setIntegrationState(
+      await imb.integrations.setEnabled(platform, enabled),
+    );
+  },
+  async loginIntegration(platform: IntegrationPlatform): Promise<void> {
+    appStore.setIntegrationState(await imb.integrations.login(platform));
+  },
+  async logoutIntegration(platform: IntegrationPlatform): Promise<void> {
+    appStore.setIntegrationState(await imb.integrations.logout(platform));
+  },
+  async clearIntegrationContacts(platform: IntegrationPlatform): Promise<void> {
+    appStore.setIntegrationState(
+      await imb.integrations.clearContacts(platform),
+    );
   },
 
   // --- Skills -----------------------------------------------------------------
@@ -821,9 +890,25 @@ export async function initAppStore(): Promise<void> {
       console.error("[updater:getState]", err);
     });
 
+  // Integration config/status is pushed by main on every change (adapter
+  // connect/disconnect, QR progress). Fetch once too in case a change landed
+  // before the renderer subscribed.
+  imb.integrations.onState((state) => appStore.setIntegrationState(state));
+  void imb.integrations
+    .getState()
+    .then((state) => appStore.setIntegrationState(state))
+    .catch((err) => {
+      console.error("[integrations:getState]", err);
+    });
+
   // Update notification click → Settings → About (validate the IPC string).
   imb.settings.onFocusSection((section) => {
-    if (section === "general" || section === "theme" || section === "about") {
+    if (
+      section === "general" ||
+      section === "theme" ||
+      section === "integrations" ||
+      section === "about"
+    ) {
       void appStore.openSettings(section);
     }
   });

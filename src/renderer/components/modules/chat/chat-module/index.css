@@ -22,3 +22,45 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Platform label for a conversation bridged to an IM integration. */
+/* The wrap fills the (shrinkable) `.imb-list-row-name`; the title text
+   truncates while the platform chip stays visible. */
+.imb-chat-name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.imb-chat-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imb-chat-source {
+  flex: none;
+  padding: 0 6px;
+  border-radius: var(--imb-radius-pill);
+  font-size: var(--imb-text-xs);
+  line-height: 16px;
+  color: var(--imb-accent);
+  background: var(--imb-accent-soft);
+}
+
+/* Inline rename of the chat header title (double-click). The editor replaces
+   the static title and grows to fill the header row. */
+.imb-chat-title-editable {
+  cursor: text;
+  user-select: text;
+}
+
+.imb-chat-title-input {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  font-size: var(--imb-text-xl);
+  font-weight: 600;
+}

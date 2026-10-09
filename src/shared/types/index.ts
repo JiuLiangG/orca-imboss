@@ -4,6 +4,7 @@ export * from "./agents";
 export * from "./chats";
 export * from "./cron";
 export * from "./employees";
+export * from "./integrations";
 export * from "./mcp";
 export * from "./messages";
 export * from "./miniapps";

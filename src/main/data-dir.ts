@@ -77,6 +77,20 @@ export function getWorkDir(): string {
   return join(getDataRoot(), "workdir");
 }
 
+/** Path of the IM integration credentials/config file (`integrations.json`). */
+export function getIntegrationsPath(): string {
+  return join(getDataRoot(), "integrations.json");
+}
+
+/**
+ * Directory holding media downloaded from IM platforms
+ * (`<platform>/<chatId>/<file>`). Deleted per-chat when a bridged chat is
+ * removed.
+ */
+export function getIntegrationsMediaDir(): string {
+  return join(getDataRoot(), "integrations", "media");
+}
+
 /**
  * Create the full data-folder layout if missing and harden permissions.
  *
@@ -97,6 +111,7 @@ export function ensureDataDir(): void {
     getAgentSessionsDir(),
     getWorkDir(),
     getMiniAppsDir(),
+    getIntegrationsMediaDir(),
   ];
   for (const dir of dirs) {
     if (!existsSync(dir)) {

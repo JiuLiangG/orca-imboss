@@ -6,6 +6,7 @@ import { ListRow } from "../../../list-row";
 import "../../module-common.css";
 import { SettingsAbout } from "../settings-about";
 import { SettingsGeneral } from "../settings-general";
+import { SettingsIntegrations } from "../settings-integrations";
 import { SettingsTheme } from "../settings-theme";
 
 const SECTIONS: Array<{
@@ -19,6 +20,11 @@ const SECTIONS: Array<{
     descKey: "App language and basic settings",
   },
   { id: "theme", labelKey: "Theme", descKey: "Accent color and theme mode" },
+  {
+    id: "integrations",
+    labelKey: "Integrations",
+    descKey: "Connect WeChat, QQ and Telegram",
+  },
   { id: "about", labelKey: "About", descKey: "Version info" },
 ];
 
@@ -44,6 +50,8 @@ export function SettingsModule(): React.JSX.Element {
   const detail =
     settingsSection === "theme" ? (
       <SettingsTheme />
+    ) : settingsSection === "integrations" ? (
+      <SettingsIntegrations />
     ) : settingsSection === "about" ? (
       <SettingsAbout />
     ) : (

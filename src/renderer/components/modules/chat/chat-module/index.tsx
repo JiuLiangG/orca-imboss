@@ -1,4 +1,5 @@
 import { ASSISTANT_ID } from "@shared/constants/employees";
+import { INTEGRATION_LABEL_KEYS } from "@shared/constants/integrations";
 import { getLocale, t } from "@shared/l10n";
 import type {
   AgentStreamEvent,
@@ -17,11 +18,13 @@ import { Avatar } from "../../../avatar";
 import { Button } from "../../../button";
 import { ContextMenu, type ContextMenuState } from "../../../context-menu";
 import { EmployeeAvatar } from "../../../employee-avatar";
+import { Input } from "../../../input";
 import { ItemList } from "../../../item-list";
 import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
 import { Modal } from "../../../modal";
 import { SearchInput } from "../../../search-input";
+import { Tooltip } from "../../../tooltip";
 import { pairAskAnswers } from "../ask-answer";
 import { ChatInputBar } from "../chat-input-bar";
 import { MessageItem } from "../message-item";
@@ -66,6 +69,17 @@ export function ChatModule(): React.JSX.Element {
   const [runStatus, setRunStatus] = useState<Map<number, ChatRunStatus>>(
     () => new Map(),
   );
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  // Optimistic header title for a just-committed rename. Needed because the
+  // active list may be a search page that is not refreshed by `chats:changed`.
+  const [titleOverride, setTitleOverride] = useState<{
+    chatId: number;
+    title: string;
+  } | null>(null);
+  // Set on the first commit/cancel so the blur that follows (the input
+  // unmounts) cannot persist a second time.
+  const titleDoneRef = useRef(false);
   const threadRef = useRef<HTMLDivElement>(null);
   const selectedIdRef = useRef<number | null>(null);
   selectedIdRef.current = selectedId;
@@ -192,6 +206,14 @@ export function ChatModule(): React.JSX.Element {
     void imb.chats.markRead(selectedId);
     appStore.setChatUnread(selectedId, 0);
   }, [selectedId, loadMessages]);
+
+  // Switching chats abandons any in-progress rename and drops the optimistic
+  // title (the new chat's title comes from its own summary).
+  useEffect(() => {
+    titleDoneRef.current = true;
+    setEditingTitle(false);
+    setTitleOverride(null);
+  }, [selectedId]);
 
   // Subscribe this window to the selected chat's agent events. The session
   // itself is created lazily main-side on the first `chat:send` (via the
@@ -349,6 +371,52 @@ export function ChatModule(): React.JSX.Element {
 
   const selected = chats.find((chat) => chat.id === selectedId) ?? null;
 
+  // Raw effective title (accounts for the local rename override); the header
+  // applies `displayTitle` on top so an empty title still falls back.
+  const selectedRawTitle =
+    selected === null
+      ? ""
+      : titleOverride?.chatId === selected.id
+        ? titleOverride.title
+        : selected.title;
+  const selectedTitle = displayTitle(selectedRawTitle);
+
+  // Double-click the header title to rename inline. Enter/blur commits, Escape
+  // cancels; `titleDoneRef` guards against a double commit from the blur that
+  // fires when the input unmounts.
+  const beginTitleEdit = useCallback((): void => {
+    if (selected === null) return;
+    titleDoneRef.current = false;
+    setTitleDraft(selectedRawTitle);
+    setEditingTitle(true);
+  }, [selected, selectedRawTitle]);
+
+  const cancelTitleEdit = useCallback((): void => {
+    titleDoneRef.current = true;
+    setEditingTitle(false);
+  }, []);
+
+  const commitTitleEdit = useCallback(async (): Promise<void> => {
+    if (titleDoneRef.current) return;
+    titleDoneRef.current = true;
+    setEditingTitle(false);
+    if (selectedId === null) return;
+    const chatId = selectedId;
+    const next = titleDraft.trim();
+    const current = selectedRawTitle.trim();
+    // An empty title is a valid stored state (it would also re-enable
+    // auto-titling), and an unchanged value is a no-op: both revert silently.
+    if (next.length === 0 || next === current) return;
+    try {
+      const updated = await imb.chats.update(chatId, next);
+      if (updated !== null) {
+        setTitleOverride({ chatId, title: updated.title });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [selectedId, selectedRawTitle, titleDraft]);
+
   const listPane = (
     <ListPane
       title={t("Chats")}
@@ -388,7 +456,18 @@ export function ChatModule(): React.JSX.Element {
                 name={displayTitle(chat.title)}
               />
             }
-            name={displayTitle(chat.title)}
+            name={
+              <span className="imb-chat-name-wrap">
+                <span className="imb-chat-name-text">
+                  {displayTitle(chat.title)}
+                </span>
+                {chat.source && (
+                  <span className="imb-chat-source">
+                    {t(INTEGRATION_LABEL_KEYS[chat.source])}
+                  </span>
+                )}
+              </span>
+            }
             meta={formatChatTime(chat.lastAt, locale)}
             sub={previewText(chat.preview ?? "")}
             badge={
@@ -440,7 +519,44 @@ export function ChatModule(): React.JSX.Element {
         <div className="imb-chat-header-avatar">
           <EmployeeAvatar employeeId={0} size={36} />
         </div>
-        <div className="imb-chat-title">{displayTitle(selected.title)}</div>
+        {editingTitle ? (
+          <Input
+            className="imb-chat-title-input"
+            value={titleDraft}
+            maxLength={200}
+            autoFocus
+            aria-label={t("Double-click to rename chat")}
+            onChange={(event) => setTitleDraft(event.target.value)}
+            onFocus={(event) => event.currentTarget.select()}
+            onBlur={() => void commitTitleEdit()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void commitTitleEdit();
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                cancelTitleEdit();
+              }
+            }}
+          />
+        ) : (
+          <Tooltip
+            placement="bottom"
+            content={t("Double-click to rename chat")}
+          >
+            <div
+              className="imb-chat-title imb-chat-title-editable"
+              onDoubleClick={beginTitleEdit}
+            >
+              {selectedTitle}
+            </div>
+          </Tooltip>
+        )}
+        {selected.source && (
+          <span className="imb-chat-source">
+            {t(INTEGRATION_LABEL_KEYS[selected.source])}
+          </span>
+        )}
       </div>
       <div className="imb-thread" ref={threadRef} onScroll={handleThreadScroll}>
         {visibleMessages.map((message) => (

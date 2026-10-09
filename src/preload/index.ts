@@ -11,6 +11,10 @@ import type {
   EmployeeInput,
   EmployeeSession,
   InstalledSkill,
+  IntegrationConfigPatch,
+  IntegrationPlatform,
+  IntegrationQrState,
+  IntegrationState,
   McpServer,
   McpServerInput,
   Message,
@@ -306,6 +310,42 @@ const api = {
 
   models: {
     list: () => ipcRenderer.invoke("models:list") as Promise<ModelOption[]>,
+  },
+
+  integrations: {
+    getState: () =>
+      ipcRenderer.invoke("integrations:getState") as Promise<IntegrationState>,
+    setConfig: (platform: IntegrationPlatform, patch: IntegrationConfigPatch) =>
+      ipcRenderer.invoke(
+        "integrations:setConfig",
+        platform,
+        patch,
+      ) as Promise<IntegrationState>,
+    setEnabled: (platform: IntegrationPlatform, enabled: boolean) =>
+      ipcRenderer.invoke(
+        "integrations:setEnabled",
+        platform,
+        enabled,
+      ) as Promise<IntegrationState>,
+    login: (platform: IntegrationPlatform) =>
+      ipcRenderer.invoke(
+        "integrations:login",
+        platform,
+      ) as Promise<IntegrationState>,
+    logout: (platform: IntegrationPlatform) =>
+      ipcRenderer.invoke(
+        "integrations:logout",
+        platform,
+      ) as Promise<IntegrationState>,
+    clearContacts: (platform: IntegrationPlatform) =>
+      ipcRenderer.invoke(
+        "integrations:clearContacts",
+        platform,
+      ) as Promise<IntegrationState>,
+    onState: (cb: (state: IntegrationState) => void) =>
+      on<IntegrationState>("integrations:state", cb),
+    onQr: (cb: (qr: IntegrationQrState) => void) =>
+      on<IntegrationQrState>("integrations:qr", cb),
   },
 
   mcp: {

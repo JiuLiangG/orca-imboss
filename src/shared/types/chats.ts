@@ -1,3 +1,5 @@
+import type { IntegrationPlatform } from "./integrations";
+
 /** Summary view of a chat row (includes unread count). */
 export interface Chat {
   id: number;
@@ -8,6 +10,11 @@ export interface Chat {
   createdAt: number;
   /** Id of the user chat that spawned this group chat, or null for a root chat. */
   fromChatId: number | null;
+  /**
+   * Platform this conversation is bridged to (`null` for local-only chats).
+   * Doubles as the conversation's platform label in the UI.
+   */
+  source: IntegrationPlatform | null;
 }
 
 /** List item of the chat module: chat + derived last-message preview. */
@@ -36,6 +43,7 @@ export interface ChatRow {
   unread: number;
   created_at: number;
   from_chat_id: number | null;
+  source: string | null;
 }
 
 export interface ChatSummaryRow extends ChatRow {
