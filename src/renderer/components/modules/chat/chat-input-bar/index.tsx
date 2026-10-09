@@ -1,8 +1,10 @@
 import { MAX_USER_ATTACHMENTS } from "@shared/constants/attachments";
 import { t } from "@shared/l10n";
 import type { MessageAttachment } from "@shared/types";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useClickOutside } from "../../../../hooks/use-click-outside";
+import { useDropdownPosition } from "../../../../hooks/use-dropdown-position";
 import { useEscapeKey } from "../../../../hooks/use-escape-key";
 import { IconAttach, IconFile, IconImage, IconSend } from "../../../icons";
 import { Textarea } from "../../../textarea";
@@ -29,9 +31,11 @@ export function ChatInputBar({
   const [notice, setNotice] = useState<string | null>(null);
   const [popupOpen, setPopupOpen] = useState(false);
   const popupRef = useRef<HTMLDivElement>(null);
+  const popupMenuRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { panelStyle, positionPanel } = useDropdownPosition(popupRef);
 
   // A new chat resets the composer (draft/attachments) and lands the caret in
   // the input. `focusToken` starts at `0`, so mounting with an existing chat
@@ -45,8 +49,23 @@ export function ChatInputBar({
     textareaRef.current?.focus();
   }, [focusToken]);
 
-  useClickOutside(popupRef, () => setPopupOpen(false), popupOpen);
+  // The menu is portaled to `document.body`, so it lives outside `popupRef`;
+  // both count as "inside" for click-outside purposes.
+  const popupOutsideRefs = useMemo(() => [popupRef, popupMenuRef], []);
+  useClickOutside(popupOutsideRefs, () => setPopupOpen(false), popupOpen);
   useEscapeKey(() => setPopupOpen(false), popupOpen);
+
+  // Reposition the portaled menu if the viewport scrolls/resizes while open.
+  useEffect(() => {
+    if (!popupOpen) return;
+    const reposition = (): void => positionPanel();
+    window.addEventListener("resize", reposition);
+    document.addEventListener("scroll", reposition, true);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      document.removeEventListener("scroll", reposition, true);
+    };
+  }, [popupOpen, positionPanel]);
 
   const send = (): void => {
     const value = text.trim();
@@ -143,38 +162,62 @@ export function ChatInputBar({
               className="imb-attach-btn"
               aria-label={t("Attach")}
               title={t("Attach")}
-              onClick={() => setPopupOpen((v) => !v)}
+              onClick={() => {
+                if (popupOpen) {
+                  setPopupOpen(false);
+                  return;
+                }
+                positionPanel();
+                setPopupOpen(true);
+              }}
             >
               <IconAttach />
             </button>
-            {popupOpen && (
-              <div className="imb-attach-popup imb-open" role="menu">
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="imb-attach-popup-item"
-                  onClick={() => {
-                    setPopupOpen(false);
-                    imageInputRef.current?.click();
+            {popupOpen &&
+              panelStyle &&
+              createPortal(
+                <div
+                  ref={popupMenuRef}
+                  className="imb-attach-popup imb-open"
+                  role="menu"
+                  style={{
+                    position: "fixed",
+                    top: panelStyle.top,
+                    bottom: panelStyle.bottom,
+                    left: panelStyle.left,
+                    width: panelStyle.width,
+                    maxHeight: panelStyle.maxHeight,
+                    right: "auto",
+                    zIndex: 50,
                   }}
                 >
-                  <IconImage />
-                  <span>{t("Image")}</span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="imb-attach-popup-item"
-                  onClick={() => {
-                    setPopupOpen(false);
-                    fileInputRef.current?.click();
-                  }}
-                >
-                  <IconFile />
-                  <span>{t("File")}</span>
-                </button>
-              </div>
-            )}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="imb-attach-popup-item"
+                    onClick={() => {
+                      setPopupOpen(false);
+                      imageInputRef.current?.click();
+                    }}
+                  >
+                    <IconImage />
+                    <span>{t("Image")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="imb-attach-popup-item"
+                    onClick={() => {
+                      setPopupOpen(false);
+                      fileInputRef.current?.click();
+                    }}
+                  >
+                    <IconFile />
+                    <span>{t("File")}</span>
+                  </button>
+                </div>,
+                document.body,
+              )}
           </div>
           <button
             type="button"

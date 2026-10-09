@@ -191,11 +191,10 @@
   height: 18px;
 }
 
-/* attach popup */
+/* attach popup — portaled to `document.body` and fixed-positioned from the
+   attach button (see ChatInputBar), so the input card's rounded-corner
+   clipping can't truncate it. */
 .imb-attach-popup {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 0;
   display: flex;
   flex-direction: column;
   background: var(--imb-surface);
@@ -204,7 +203,6 @@
   box-shadow: var(--imb-elev-raised);
   min-width: 120px;
   padding: 4px 0;
-  z-index: 10;
 }
 
 .imb-attach-anchor {
