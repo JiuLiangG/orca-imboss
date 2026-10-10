@@ -7,3 +7,4 @@ out
 AGENTS.md
 .pi
 .npmrc
+tsconfig.node.tsbuildinfo

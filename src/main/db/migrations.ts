@@ -124,14 +124,6 @@ const MIGRATIONS: Array<(db: Database) => void> = [
         PRIMARY KEY (employee_id, chat_id)
       );
 
-      CREATE TABLE IF NOT EXISTS mcp_servers (
-        id          INTEGER PRIMARY KEY,
-        name        TEXT NOT NULL,
-        description TEXT NOT NULL DEFAULT '',
-        transport   TEXT NOT NULL DEFAULT 'stdio',
-        config      TEXT NOT NULL DEFAULT '{}'
-      );
-
       CREATE TABLE IF NOT EXISTS cron_jobs (
         id           TEXT PRIMARY KEY,
         chat_id      INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
