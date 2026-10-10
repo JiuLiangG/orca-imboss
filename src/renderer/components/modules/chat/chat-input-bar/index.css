@@ -1,8 +1,30 @@
 .imb-chat-input-wrap {
+  position: relative;
   flex: none;
   padding: var(--imb-space-1);
   background: var(--imb-surface);
   border-top: 1px solid var(--imb-border);
+}
+
+/* File-drop target hint (see ChatInputBar drag handlers). */
+.imb-drop-hint {
+  position: absolute;
+  inset: var(--imb-space-1);
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  border: 2px dashed var(--imb-accent);
+  border-radius: var(--imb-radius-md);
+  background: color-mix(in oklab, var(--imb-surface) 92%, transparent);
+  color: var(--imb-accent);
+  font-size: var(--imb-text-sm);
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.imb-drop-active .imb-chat-input-card {
+  border-color: var(--imb-accent);
 }
 
 .imb-chat-input-card {
