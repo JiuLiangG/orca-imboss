@@ -111,4 +111,8 @@
   .imb-bubble-chip {
     background: rgba(255, 255, 255, 0.2);
   }
+
+  .imb-msg.imb-self .imb-bubble-chip {
+    background: rgba(255, 255, 255, 0.2);
+  }
 }
