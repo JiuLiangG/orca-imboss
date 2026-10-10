@@ -22,7 +22,7 @@
     "dev": "electron-vite dev",
     "build": "pnpm run typecheck && electron-vite build",
     "postinstall": "electron-builder install-app-deps",
-    "dist:local": "pnpm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --dir && codesign --force --deep --sign DevSelfSign 'dist/mac-arm64/imboss.app'",
+    "dist:local": "pnpm run build && CSC_IDENTITY_AUTO_DISCOVERY=false ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ electron-builder --mac --dir && codesign --force --deep --sign DevSelfSign 'dist/mac-arm64/imboss.app'",
     "dist:win": "pnpm run build && electron-builder --win",
     "dist:mac": "pnpm run build && electron-builder --mac",
     "dist:linux": "pnpm run build && electron-builder --linux"
