@@ -47,10 +47,12 @@ app.on("second-instance", () => {
   }
 });
 
+// Closing the last window quits the app on every platform, including macOS:
+// the app has no reason to keep running in the background, so the red close
+// button (and the custom title-bar close) fully exits instead of leaving a
+// dock-persistent process.
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
+  app.quit();
 });
 
 app.on("before-quit", () => {

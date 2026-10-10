@@ -11,6 +11,9 @@ export interface GroupChatModuleProps {
   chatId: number;
 }
 
+/** Distance from the bottom (px) still considered "pinned" for auto-scroll. */
+const PIN_THRESHOLD = 32;
+
 /**
  * Read-only view of a group chat opened from a `chat`-kind card. Shows the
  * conversation history and live-updates on new messages; it never sends
@@ -24,6 +27,9 @@ export function GroupChatModule({
   const [messages, setMessages] = useState<Message[]>([]);
   const [error, setError] = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
+  // Whether the thread is scrolled to (near) the bottom. Auto-scroll only
+  // happens while pinned, so reading history is never interrupted.
+  const pinnedRef = useRef(true);
 
   const chat = openedChats.find((c) => c.id === chatId) ?? null;
 
@@ -48,10 +54,20 @@ export function GroupChatModule({
     return off;
   }, [chatId, loadMessages]);
 
+  // Auto-scroll to the newest message, but only while the user is pinned to
+  // the bottom. Incoming messages must not yank a user who scrolled up to read
+  // history.
   useEffect(() => {
     const el = threadRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && pinnedRef.current) el.scrollTop = el.scrollHeight;
   }, [messages]);
+
+  const handleScroll = useCallback((): void => {
+    const el = threadRef.current;
+    if (!el) return;
+    pinnedRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight <= PIN_THRESHOLD;
+  }, []);
 
   const content = (
     <>
@@ -65,7 +81,7 @@ export function GroupChatModule({
         </div>
         <div className="imb-chat-title">{chat?.title ?? t("Conversation")}</div>
       </div>
-      <div className="imb-thread" ref={threadRef}>
+      <div className="imb-thread" ref={threadRef} onScroll={handleScroll}>
         {messages.length === 0 ? (
           <div className="imb-chat-empty-detail">{t("No messages yet")}</div>
         ) : (
