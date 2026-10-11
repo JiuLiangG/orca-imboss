@@ -15,6 +15,15 @@ export interface GroupChatModuleProps {
 const PIN_THRESHOLD = 32;
 
 /**
+ * Per-chat thread scroll store surviving module unmounts.
+ */
+interface GroupChatScroll {
+  scrollTop: number;
+  pinned: boolean;
+}
+const groupChatScrollStore = new Map<number, GroupChatScroll>();
+
+/**
  * Read-only view of a group chat opened from a `chat`-kind card. Shows the
  * conversation history and live-updates on new messages; it never sends
  * (`ChatInputBar` is absent), never binds an agent session, and never touches
@@ -27,9 +36,10 @@ export function GroupChatModule({
   const [messages, setMessages] = useState<Message[]>([]);
   const [error, setError] = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
-  // Whether the thread is scrolled to (near) the bottom. Auto-scroll only
-  // happens while pinned, so reading history is never interrupted.
   const pinnedRef = useRef(true);
+  const restoreScrollRef = useRef<{ chatId: number; scrollTop: number } | null>(
+    null,
+  );
 
   const chat = openedChats.find((c) => c.id === chatId) ?? null;
 
@@ -42,6 +52,10 @@ export function GroupChatModule({
   }, []);
 
   useEffect(() => {
+    const saved = groupChatScrollStore.get(chatId);
+    pinnedRef.current = saved ? saved.pinned : true;
+    restoreScrollRef.current =
+      saved && !saved.pinned ? { chatId, scrollTop: saved.scrollTop } : null;
     void loadMessages(chatId);
   }, [chatId, loadMessages]);
 
@@ -54,20 +68,30 @@ export function GroupChatModule({
     return off;
   }, [chatId, loadMessages]);
 
-  // Auto-scroll to the newest message, but only while the user is pinned to
-  // the bottom. Incoming messages must not yank a user who scrolled up to read
-  // history.
+  // Auto-scroll to newest message while pinned, or restore previous scroll position.
   useEffect(() => {
     const el = threadRef.current;
-    if (el && pinnedRef.current) el.scrollTop = el.scrollHeight;
-  }, [messages]);
+    if (!el) return;
+    const restore = restoreScrollRef.current;
+    if (restore && restore.chatId === chatId) {
+      el.scrollTop = restore.scrollTop;
+      restoreScrollRef.current = null;
+      return;
+    }
+    if (pinnedRef.current) el.scrollTop = el.scrollHeight;
+  }, [messages, chatId]);
 
   const handleScroll = useCallback((): void => {
     const el = threadRef.current;
     if (!el) return;
-    pinnedRef.current =
+    const pinned =
       el.scrollHeight - el.scrollTop - el.clientHeight <= PIN_THRESHOLD;
-  }, []);
+    pinnedRef.current = pinned;
+    groupChatScrollStore.set(chatId, {
+      scrollTop: el.scrollTop,
+      pinned,
+    });
+  }, [chatId]);
 
   const content = (
     <>

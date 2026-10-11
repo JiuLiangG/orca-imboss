@@ -46,6 +46,12 @@ const REFRESH_DELAY = 150;
 /** Distance from the bottom (px) still considered "pinned" for auto-scroll. */
 const PIN_THRESHOLD = 32;
 
+interface SessionScroll {
+  scrollTop: number;
+  pinned: boolean;
+}
+const sessionScrollStore = new Map<string, SessionScroll>();
+
 /**
  * Read-only view of one `(employee, chat)` agent session.
  *
@@ -70,10 +76,23 @@ export function AgentSessionModule({
   // Any live mutation bumps the version so the ref-based live state re-renders.
   const [version, bump] = useReducer((n: number) => n + 1, 0);
 
+  const sessionKeyStr = `${employeeId}/${chatId}`;
   const threadRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
+  const restoreScrollRef = useRef<{ key: string; scrollTop: number } | null>(
+    null,
+  );
   const refreshTimer = useRef<number | null>(null);
   const disposedRef = useRef(false);
+
+  useEffect(() => {
+    const saved = sessionScrollStore.get(sessionKeyStr);
+    pinnedRef.current = saved ? saved.pinned : true;
+    restoreScrollRef.current =
+      saved && !saved.pinned
+        ? { key: sessionKeyStr, scrollTop: saved.scrollTop }
+        : null;
+  }, [sessionKeyStr]);
 
   const session = openedSessions.find(
     (s) => s.employeeId === employeeId && s.chatId === chatId,
@@ -295,18 +314,30 @@ export function AgentSessionModule({
     return off;
   }, [handleEvent]);
 
-  // Auto-scroll to the newest content while the user is pinned to the bottom.
+  // Auto-scroll to the newest content while pinned, or restore saved scroll position.
   useEffect(() => {
     const el = threadRef.current;
-    if (el && pinnedRef.current) el.scrollTop = el.scrollHeight;
-  }, [entries, version, loading]);
+    if (!el) return;
+    const restore = restoreScrollRef.current;
+    if (restore && restore.key === sessionKeyStr && !loading) {
+      el.scrollTop = restore.scrollTop;
+      restoreScrollRef.current = null;
+      return;
+    }
+    if (pinnedRef.current) el.scrollTop = el.scrollHeight;
+  }, [entries, version, loading, sessionKeyStr]);
 
   const handleScroll = useCallback((): void => {
     const el = threadRef.current;
     if (!el) return;
-    pinnedRef.current =
+    const pinned =
       el.scrollHeight - el.scrollTop - el.clientHeight <= PIN_THRESHOLD;
-  }, []);
+    pinnedRef.current = pinned;
+    sessionScrollStore.set(sessionKeyStr, {
+      scrollTop: el.scrollTop,
+      pinned,
+    });
+  }, [sessionKeyStr]);
 
   const live = liveRef.current;
   const liveBlocks = live
