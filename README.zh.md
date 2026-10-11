@@ -6,7 +6,7 @@
 
 imboss 是一款桌面应用：你与一位担任「幕僚长」的 AI **助理**对话，告诉它你的需求，它会组建一支 AI **员工**团队，在群聊里派发任务、实时同步进展，并最终把成果汇报给你。
 
----
+<img width="1938" height="1412" alt="imboss" src="https://github.com/user-attachments/assets/e785e2e1-145a-436b-a1e6-975710ffbd24" />
 
 ## 工作原理
 
@@ -15,8 +15,6 @@ imboss 是一款桌面应用：你与一位担任「幕僚长」的 AI **助理*
 3. **员工开始干活。** 每位员工都有自己的角色、人设、模型、工具、技能与 MCP 服务，能调研、写作、执行命令并产出真实成果。
 4. **团队自行协作。** 员工之间通过 @ 提及、提问与汇报结果，助理则推动任务前进、及时解困。
 5. **你始终掌控全局。** 在对话中跟进进展，只在真正需要拍板时回答问题，最后收到完整结果。
-
----
 
 ## 功能特性
 
@@ -104,8 +102,6 @@ imboss 是一款桌面应用：你与一位担任「幕僚长」的 AI **助理*
 
 - 内置基于 GitHub Releases 的更新能力：收到提醒、下载并重启即可应用新版本。
 
----
-
 ## 快速开始
 
 **环境要求**
@@ -123,8 +119,6 @@ pnpm dev                # 启动应用，支持热更新
 
 首次启动后，先在**模型服务商**中添加一个服务商，然后到**对话**里和你的助理打个招呼吧。
 
----
-
 ## 构建
 
 ```bash
@@ -133,8 +127,6 @@ pnpm dist:mac           # macOS（DMG + ZIP）
 pnpm dist:win           # Windows（NSIS 安装包）
 pnpm dist:linux         # Linux（AppImage）
 ```
-
----
 
 ## 许可说明
 
@@ -145,16 +137,12 @@ imboss 采用**双重许可**模式：
 
 若你依据 GPL-3.0 使用 imboss，就需履行其全部义务，包括以相同许可开放你的衍生作品。但请注意，履行 GPL-3.0 本身**并不**授予企业使用权限：只要在企业范围内使用，都需要商业许可。若你无法或不愿履行 GPL-3.0，或者需要企业使用，则需要商业许可。
 
----
-
 ## 技术实现
 
 - **运行时** —— Electron 44、React 19 + TypeScript、`electron-vite`。
 - **数据** —— `better-sqlite3`（WAL 模式），仅驻留主进程，通过 IPC 访问。
 - **智能体** —— [Pi SDK](https://github.com/earendil-works/pi-coding-agent)，隔离运行于 `~/.imboss/agent`。
 - **更新与打包** —— `electron-updater` 与 `electron-builder`。
-
----
 
 ## Buy me a coffee
 
