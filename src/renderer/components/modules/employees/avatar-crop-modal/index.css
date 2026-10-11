@@ -1,0 +1,102 @@
+.imb-avatar-crop-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--imb-space-4);
+  user-select: none;
+}
+
+.imb-crop-viewport {
+  position: relative;
+  width: 320px;
+  height: 320px;
+  background: #121212;
+  border-radius: var(--imb-radius-lg);
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.imb-crop-viewport:active {
+  cursor: grabbing;
+}
+
+.imb-crop-canvas {
+  width: 320px;
+  height: 320px;
+  display: block;
+  user-select: none;
+}
+
+.imb-crop-controls {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--imb-space-3);
+  padding: 0 var(--imb-space-2);
+}
+
+.imb-crop-controls span {
+  font-size: var(--imb-text-sm);
+  color: var(--imb-muted);
+  flex-shrink: 0;
+}
+
+.imb-crop-slider {
+  flex: 1;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--imb-border);
+  border-radius: var(--imb-radius-full);
+  outline: none;
+  cursor: pointer;
+  transition: background var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-crop-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--imb-accent);
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-crop-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.imb-crop-slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: var(--imb-focus-ring);
+}
+
+.imb-crop-preview-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--imb-space-4);
+  font-size: var(--imb-text-sm);
+  color: var(--imb-muted);
+}
+
+.imb-crop-mini-preview {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--imb-radius-md);
+  overflow: hidden;
+  background: var(--imb-surface);
+  border: 1px solid var(--imb-border);
+  position: relative;
+  flex-shrink: 0;
+}
+
+.imb-crop-mini-preview canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
