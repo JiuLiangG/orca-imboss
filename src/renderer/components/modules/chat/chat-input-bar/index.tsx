@@ -17,10 +17,17 @@ import {
 import { useClickOutside } from "../../../../hooks/use-click-outside";
 import { useDropdownPosition } from "../../../../hooks/use-dropdown-position";
 import { useEscapeKey } from "../../../../hooks/use-escape-key";
-import { IconAttach, IconFile, IconFolder, IconImage, IconSend } from "../../../icons";
+import {
+  IconAttach,
+  IconFile,
+  IconFolder,
+  IconImage,
+  IconSend,
+} from "../../../icons";
 import { Textarea } from "../../../textarea";
 import { Tooltip } from "../../../tooltip";
 import "./index.css";
+import { MentionPopup } from "./mention-popup";
 
 export interface ChatInputBarProps {
   disabled?: boolean;
@@ -106,6 +113,25 @@ export function ChatInputBar({
   const [notice, setNotice] = useState<string | null>(null);
   const [popupOpen, setPopupOpen] = useState(false);
   const [dropActive, setDropActive] = useState(false);
+
+  // Mention state
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [mentionCaret, setMentionCaret] = useState({ start: 0, end: 0 });
+
+  const allEmployees = snap.data.employees.items;
+  const filteredEmployees = useMemo(() => {
+    if (!mentionOpen) return [];
+    const q = mentionQuery.toLowerCase().trim();
+    if (!q) return allEmployees;
+    return allEmployees.filter(
+      (e) =>
+        e.name.toLowerCase().includes(q) ||
+        e.role.toLowerCase().includes(q) ||
+        String(e.id).includes(q),
+    );
+  }, [mentionOpen, mentionQuery, allEmployees]);
   const popupRef = useRef<HTMLDivElement>(null);
   const popupMenuRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -243,7 +269,9 @@ export function ChatInputBar({
 
   const addFiles = (files: readonly File[] | null): void => {
     if (!files || files.length === 0) return;
-    addEntries(Array.from(files).map((file) => ({ file, kind: "file" as const })));
+    addEntries(
+      Array.from(files).map((file) => ({ file, kind: "file" as const })),
+    );
   };
 
   const addEntries = (
@@ -315,7 +343,10 @@ export function ChatInputBar({
     }
     if (!directories || directories.length === 0) return;
     const next: PendingAttachment[] = [];
-    for (const directory of directories.slice(0, capCount(directories.length))) {
+    for (const directory of directories.slice(
+      0,
+      capCount(directories.length),
+    )) {
       next.push({
         id: nextAttachmentId(),
         attachment: {
@@ -445,10 +476,95 @@ export function ChatInputBar({
   };
 
   const onKeyDown = (event: React.KeyboardEvent): void => {
+    if (mentionOpen && filteredEmployees.length > 0) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setMentionIndex((i) => (i + 1) % filteredEmployees.length);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setMentionIndex(
+          (i) => (i - 1 + filteredEmployees.length) % filteredEmployees.length,
+        );
+        return;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        const chosen = filteredEmployees[mentionIndex] ?? filteredEmployees[0];
+        if (chosen) insertMention(chosen);
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMentionOpen(false);
+        return;
+      }
+    }
+
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       send();
     }
+  };
+
+  const checkMentionTrigger = (val: string, cursor: number): void => {
+    const before = val.slice(0, cursor);
+    const match = /(?:^|\s)@([^\s@]*)$/.exec(before);
+    if (match) {
+      const query = match[1];
+      const atStart = match.index + (match[0].startsWith("@") ? 0 : 1);
+      setMentionQuery(query);
+      setMentionCaret({ start: atStart, end: cursor });
+      setMentionOpen(true);
+      setMentionIndex(0);
+    } else {
+      setMentionOpen(false);
+    }
+  };
+
+  const syncDraftText = (val: string, cursor?: number): void => {
+    appStore.setChatDraftText(chatId, val);
+    const pos = cursor ?? textareaRef.current?.selectionStart ?? val.length;
+    checkMentionTrigger(val, pos);
+  };
+
+  const onTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>): void => {
+    syncDraftText(
+      e.target.value,
+      e.target.selectionStart ?? e.target.value.length,
+    );
+  };
+
+  const onTextSelect = (): void => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      checkMentionTrigger(textarea.value, textarea.selectionStart ?? 0);
+    }
+  };
+
+  const insertMention = (employee: {
+    id: number;
+    name?: string;
+    role?: string;
+  }): void => {
+    const mentionTag = `@${employee.name || employee.role || employee.id} `;
+    const prevText = text;
+    const nextText =
+      prevText.slice(0, mentionCaret.start) +
+      mentionTag +
+      prevText.slice(mentionCaret.end);
+    appStore.setChatDraftText(chatId, nextText);
+    setMentionOpen(false);
+
+    setTimeout(() => {
+      const textarea = textareaRef.current;
+      if (textarea) {
+        textarea.focus();
+        const newCursor = mentionCaret.start + mentionTag.length;
+        textarea.setSelectionRange(newCursor, newCursor);
+      }
+    }, 0);
   };
 
   return (
@@ -513,6 +629,13 @@ export function ChatInputBar({
           </div>
         )}
         {notice !== null && <div className="imb-attach-notice">{notice}</div>}
+        <MentionPopup
+          open={mentionOpen}
+          employees={filteredEmployees}
+          selectedIndex={mentionIndex}
+          onSelect={insertMention}
+          onHoverIndex={setMentionIndex}
+        />
         <Textarea
           ref={textareaRef}
           className="imb-chat-input-textarea"
@@ -524,10 +647,11 @@ export function ChatInputBar({
           disabled={disabled}
           minHeight={0}
           onInput={(e) =>
-            appStore.setChatDraftText(chatId, e.currentTarget.value)
+            syncDraftText(e.currentTarget.value, e.currentTarget.selectionStart)
           }
-          onChange={(e) => appStore.setChatDraftText(chatId, e.target.value)}
-          onValueCommit={(val) => appStore.setChatDraftText(chatId, val)}
+          onChange={onTextChange}
+          onValueCommit={(val) => syncDraftText(val)}
+          onSelect={onTextSelect}
           onKeyDown={onKeyDown}
         />
         <div className="imb-chat-input-actions">
