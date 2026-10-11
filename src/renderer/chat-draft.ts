@@ -41,6 +41,29 @@ export function nextAttachmentId(): number {
 }
 
 /**
+ * Copy an attachment read out of the Valtio draft into a plain object.
+ *
+ * The composer reads its draft through `useSnapshot`, so every nested object —
+ * including `PendingAttachment.attachment` — is a `proxy-compare` proxy, and
+ * proxies cannot cross the Electron IPC boundary (V8's structured clone raises
+ * "An object could not be cloned."). Rebuilding the known fields also pins the
+ * shape the main process validates.
+ */
+export function toPlainAttachment(
+  attachment: MessageAttachment,
+): MessageAttachment {
+  const plain: MessageAttachment = {
+    name: attachment.name,
+    size: attachment.size,
+    type: attachment.type,
+  };
+  if (typeof attachment.path === "string" && attachment.path.length > 0) {
+    plain.path = attachment.path;
+  }
+  return plain;
+}
+
+/**
  * Release every renderer-only preview URL held by a draft. Called when a draft
  * is cleared (send / new chat / chat deletion); revoking an already-revoked URL
  * is a no-op, so callers need no extra bookkeeping.

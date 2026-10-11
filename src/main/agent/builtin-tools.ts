@@ -253,12 +253,16 @@ function toMessageBrief(message: Message): MessageBrief {
   };
   if (message.steps && message.steps.length > 0) brief.steps = message.steps;
   if (message.attachments && message.attachments.length > 0) {
-    // Strip the on-disk `path`: the model has its own filesystem tools and
-    // must not receive local paths through the chat brief.
+    // Forward the on-disk `path` too: the model has filesystem tools and needs
+    // the location to read the attached file. Paths are captured by the app
+    // (picker via `webUtils`, tool attachments via `resolve`), never invented
+    // by the model, and are only exposed to agents that may already read the
+    // chat.
     brief.attachments = message.attachments.map((attachment) => ({
       name: attachment.name,
       size: attachment.size,
       type: attachment.type,
+      ...(attachment.path ? { path: attachment.path } : {}),
     }));
     if (
       message.attachmentsTotal !== null &&

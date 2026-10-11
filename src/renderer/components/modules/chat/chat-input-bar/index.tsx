@@ -8,6 +8,7 @@ import { appStore, useAppSync } from "../../../../app-store";
 import {
   EMPTY_DRAFT,
   nextAttachmentId,
+  toPlainAttachment,
   type PendingAttachment,
 } from "../../../../chat-draft";
 import { useClickOutside } from "../../../../hooks/use-click-outside";
@@ -128,9 +129,11 @@ export function ChatInputBar({
     const value = text.trim();
     if (disabled) return;
     if (!value && attachments.length === 0) return;
+    // Rebuild each attachment as a plain object: `attachments` comes from the
+    // Valtio snapshot, and its proxies cannot cross the IPC boundary.
     onSend(
       value,
-      attachments.map((item) => item.attachment),
+      attachments.map((item) => toPlainAttachment(item.attachment)),
     );
     // Clear the per-chat draft; the store revokes its preview URLs.
     appStore.clearChatDraft(chatId);
