@@ -6,7 +6,7 @@
 
 imboss is a desktop app where you chat with an AI **Assistant** who acts as your chief of staff. Tell it what you need, and it assembles a team of AI **Employees**, hands out the work in group chats, keeps you posted on progress, and reports back with the result.
 
----
+<img width="1938" height="1412" alt="imboss" src="https://github.com/user-attachments/assets/e785e2e1-145a-436b-a1e6-975710ffbd24" />
 
 ## How it works
 
@@ -15,8 +15,6 @@ imboss is a desktop app where you chat with an AI **Assistant** who acts as your
 3. **Employees do the work.** Each employee has its own role, persona, model, tools, skills and MCP servers. They research, write, run commands and produce real deliverables.
 4. **The team coordinates itself.** Employees @-mention each other, ask questions and report results, while the Assistant keeps the task moving and unblocks them.
 5. **You stay in control.** Follow progress in the chat, answer questions when a decision is genuinely needed, and receive the finished result.
-
----
 
 ## Features
 
@@ -104,8 +102,6 @@ imboss is a desktop app where you chat with an AI **Assistant** who acts as your
 
 - Built-in updates from GitHub releases: get notified, download and restart to apply.
 
----
-
 ## Getting started
 
 **Prerequisites**
@@ -123,8 +119,6 @@ pnpm dev                # start the app with hot reload
 
 On first launch, add a model provider in **Providers**, then say hello to your Assistant in **Chats**.
 
----
-
 ## Building
 
 ```bash
@@ -133,8 +127,6 @@ pnpm dist:mac           # macOS (DMG + ZIP)
 pnpm dist:win           # Windows (NSIS installer)
 pnpm dist:linux         # Linux (AppImage)
 ```
-
----
 
 ## License
 
@@ -145,16 +137,12 @@ imboss is **dual-licensed**:
 
 If you use imboss under GPL-3.0 you must comply with all of its terms, including making your derivative work available under the same license. Note that GPL-3.0 compliance alone does **not** grant enterprise use: any use by or within an enterprise requires a commercial license. If you cannot or do not want to comply with GPL-3.0, or if you need enterprise use, a commercial license is required.
 
----
-
 ## Under the hood
 
 - **Runtime** — Electron 44, React 19 + TypeScript, `electron-vite`.
 - **Data** — `better-sqlite3` in WAL mode, kept in the main process behind IPC.
 - **Agent** — the [Pi SDK](https://github.com/earendil-works/pi-coding-agent), isolated under `~/.imboss/agent`.
 - **Updates & packaging** — `electron-updater` and `electron-builder`.
-
----
 
 ## Buy me a coffee
 
