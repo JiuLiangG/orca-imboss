@@ -153,3 +153,11 @@ If you use imboss under GPL-3.0 you must comply with all of its terms, including
 - **Data** — `better-sqlite3` in WAL mode, kept in the main process behind IPC.
 - **Agent** — the [Pi SDK](https://github.com/earendil-works/pi-coding-agent), isolated under `~/.imboss/agent`.
 - **Updates & packaging** — `electron-updater` and `electron-builder`.
+
+---
+
+## Buy me a coffee
+
+If you think the software I have developed is helpful to you and would like to give recognition and support, you may buy me a coffee using following link. Thank you for your support and attention.
+
+<a href='https://ko-fi.com/R5R213X8MC' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi1.png?v=3' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>

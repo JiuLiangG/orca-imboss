@@ -153,3 +153,11 @@ imboss 采用**双重许可**模式：
 - **数据** —— `better-sqlite3`（WAL 模式），仅驻留主进程，通过 IPC 访问。
 - **智能体** —— [Pi SDK](https://github.com/earendil-works/pi-coding-agent)，隔离运行于 `~/.imboss/agent`。
 - **更新与打包** —— `electron-updater` 与 `electron-builder`。
+
+---
+
+## Buy me a coffee
+
+如果您认为我所开发的软件对您有所帮助，并且愿意给予肯定和支持，不妨扫描下方的二维码进行打赏。感谢您的支持与关注。
+
+![wx](https://user-images.githubusercontent.com/3410293/236807219-cf21180a-e7f8-44a9-abde-86e1e6df999b.jpg)
