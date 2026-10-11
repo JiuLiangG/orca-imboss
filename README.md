@@ -136,6 +136,17 @@ pnpm dist:linux         # Linux (AppImage)
 
 ---
 
+## License
+
+imboss is **dual-licensed**:
+
+- **Open source — GPL-3.0.** Free for personal use. The full text is in [LICENSE](LICENSE).
+- **Commercial license.** Required for **any use by or within an enterprise, including purely internal use**. See [LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md) and contact [kefroth@outlook.com](mailto:kefroth@outlook.com) for details.
+
+If you use imboss under GPL-3.0 you must comply with all of its terms, including making your derivative work available under the same license. Note that GPL-3.0 compliance alone does **not** grant enterprise use: any use by or within an enterprise requires a commercial license. If you cannot or do not want to comply with GPL-3.0, or if you need enterprise use, a commercial license is required.
+
+---
+
 ## Under the hood
 
 - **Runtime** — Electron 44, React 19 + TypeScript, `electron-vite`.

@@ -136,6 +136,17 @@ pnpm dist:linux         # Linux（AppImage）
 
 ---
 
+## 许可说明
+
+imboss 采用**双重许可**模式：
+
+- **开源许可 —— GPL-3.0。** 个人使用免费，条款全文见 [LICENSE](LICENSE)。
+- **商业许可。** **只要在企业范围内使用 imboss——包括仅限内部使用——都需要付费授权**，详见 [LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md)；如有需要，请联系 [kefroth@outlook.com](mailto:kefroth@outlook.com) 了解细节。
+
+若你依据 GPL-3.0 使用 imboss，就需履行其全部义务，包括以相同许可开放你的衍生作品。但请注意，履行 GPL-3.0 本身**并不**授予企业使用权限：只要在企业范围内使用，都需要商业许可。若你无法或不愿履行 GPL-3.0，或者需要企业使用，则需要商业许可。
+
+---
+
 ## 技术实现
 
 - **运行时** —— Electron 44、React 19 + TypeScript、`electron-vite`。
