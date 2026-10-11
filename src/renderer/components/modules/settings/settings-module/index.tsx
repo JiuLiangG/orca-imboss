@@ -7,6 +7,7 @@ import "../../module-common.css";
 import { SettingsAbout } from "../settings-about";
 import { SettingsGeneral } from "../settings-general";
 import { SettingsIntegrations } from "../settings-integrations";
+import { SettingsNetwork } from "../settings-network";
 import { SettingsTheme } from "../settings-theme";
 
 const SECTIONS: Array<{
@@ -24,6 +25,11 @@ const SECTIONS: Array<{
     id: "integrations",
     labelKey: "Integrations",
     descKey: "Connect WeChat, QQ and Telegram",
+  },
+  {
+    id: "network",
+    labelKey: "Network",
+    descKey: "Proxy for outbound model requests",
   },
   { id: "about", labelKey: "About", descKey: "Version info" },
 ];
@@ -52,6 +58,8 @@ export function SettingsModule(): React.JSX.Element {
       <SettingsTheme />
     ) : settingsSection === "integrations" ? (
       <SettingsIntegrations />
+    ) : settingsSection === "network" ? (
+      <SettingsNetwork />
     ) : settingsSection === "about" ? (
       <SettingsAbout />
     ) : (

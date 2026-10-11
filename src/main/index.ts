@@ -10,6 +10,7 @@ import { getAgentRoot } from "./data-dir";
 import { initDatabase } from "./db";
 import { purgeDisabledEmployees } from "./db/employees";
 import { unlinkSessionFile } from "./db/sessions";
+import { applyStoredHttpProxy } from "./http-proxy";
 import { initIntegrations, shutdownIntegrations } from "./integrations";
 import { registerIpcHandlers } from "./ipc";
 import { getResolvedLocale, initLocale } from "./locale";
@@ -71,6 +72,10 @@ app.whenReady().then(() => {
   app.setAppUserModelId("com.orcastudio.imboss");
 
   initDatabase();
+  // Apply the persisted outbound proxy before any network work (integrations,
+  // model-catalog refresh, provider "Fetch models") so it takes effect from the
+  // very first request.
+  applyStoredHttpProxy();
   // Localize main-process strings (native dialogs, OS notifications) from the
   // stored/system locale. Must run after the database is available.
   initLocale();

@@ -148,7 +148,7 @@ export function ProviderConfigFields({
         <Textarea
           id={`${idPrefix}-model-ids`}
           value={value.modelIds}
-          placeholder={"model-a\nmodel-b"}
+          placeholder={"gpt-4o\nanthropic/claude-sonnet-4.5"}
           minHeight={72}
           mono
           onChange={(e) => set({ modelIds: e.target.value })}

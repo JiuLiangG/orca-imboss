@@ -25,7 +25,17 @@ import { getAuthPath, getModelsPath } from "../data-dir";
  */
 
 const MODELS_FETCH_TIMEOUT_MS = 10_000;
+
+/** Provider ids remain strict: they are object keys, not display data. */
 const SAFE_ID_RE = /^[A-Za-z0-9._-]+$/;
+
+/**
+ * Model ids are opaque data (never file paths or shell arguments), and relay /
+ * aggregator providers use wider ids — OpenRouter's `anthropic/claude-opus-4.5`,
+ * Bedrock's `amazon.nova-2-lite-v1:0`, Cloudflare's `@cf/...`, `~`/`+` variants.
+ * The allow-list covers every character seen in the SDK's bundled catalogs.
+ */
+const MODEL_ID_RE = /^[A-Za-z0-9._:/@~+-]+$/;
 
 export async function listProviders(): Promise<ProviderInfo[]> {
   const [auth, models] = await Promise.all([
@@ -312,7 +322,7 @@ function validateModelIds(modelIds: string[] | undefined): string[] {
   }
   if (modelIds.length > 256) throw new Error("Too many model ids.");
   for (const mid of modelIds) {
-    if (typeof mid !== "string" || !SAFE_ID_RE.test(mid) || mid.length > 128) {
+    if (typeof mid !== "string" || !MODEL_ID_RE.test(mid) || mid.length > 128) {
       throw new Error(`Invalid model id: ${String(mid).slice(0, 32)}`);
     }
   }

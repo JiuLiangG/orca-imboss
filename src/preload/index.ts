@@ -52,6 +52,14 @@ const api = {
       on<string>("settings:focus", cb),
   },
 
+  network: {
+    /** Persisted outbound HTTP(S) proxy URL (empty = direct). */
+    getProxy: () => ipcRenderer.invoke("network:getProxy") as Promise<string>,
+    /** Validate + persist + apply immediately; throws on an invalid URL. */
+    setProxy: (url: string) =>
+      ipcRenderer.invoke("network:setProxy", url) as Promise<void>,
+  },
+
   workdir: {
     get: () => ipcRenderer.invoke("workdir:get") as Promise<WorkDirState>,
     choose: () =>

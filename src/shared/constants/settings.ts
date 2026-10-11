@@ -5,6 +5,8 @@ export const SettingKeys = {
   DefaultThinkingLevel: "agent.defaultThinkingLevel",
   UserEnv: "agent.userEnv",
   WorkDir: "agent.workdir",
+  /** Outbound HTTP(S) proxy URL for model/provider traffic (empty = direct). */
+  HttpProxy: "network.httpProxy",
   ThemeMode: "ui.theme.mode",
   ThemeColor: "ui.theme.color",
   NavCollapse: "ui.navCollapsed",

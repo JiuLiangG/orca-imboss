@@ -6,6 +6,7 @@ import { registerIntegrationHandlers } from "./integrations";
 import { registerMcpHandlers } from "./mcp";
 import { registerMessageHandlers } from "./message";
 import { registerMiniAppHandlers } from "./miniapps";
+import { registerNetworkHandlers } from "./network";
 import { registerProviderHandlers } from "./provider";
 import { registerSessionHandlers } from "./session";
 import { registerSettingsHandlers } from "./settings";
@@ -20,6 +21,7 @@ export function registerIpcHandlers(): void {
   registerSettingsHandlers();
   registerWorkdirHandlers();
   registerThemeHandlers();
+  registerNetworkHandlers();
   registerWindowHandlers();
   registerUpdaterHandlers();
   registerChatHandlers();

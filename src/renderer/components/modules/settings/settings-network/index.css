@@ -1,0 +1,16 @@
+.imb-settings-proxy-row {
+  display: flex;
+  align-items: center;
+  gap: var(--imb-space-2);
+}
+
+.imb-settings-proxy-row .imb-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.imb-settings-proxy-saved {
+  flex-shrink: 0;
+  color: var(--imb-muted);
+  font-size: var(--imb-text-sm);
+}
