@@ -47,8 +47,8 @@ import { wakeAgent } from "./session-queue";
  *
  * The tool set is role-based: the assistant (employee id 0) gets the
  * orchestration tools (`imb_set_employees`, `imb_create_chat`,
- * `imb_list_employees`, `imb_notify`, `imb_progress`, `imb_ask`) plus
- * `imb_send_message` and `imb_read_chat`; a participant employee gets
+ * `imb_add_participant`, `imb_list_employees`, `imb_notify`, `imb_progress`,
+ * `imb_ask`) plus `imb_send_message` and `imb_read_chat`; a participant gets
  * `imb_send_message` and `imb_read_chat`, plus `imb_set_cronjob` and/or
  * `imb_remove_cronjob` when the employee opted in via their "Linked MCP" list.
  * The cron tools are deliberately NOT part of the assistant's tool set, and
@@ -135,7 +135,7 @@ async function resolveAttachments(
 
 /**
  * Shared send pipeline used by the `send_message` tool and by internal sends
- * (`create_chat`, `add_participant.join_notice`).
+ * (`create_chat`, `add_participant`).
  *
  * The tool enforces that the sender is an active non-disabled participant of
  * the chat; internal sends pass `skipSenderCheck` so the orchestrating
@@ -289,6 +289,48 @@ function assertActiveEmployee(employeeId: number): void {
   }
 }
 
+/**
+ * Display name for orchestration messages: `#ID name`, or `#ID` for an
+ * unnamed employee. Matches the employee list/detail `#ID` convention.
+ */
+function employeeDisplayName(employeeId: number): string {
+  const name = getEmployee(employeeId)?.name.trim() ?? "";
+  return name.length > 0 ? `#${employeeId} ${name}` : `#${employeeId}`;
+}
+
+/**
+ * Record one Pi session per employee participant of a chat and return the
+ * records to materialize after commit.
+ *
+ * Must be called inside a DB transaction: the synchronous `setSession` writes
+ * join the caller's transaction. The assistant is deliberately skipped — it has
+ * no session in a task group chat and reads it from its root-chat session
+ * instead. The on-disk files are materialized separately/best-effort by
+ * `materializeSessions`, so a file problem never rolls back committed DB.
+ */
+function recordParticipantSessions(
+  chatId: number,
+  employeeIds: number[],
+): EmployeeSession[] {
+  const records: EmployeeSession[] = [];
+  for (const pid of employeeIds) {
+    if (pid === ASSISTANT_ID) continue;
+    const path = sessionPathFor(chatId, pid);
+    dbSessions.setSession(pid, chatId, path);
+    records.push({ employeeId: pid, chatId, session: path });
+  }
+  return records;
+}
+
+/** Materialize recorded session files; best-effort, never rolls back the DB. */
+async function materializeSessions(records: EmployeeSession[]): Promise<void> {
+  await Promise.all(
+    records.map((r) =>
+      materializeSessionFile(r.session).catch(() => undefined),
+    ),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // tools
 // ---------------------------------------------------------------------------
@@ -396,32 +438,20 @@ function createChatTool(
 
       const db = getDB();
       // Atomic: chat row + one session row per employee participant commit
-      // together. The assistant is deliberately skipped — it has no session in
-      // a task group chat and reads it from its root-chat session instead.
+      // together. The assistant is deliberately skipped (see
+      // `recordParticipantSessions`).
       const { chat, sessionRecords } = db.transaction(() => {
         const chat = dbChats.createChat(input.title, participants, {
           fromChatId: callingChatId,
         });
-        const records: EmployeeSession[] = [];
-        for (const pid of chat.participants) {
-          if (pid === ASSISTANT_ID) continue;
-          const path = sessionPathFor(chat.id, pid);
-          dbSessions.setSession(pid, chat.id, path);
-          records.push({
-            employeeId: pid,
-            chatId: chat.id,
-            session: path,
-          });
-        }
-        return { chat, sessionRecords: records };
+        return {
+          chat,
+          sessionRecords: recordParticipantSessions(chat.id, chat.participants),
+        };
       })();
 
       // Best-effort: materialize session files; never roll back committed DB.
-      await Promise.all(
-        sessionRecords.map((r) =>
-          materializeSessionFile(r.session).catch(() => undefined),
-        ),
-      );
+      await materializeSessions(sessionRecords);
 
       // Link the new chat back to its spawning chat with a `chat`-kind card.
       // No `notify` on purpose: creating a chat must NOT start any participant's
@@ -704,20 +734,23 @@ function removeCronjobTool(employeeId: number): AnyPiTool {
   };
 }
 
-/** `imb_add_participant` — add members to a chat, notify, and prompt their agents. */
+/** `imb_add_participant` — add members to a chat and prepare their sessions. */
 function addParticipantTool(env: AgentEnvironment): AnyPiTool {
   return {
     name: "imb_add_participant",
     label: "Add participant",
     description:
-      "Add participants to an existing chat, send a join notice, and prompt each new participant's agent session.",
+      "Add participants to an existing chat and initialize one persistent agent " +
+      "session per new participant. A join notice is posted into " +
+      "the chat. New participants are NOT notified or started automatically — " +
+      "assign their work afterwards with `imb_send_message`, passing their ids in " +
+      "`notify` to wake them.",
     promptSnippet: "add members to a chat",
     parameters: Type.Object({
       chatId: Type.Integer({ minimum: 1 }),
       participants: Type.Array(
         Type.Object({
           employeeID: Type.Integer({ minimum: 1 }),
-          prompt: Type.String({ minLength: 1, maxLength: 20000 }),
         }),
         { minItems: 1 },
       ),
@@ -725,46 +758,53 @@ function addParticipantTool(env: AgentEnvironment): AnyPiTool {
     execute: async (_toolCallId, params) => {
       const input = params as {
         chatId: number;
-        participants: { employeeID: number; prompt: string }[];
+        participants: { employeeID: number }[];
       };
       const chat = dbChats.getChat(input.chatId);
       if (!chat) throw new Error("Chat does not exist.");
 
-      // Only genuinely-new, active employees are added.
-      const newParticipants = input.participants.filter(
-        (p) => !chat.participants.includes(p.employeeID),
-      );
-      const add = newParticipants.map((p) => p.employeeID);
-      for (const p of newParticipants) assertActiveEmployee(p.employeeID);
-      if (add.length > 0) {
-        const names = add.map(
-          (id) => dbEmployees.getEmployee(id)?.name || `#${id}`,
-        );
-        const updated = dbChats.updateChatParticipants(input.chatId, {
-          add,
-        });
-        if (!updated) throw new Error("Chat does not exist.");
-
-        // Sender = orchestrating assistant; relaxed participant check (risk #1).
-        await performSendMessage(env, {
-          senderEmployeeId: ASSISTANT_ID,
-          chatId: input.chatId,
-          kind: "join_notice",
-          content: `New participant(s) joined: ${names.join(", ")}`,
-          skipSenderCheck: true,
-        });
-
-        for (const participant of newParticipants) {
-          await wakeAgent(
-            participant.employeeID,
-            input.chatId,
-            participant.prompt,
-          );
-        }
-        return toolResult({ chatId: updated.id, added: add });
+      // Only genuinely-new, active employees are added; dedupe defensively.
+      const add = [
+        ...new Set(
+          input.participants
+            .map((p) => p.employeeID)
+            .filter((id) => !chat.participants.includes(id)),
+        ),
+      ];
+      for (const id of add) assertActiveEmployee(id);
+      if (add.length === 0) {
+        return toolResult({ chatId: chat.id, added: [] });
       }
 
-      return toolResult({ chatId: chat.id, added: [] });
+      // Atomic: the participant edit + one session row per new participant
+      // commit together. The assistant is skipped by the helper — it has no
+      // session in a task group chat and reads it from its root-chat session.
+      const { updated, sessionRecords } = getDB().transaction(() => {
+        const updated = dbChats.updateChatParticipants(input.chatId, { add });
+        if (!updated) throw new Error("Chat does not exist.");
+        return {
+          updated,
+          sessionRecords: recordParticipantSessions(updated.id, add),
+        };
+      })();
+
+      // Best-effort: materialize session files; never roll back committed DB.
+      await materializeSessions(sessionRecords);
+
+      // Join notice with the new members' `#ID name` display names. No `notify`
+      // on purpose: adding members must NOT start any participant's agent. They
+      // are woken only when an assignment reaches them through
+      // `imb_send_message` with a `notify` list.
+      const names = add.map(employeeDisplayName);
+      await performSendMessage(env, {
+        senderEmployeeId: ASSISTANT_ID,
+        chatId: updated.id,
+        kind: "text",
+        content: `New participant(s) joined: ${names.join(", ")}`,
+        skipSenderCheck: true,
+      });
+
+      return toolResult({ chatId: updated.id, added: add });
     },
   };
 }
@@ -842,18 +882,13 @@ function askTool(env: AgentEnvironment): AnyPiTool {
   };
 }
 
-// `add_participant` is intentionally NOT registered for any role (see plan
-// §10.1); the definition is kept in the file for reference and re-enabled by
-// uncommenting the push in `createTeamToolDefinitions`. Referenced here so the
-// disabled definition is not reported as an unused local.
-void addParticipantTool;
-
 /**
  * Build the role-based tool set for the calling agent.
  *
  * - Assistant (id 0): orchestration tools — `imb_set_employees`,
- *   `imb_create_chat`, `imb_read_chat`, `imb_list_employees`, `imb_notify`,
- *   `imb_progress`, `imb_ask`; plus `imb_send_message`. No cron tools.
+ *   `imb_create_chat`, `imb_add_participant`, `imb_read_chat`,
+ *   `imb_list_employees`, `imb_notify`, `imb_progress`, `imb_ask`; plus
+ *   `imb_send_message`. No cron tools.
  * - Participant employee: `imb_send_message`, `imb_read_chat`; plus
  *   `imb_set_cronjob` / `imb_remove_cronjob` when the corresponding opt-in
  *   marker is present in `mcp`. Employees have no structured ask/answer
@@ -869,6 +904,7 @@ export function createTeamToolDefinitions(
   if (isAssistant) {
     tools.push(setEmployeesTool());
     tools.push(createChatTool(env, chatId));
+    tools.push(addParticipantTool(env));
     tools.push(listEmployeesTool());
     tools.push(notifyTool());
     // Progress cards are assistant-only: the tool hardcodes the sender to the
@@ -891,8 +927,5 @@ export function createTeamToolDefinitions(
   }
   tools.push(sendMessageTool(env));
   tools.push(readChatTool(employeeId));
-  // add_participant is intentionally disabled for all roles (see plan §10.1);
-  // kept in the file for reference and updated if re-enabled.
-  // tools.push(addParticipantTool(env));
   return tools;
 }

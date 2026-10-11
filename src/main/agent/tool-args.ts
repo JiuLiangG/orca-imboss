@@ -141,6 +141,14 @@ function summarizeKnown(
       const suffix = count > 0 ? ` · ${count} participants` : "";
       return title ? `${truncate(title, MAX_VALUE)}${suffix}` : suffix.slice(3);
     }
+    case "imb_add_participant": {
+      const chatId = text(record.chatId);
+      const count = Array.isArray(record.participants)
+        ? record.participants.length
+        : 0;
+      const suffix = count > 0 ? ` · ${count} participants` : "";
+      return chatId ? `chat ${chatId}${suffix}` : suffix.slice(3);
+    }
     case "imb_read_chat": {
       const chatId = text(record.chatId);
       return chatId ? `chat ${chatId}` : "";
