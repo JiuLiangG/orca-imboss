@@ -16,6 +16,11 @@ import type {
 } from "@shared/types";
 import { createRef } from "react";
 import { proxy, useSnapshot } from "valtio";
+import {
+  revokeDraftUrls,
+  type ChatDraft,
+  type PendingAttachment,
+} from "./chat-draft";
 import { updateLocale } from "./locale";
 import { playNotificationSound } from "./sound";
 import { updateThemeState } from "./theme";
@@ -118,6 +123,16 @@ export const appStore = proxy({
   // Pending chat to select when the chat module is mounted (set by an OS
   // notification click). Cleared once consumed.
   focusChatId: null as number | null,
+
+  // Per-chat composer drafts (text + pending attachments). Kept here so the
+  // chat module can be unmounted on a module switch without losing input.
+  // Session-only: deliberately not persisted.
+  chatDrafts: {} as Record<number, ChatDraft>,
+
+  // Root chat currently selected in the chat module. Distinct from
+  // `activeChatId` (an opened *group* chat). Written by `ChatModule` so the
+  // selection survives a module switch; session-only.
+  activeRootChatId: null as number | null,
 
   // Active Settings section. Lifted out of `SettingsModule` so main can
   // deep-link to a section (the update notification opens "about").
@@ -563,6 +578,10 @@ export const appStore = proxy({
     sortChats();
   },
   removeChat(id: number): void {
+    appStore.clearChatDraft(id);
+    if (appStore.activeRootChatId === id) {
+      appStore.activeRootChatId = null;
+    }
     const index = appStore.data.chats.items.findIndex((c) => c.id === id);
     if (index >= 0) {
       appStore.data.chats.items.splice(index, 1);
@@ -601,6 +620,46 @@ export const appStore = proxy({
     if (chat) {
       chat.unread = Math.max(0, unread);
     }
+  },
+
+  // --- Chat composer drafts (session-only, per chat) --------------------------
+  /**
+   * Draft for `chatId`, allocating an empty one on demand so callers can mutate
+   * it in place. In render, prefer the allocation-free read path
+   * `appStore.chatDrafts[chatId] ?? EMPTY_DRAFT` (`src/renderer/chat-draft.ts`).
+   */
+  ensureChatDraft(chatId: number): ChatDraft {
+    let draft = appStore.chatDrafts[chatId];
+    if (!draft) {
+      draft = { text: "", attachments: [] };
+      appStore.chatDrafts[chatId] = draft;
+    }
+    return draft;
+  },
+  setChatDraftText(chatId: number, text: string): void {
+    appStore.ensureChatDraft(chatId).text = text;
+  },
+  addChatDraftAttachments(chatId: number, items: PendingAttachment[]): void {
+    if (items.length === 0) return;
+    appStore.ensureChatDraft(chatId).attachments.push(...items);
+  },
+  removeChatDraftAttachment(chatId: number, index: number): void {
+    const draft = appStore.chatDrafts[chatId];
+    if (!draft) return;
+    const [removed] = draft.attachments.splice(index, 1);
+    if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+    // Drop the entry entirely once it is empty so the store holds only real
+    // drafts and `EMPTY_DRAFT` remains the only empty shape.
+    if (draft.text.length === 0 && draft.attachments.length === 0) {
+      delete appStore.chatDrafts[chatId];
+    }
+  },
+  clearChatDraft(chatId: number): void {
+    revokeDraftUrls(appStore.chatDrafts[chatId]);
+    delete appStore.chatDrafts[chatId];
+  },
+  setActiveRootChat(chatId: number | null): void {
+    appStore.activeRootChatId = chatId;
   },
 
   // --- Providers (full cache) ----------------------------------------------------
@@ -917,6 +976,15 @@ export async function initAppStore(): Promise<void> {
 /** Reactive app-state hook (valtio snapshot). */
 export function useApp() {
   return useSnapshot(appStore);
+}
+
+/**
+ * Reactive app-state hook with synchronous updates, for controlled inputs where
+ * the default batching can reset the DOM value/caret (valtio's documented
+ * `useSnapshot(store, { sync: true })` pattern).
+ */
+export function useAppSync() {
+  return useSnapshot(appStore, { sync: true });
 }
 
 /** Keep the chat cache ordered newest-message-first (recency key, id breaks ties). */

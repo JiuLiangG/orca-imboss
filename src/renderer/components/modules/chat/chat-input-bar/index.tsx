@@ -1,9 +1,15 @@
 import { MAX_USER_ATTACHMENTS } from "@shared/constants/attachments";
 import { t } from "@shared/l10n";
 import type { MessageAttachment } from "@shared/types";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cls } from "reactutils";
+import { appStore, useAppSync } from "../../../../app-store";
+import {
+  EMPTY_DRAFT,
+  nextAttachmentId,
+  type PendingAttachment,
+} from "../../../../chat-draft";
 import { useClickOutside } from "../../../../hooks/use-click-outside";
 import { useDropdownPosition } from "../../../../hooks/use-dropdown-position";
 import { useEscapeKey } from "../../../../hooks/use-escape-key";
@@ -13,6 +19,8 @@ import "./index.css";
 
 export interface ChatInputBarProps {
   disabled?: boolean;
+  /** Chat whose draft this composer edits (drafts are per chat, on appStore). */
+  chatId: number;
   /**
    * Bumped by the parent when a new chat is created. A non-zero change resets
    * the composer and focuses the textarea; `0` (the initial value) never
@@ -20,17 +28,6 @@ export interface ChatInputBarProps {
    */
   focusToken?: number;
   onSend: (text: string, attachments: MessageAttachment[]) => void;
-}
-
-/**
- * Composer-local attachment: the persisted metadata plus an optional
- * renderer-only object URL used to show an image thumbnail before sending.
- * Object URLs cannot be persisted, so the URL lives only in this component.
- */
-interface PendingAttachment {
-  id: number;
-  attachment: MessageAttachment;
-  previewUrl?: string;
 }
 
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|bmp|svg|avif|ico|heic|heif)$/i;
@@ -51,11 +48,17 @@ function hasDroppedFiles(dataTransfer: DataTransfer): boolean {
 
 export function ChatInputBar({
   disabled = false,
+  chatId,
   focusToken = 0,
   onSend,
 }: ChatInputBarProps): React.JSX.Element {
-  const [text, setText] = useState("");
-  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  // The draft is per chat and lives on appStore so it survives the chat module
+  // being unmounted on a module switch. `sync: true` keeps the controlled
+  // textarea's value/caret in step with the store.
+  const snap = useAppSync();
+  const draft = snap.chatDrafts[chatId] ?? EMPTY_DRAFT;
+  const { text, attachments } = draft;
+
   const [notice, setNotice] = useState<string | null>(null);
   const [popupOpen, setPopupOpen] = useState(false);
   const [dropActive, setDropActive] = useState(false);
@@ -64,43 +67,27 @@ export function ChatInputBar({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const nextAttachmentIdRef = useRef(0);
-  // Every object URL handed to an <img>; revoked on removal/send/reset/unmount
-  // so the browser can release the underlying blob.
-  const previewUrlsRef = useRef<Set<string>>(new Set());
   const { panelStyle, positionPanel } = useDropdownPosition(popupRef);
-
-  // Release every preview URL when the composer unmounts. Under StrictMode the
-  // extra mount/unmount cycle runs this before any preview exists (a no-op).
-  useEffect(() => {
-    const urls = previewUrlsRef.current;
-    return () => {
-      for (const url of urls) URL.revokeObjectURL(url);
-      urls.clear();
-    };
-  }, []);
-
-  const releasePreview = useCallback((url?: string): void => {
-    if (url && previewUrlsRef.current.delete(url)) {
-      URL.revokeObjectURL(url);
-    }
-  }, []);
 
   // A new chat resets the composer (draft/attachments) and lands the caret in
   // the input. `focusToken` starts at `0`, so mounting with an existing chat
   // never steals focus.
   useEffect(() => {
     if (focusToken === 0) return;
-    setText("");
-    setAttachments((current) => {
-      for (const item of current) releasePreview(item.previewUrl);
-      return [];
-    });
+    appStore.clearChatDraft(chatId);
     setNotice(null);
     setPopupOpen(false);
     setDropActive(false);
     textareaRef.current?.focus();
-  }, [focusToken, releasePreview]);
+  }, [focusToken, chatId]);
+
+  // Per-chat drafts: reset transient UI when the edited chat changes so a
+  // notice or an open attach menu never carries over to another chat's draft.
+  useEffect(() => {
+    setNotice(null);
+    setPopupOpen(false);
+    setDropActive(false);
+  }, [chatId]);
 
   // A file dropped anywhere outside the input bar would otherwise make Chromium
   // navigate the window to it. Neutralize that default globally; the input bar
@@ -137,13 +124,6 @@ export function ChatInputBar({
     };
   }, [popupOpen, positionPanel]);
 
-  const clearAttachments = (): void => {
-    setAttachments((current) => {
-      for (const item of current) releasePreview(item.previewUrl);
-      return [];
-    });
-  };
-
   const send = (): void => {
     const value = text.trim();
     if (disabled) return;
@@ -152,8 +132,8 @@ export function ChatInputBar({
       value,
       attachments.map((item) => item.attachment),
     );
-    setText("");
-    clearAttachments();
+    // Clear the per-chat draft; the store revokes its preview URLs.
+    appStore.clearChatDraft(chatId);
     setNotice(null);
   };
 
@@ -177,10 +157,9 @@ export function ChatInputBar({
       let previewUrl: string | undefined;
       if (isImageFile(file)) {
         previewUrl = URL.createObjectURL(file);
-        previewUrlsRef.current.add(previewUrl);
       }
       next.push({
-        id: nextAttachmentIdRef.current++,
+        id: nextAttachmentId(),
         attachment: {
           name: file.name,
           size: file.size,
@@ -191,7 +170,7 @@ export function ChatInputBar({
       });
     }
     if (next.length > 0) {
-      setAttachments((current) => [...current, ...next]);
+      appStore.addChatDraftAttachments(chatId, next);
     }
     setPopupOpen(false);
   };
@@ -287,10 +266,7 @@ export function ChatInputBar({
                   className="imb-attached-file-remove"
                   aria-label={`${t("Remove")} ${item.attachment.name}`}
                   onClick={() =>
-                    setAttachments((current) => {
-                      releasePreview(current[index]?.previewUrl);
-                      return current.filter((_, i) => i !== index);
-                    })
+                    appStore.removeChatDraftAttachment(chatId, index)
                   }
                 >
                   ×
@@ -308,7 +284,7 @@ export function ChatInputBar({
           placeholder={t("What are your instructions?")}
           disabled={disabled}
           minHeight={0}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => appStore.setChatDraftText(chatId, e.target.value)}
           onKeyDown={onKeyDown}
         />
         <div className="imb-chat-input-actions">

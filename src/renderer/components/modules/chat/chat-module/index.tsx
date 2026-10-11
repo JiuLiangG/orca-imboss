@@ -54,9 +54,23 @@ interface ChatRunStatus {
 /** Distance from the bottom (px) still considered "pinned" for auto-scroll. */
 const PIN_THRESHOLD = 32;
 
+/**
+ * Per-chat thread scroll, kept outside the component so it survives a module
+ * switch. A plain `Map` (not the appStore proxy): scroll is high-frequency and
+ * imperative, and nothing should re-render when it changes. Session-only.
+ */
+interface ChatScroll {
+  scrollTop: number;
+  pinned: boolean;
+}
+const chatScrollStore = new Map<number, ChatScroll>();
+
 export function ChatModule(): React.JSX.Element {
   const { data, focusChatId } = useApp();
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(
+    // Restore the chat selected before this module was unmounted.
+    () => appStore.activeRootChatId,
+  );
   const [messages, setMessages] = useState<Message[]>([]);
   const [query, setQuery] = useState("");
   // Bumped on chat creation so the composer resets and focuses (see
@@ -86,6 +100,13 @@ export function ChatModule(): React.JSX.Element {
   // Whether the thread is scrolled to (near) the bottom. Auto-scroll only
   // happens while pinned, so reading history is never interrupted.
   const pinnedRef = useRef(true);
+  // The chat whose messages are currently in `messages`. Guards the one-shot
+  // scroll restore from running against another chat's not-yet-replaced thread.
+  const loadedChatIdRef = useRef<number | null>(null);
+  // Pending one-shot scroll restore keyed by chat, set when a chat is selected.
+  const restoreScrollRef = useRef<{ chatId: number; scrollTop: number } | null>(
+    null,
+  );
   const locale = getLocale();
 
   // Hybrid search: an empty query reads the appStore chat cache (root-only,
@@ -120,6 +141,7 @@ export function ChatModule(): React.JSX.Element {
   const loadMessages = useCallback(async (chatId: number): Promise<void> => {
     try {
       const data = await imb.messages.list(chatId);
+      loadedChatIdRef.current = chatId;
       setMessages(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -196,12 +218,22 @@ export function ChatModule(): React.JSX.Element {
 
   // Open thread + clear unread whenever the selection changes.
   useEffect(() => {
-    // A freshly selected chat always starts pinned to its newest message.
-    pinnedRef.current = true;
+    // Remember the selection so returning to this module restores it.
+    appStore.setActiveRootChat(selectedId);
     if (selectedId === null) {
+      restoreScrollRef.current = null;
+      pinnedRef.current = true;
       setMessages([]);
       return;
     }
+    // Restore this chat's previous scroll unless it was pinned to the bottom
+    // (a fresh selection with no saved position also starts pinned).
+    const saved = chatScrollStore.get(selectedId);
+    pinnedRef.current = saved ? saved.pinned : true;
+    restoreScrollRef.current =
+      saved && !saved.pinned
+        ? { chatId: selectedId, scrollTop: saved.scrollTop }
+        : null;
     void loadMessages(selectedId);
     void imb.chats.markRead(selectedId);
     appStore.setChatUnread(selectedId, 0);
@@ -294,17 +326,32 @@ export function ChatModule(): React.JSX.Element {
 
   // Auto-scroll to the newest message, but only while the user is pinned to
   // the bottom. Incoming messages/run events must not yank a user who scrolled
-  // up to read history.
+  // up to read history. A restored (non-pinned) position wins once, after that
+  // chat's messages have rendered.
   useEffect(() => {
     const el = threadRef.current;
-    if (el && pinnedRef.current) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    const restore = restoreScrollRef.current;
+    if (restore && loadedChatIdRef.current === restore.chatId) {
+      el.scrollTop = restore.scrollTop;
+      restoreScrollRef.current = null;
+      return;
+    }
+    if (pinnedRef.current) el.scrollTop = el.scrollHeight;
   }, [messages, selectedRunStatus]);
 
   const handleThreadScroll = useCallback((): void => {
     const el = threadRef.current;
     if (!el) return;
-    pinnedRef.current =
+    const pinned =
       el.scrollHeight - el.scrollTop - el.clientHeight <= PIN_THRESHOLD;
+    pinnedRef.current = pinned;
+    if (selectedIdRef.current !== null) {
+      chatScrollStore.set(selectedIdRef.current, {
+        scrollTop: el.scrollTop,
+        pinned,
+      });
+    }
   }, []);
 
   const handleSend = useCallback(
@@ -313,6 +360,7 @@ export function ChatModule(): React.JSX.Element {
       const chatId = selectedId;
       // Sending always jumps to the bottom, even if the user had scrolled up.
       pinnedRef.current = true;
+      restoreScrollRef.current = null;
       try {
         await imb.chat.send(chatId, text, attachments);
         void loadMessages(chatId);
@@ -575,7 +623,11 @@ export function ChatModule(): React.JSX.Element {
           </div>
         )}
       </div>
-      <ChatInputBar focusToken={focusToken} onSend={handleSend} />
+      <ChatInputBar
+        chatId={selected.id}
+        focusToken={focusToken}
+        onSend={handleSend}
+      />
     </>
   ) : null;
 
