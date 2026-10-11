@@ -47,29 +47,29 @@ export function TitleBar(): React.JSX.Element {
             {maximized ? (
               <svg className="imb-icon" viewBox="0 0 16 16" aria-hidden="true">
                 <rect
-                  x="4"
+                  x="6"
                   y="3"
-                  width="9"
-                  height="9"
+                  width="7"
+                  height="7"
                   fill="none"
                   {...stroke}
                 />
                 <rect
-                  x="3"
-                  y="4"
-                  width="9"
-                  height="9"
-                  fill="none"
+                  x="4"
+                  y="5"
+                  width="7"
+                  height="7"
+                  fill="var(--imb-bg)"
                   {...stroke}
                 />
               </svg>
             ) : (
               <svg className="imb-icon" viewBox="0 0 16 16" aria-hidden="true">
                 <rect
-                  x="3"
-                  y="3"
-                  width="10"
-                  height="10"
+                  x="4"
+                  y="4"
+                  width="8"
+                  height="8"
                   fill="none"
                   {...stroke}
                 />
