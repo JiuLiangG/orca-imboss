@@ -4,10 +4,9 @@ import { Button } from "../../../button";
 import { Modal } from "../../../modal";
 import "./index.css";
 
-const VIEWPORT_SIZE = 320;
-const CROP_SIZE = 240;
-const CROP_MARGIN = (VIEWPORT_SIZE - CROP_SIZE) / 2; // 40px
-const CROP_RADIUS = 20;
+const VIEWPORT_SIZE = 260;
+const CROP_SIZE = 200;
+const CROP_MARGIN = (VIEWPORT_SIZE - CROP_SIZE) / 2; // 30px
 const OUTPUT_SIZE = 512;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 4.0;
@@ -114,44 +113,22 @@ export function AvatarCropModal({
       renderH,
     );
 
-    // 3. Draw semi-transparent mask outside crop area
+    // 3. Draw semi-transparent mask outside circular crop area
     ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
     ctx.beginPath();
     ctx.rect(0, 0, VIEWPORT_SIZE, VIEWPORT_SIZE);
-    if (typeof ctx.roundRect === "function") {
-      ctx.roundRect(
-        CROP_MARGIN,
-        CROP_MARGIN,
-        CROP_SIZE,
-        CROP_SIZE,
-        CROP_RADIUS,
-      );
-    } else {
-      ctx.rect(CROP_MARGIN, CROP_MARGIN, CROP_SIZE, CROP_SIZE);
-    }
+    ctx.arc(
+      VIEWPORT_SIZE / 2,
+      VIEWPORT_SIZE / 2,
+      CROP_SIZE / 2,
+      0,
+      Math.PI * 2,
+    );
     ctx.fill("evenodd");
 
-    // 4. Draw crop rounded border
+    // 4. Draw circular crop border
     ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
     ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    if (typeof ctx.roundRect === "function") {
-      ctx.roundRect(
-        CROP_MARGIN,
-        CROP_MARGIN,
-        CROP_SIZE,
-        CROP_SIZE,
-        CROP_RADIUS,
-      );
-    } else {
-      ctx.rect(CROP_MARGIN, CROP_MARGIN, CROP_SIZE, CROP_SIZE);
-    }
-    ctx.stroke();
-
-    // 5. Draw faint circular guide
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.28)";
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
     ctx.beginPath();
     ctx.arc(
       VIEWPORT_SIZE / 2,
@@ -161,11 +138,10 @@ export function AvatarCropModal({
       Math.PI * 2,
     );
     ctx.stroke();
-    ctx.setLineDash([]);
 
     ctx.restore();
 
-    // 6. Draw mini preview
+    // 5. Draw mini preview
     const mini = miniCanvasRef.current;
     if (mini) {
       const miniCtx = mini.getContext("2d");
@@ -229,11 +205,16 @@ export function AvatarCropModal({
       setOffset(initialOffset);
 
       // Set canvas backing dimensions for HiDPI
+      const dpr = window.devicePixelRatio || 1;
       const canvas = canvasRef.current;
       if (canvas) {
-        const dpr = window.devicePixelRatio || 1;
         canvas.width = VIEWPORT_SIZE * dpr;
         canvas.height = VIEWPORT_SIZE * dpr;
+      }
+      const mini = miniCanvasRef.current;
+      if (mini) {
+        mini.width = 44 * dpr;
+        mini.height = 44 * dpr;
       }
 
       redrawCanvas();
@@ -296,7 +277,7 @@ export function AvatarCropModal({
     }
   };
 
-  // Zoom centered on crop frame center (160, 160).
+  // Zoom centered on crop frame center.
   const applyZoom = useCallback(
     (targetZoom: number): void => {
       const img = stateRef.current.img;
@@ -429,7 +410,7 @@ export function AvatarCropModal({
         {/* Live preview */}
         <div className="imb-crop-preview-wrap">
           <div className="imb-crop-mini-preview">
-            <canvas ref={miniCanvasRef} width={48} height={48} />
+            <canvas ref={miniCanvasRef} width={44} height={44} />
           </div>
           <span>{t("Preview")}</span>
         </div>

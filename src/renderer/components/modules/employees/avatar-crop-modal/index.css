@@ -1,15 +1,21 @@
+/* 解除包含头像裁切组件的 Modal 弹窗高度限制，彻底消除弹框高度不足导致的遮挡与滚动条 */
+.imb-modal:has(.imb-avatar-crop-body) .imb-modal-body {
+  max-height: none;
+  overflow: visible;
+}
+
 .imb-avatar-crop-body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--imb-space-4);
+  gap: var(--imb-space-3);
   user-select: none;
 }
 
 .imb-crop-viewport {
   position: relative;
-  width: 320px;
-  height: 320px;
+  width: 260px;
+  height: 260px;
   background: #121212;
   border-radius: var(--imb-radius-lg);
   overflow: hidden;
@@ -23,18 +29,17 @@
 }
 
 .imb-crop-canvas {
-  width: 320px;
-  height: 320px;
+  width: 260px;
+  height: 260px;
   display: block;
   user-select: none;
 }
 
 .imb-crop-controls {
-  width: 100%;
+  width: 260px;
   display: flex;
   align-items: center;
   gap: var(--imb-space-3);
-  padding: 0 var(--imb-space-2);
 }
 
 .imb-crop-controls span {
@@ -58,8 +63,8 @@
 .imb-crop-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: var(--imb-accent);
   cursor: pointer;
@@ -79,24 +84,28 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--imb-space-4);
+  gap: var(--imb-space-3);
   font-size: var(--imb-text-sm);
   color: var(--imb-muted);
 }
 
 .imb-crop-mini-preview {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--imb-radius-md);
+  width: 44px;
+  height: 44px;
+  border-radius: var(--imb-radius-pill);
   overflow: hidden;
   background: var(--imb-surface);
   border: 1px solid var(--imb-border);
   position: relative;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .imb-crop-mini-preview canvas {
   width: 100%;
   height: 100%;
+  border-radius: var(--imb-radius-pill);
   display: block;
 }
