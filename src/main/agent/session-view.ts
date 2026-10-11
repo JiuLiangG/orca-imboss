@@ -73,7 +73,7 @@ function projectEntries(entries: SessionEntry[]): AgentSessionViewEntry[] {
     switch (message.role) {
       case "user": {
         const text = extractUserText(message.content);
-        if (text.length > 0) {
+        if (text.length > 0 && !isInternalWakePrompt(text)) {
           out.push({ kind: "user", id: entry.id, text: cap(text) });
         }
         break;
@@ -184,6 +184,16 @@ function extractUserText(content: unknown): string {
 /** Cap a block's text so one huge message can never blow up the payload. */
 function cap(text: string): string {
   return text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT)}\n…` : text;
+}
+
+/**
+ * Internal synthetic wake prompts (e.g. readChatPrompt / READ_CHAT_PROMPT)
+ * injected by the orchestrator to wake agents to read chats.
+ * These are background dispatcher triggers, never user-authored messages,
+ * and are omitted from the user-facing transcript.
+ */
+function isInternalWakePrompt(text: string): boolean {
+  return /^You have new messages in (?:chat \d+|this chat)\./i.test(text.trim());
 }
 
 /**
