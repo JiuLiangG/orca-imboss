@@ -8,11 +8,14 @@ import type { Message, MessageStep } from "@shared/types";
  * description, and Markdown is flattened (platforms render plain text at best).
  */
 
-/** Highest-priority helper: convert a message into forwardable plain text. */
+/**
+ * Highest-priority helper: convert a message into its forwardable plain-text
+ * body. Attachment filenames are deliberately excluded — the manager sends
+ * files as native media and only falls back to a `[name]` note when a file
+ * cannot be delivered, so successful sends are never duplicated as text.
+ */
 export function formatOutbound(message: Message): string {
-  const body = formatBody(message);
-  const withAttachments = appendAttachmentNames(body, message);
-  return markdownToPlainText(withAttachments).trim();
+  return markdownToPlainText(formatBody(message)).trim();
 }
 
 function formatBody(message: Message): string {
@@ -72,14 +75,6 @@ function formatChatLink(content: string): string {
     }
   }
   return t("New group chat");
-}
-
-function appendAttachmentNames(body: string, message: Message): string {
-  const attachments = message.attachments;
-  if (!attachments || attachments.length === 0) return body;
-  const names = attachments.map((attachment) => attachment.name).join(", ");
-  const note = `[${names}]`;
-  return body.length > 0 ? `${body}\n${note}` : note;
 }
 
 /**

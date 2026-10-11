@@ -1,6 +1,12 @@
-import { writeFile } from "fs/promises";
-import { join } from "path";
-import type { MessageItem, WeixinMessage } from "wechat-ilink-client";
+import { createHash, randomBytes } from "crypto";
+import { readFile, writeFile } from "fs/promises";
+import { basename, join } from "path";
+import type {
+  GetUploadUrlResp,
+  MessageItem,
+  UploadedFileInfo,
+  WeixinMessage,
+} from "wechat-ilink-client";
 import type { WechatConfig } from "../store";
 import { chunkText } from "../format";
 import { mimeByFileName, safeFileName } from "../media";
@@ -24,6 +30,14 @@ import { errorMessage } from "../util";
  */
 
 const MAX_MESSAGE_LENGTH = 2000;
+
+/**
+ * CDN upload policy: retry transient failures (mirrors the official plugin),
+ * abort immediately on client errors, and cap every attempt so a hung
+ * connection can never stall the forwarding loop indefinitely.
+ */
+const UPLOAD_MAX_RETRIES = 3;
+const UPLOAD_TIMEOUT_MS = 120_000;
 
 type IlinkSdk = typeof import("wechat-ilink-client");
 type IlinkClient = InstanceType<IlinkSdk["WeChatClient"]>;
@@ -114,12 +128,43 @@ export class WechatAdapter implements IntegrationAdapter {
     caption?: string,
   ): Promise<void> {
     const client = this.client;
+    const sdk = this.sdk;
     if (!client) throw new Error("WeChat client is not connected.");
-    await client.sendMedia(
-      session.sessionId,
+    if (!sdk) throw new Error("WeChat SDK is not available.");
+    // The SDK's own `sendMedia` only understands `upload_param`, which the
+    // server no longer returns, so upload here and send the media ourselves.
+    const uploaded = await uploadWechatMedia(
+      sdk,
+      client.api,
       filePath,
+      session.sessionId,
+    );
+    const mime = sdk.getMimeFromFilename(filePath);
+    const context = session.replyContext;
+    if (mime.startsWith("image/")) {
+      await client.sendUploadedImage(
+        session.sessionId,
+        uploaded,
+        caption,
+        context,
+      );
+      return;
+    }
+    if (mime.startsWith("video/")) {
+      await client.sendUploadedVideo(
+        session.sessionId,
+        uploaded,
+        caption,
+        context,
+      );
+      return;
+    }
+    await client.sendUploadedFile(
+      session.sessionId,
+      basename(filePath),
+      uploaded,
       caption,
-      session.replyContext,
+      context,
     );
   }
 
@@ -230,6 +275,131 @@ export class WechatAdapter implements IntegrationAdapter {
     return this.sdkPromise;
   }
 }
+
+/**
+ * Upload one local file to the WeChat CDN.
+ *
+ * `wechat-ilink-client@0.1.0` builds its upload URL only from `upload_param`,
+ * but the iLink server now returns `upload_full_url` instead, so the SDK's own
+ * `sendMedia` throws before anything is sent. This mirrors the official
+ * Tencent plugin: use `upload_full_url` verbatim when present, otherwise fall
+ * back to a URL built from `upload_param` + `filekey`. The result matches the
+ * SDK's `UploadedFileInfo`, so the public `sendUploaded*` methods can send it.
+ */
+async function uploadWechatMedia(
+  sdk: IlinkSdk,
+  api: IlinkClient["api"],
+  filePath: string,
+  toUserId: string,
+): Promise<UploadedFileInfo> {
+  const mime = sdk.getMimeFromFilename(filePath);
+  const plaintext = await readFile(filePath);
+  const rawsize = plaintext.length;
+  const rawfilemd5 = createHash("md5").update(plaintext).digest("hex");
+  const filesize = sdk.aesEcbPaddedSize(rawsize);
+  const filekey = randomBytes(16).toString("hex");
+  const aeskey = randomBytes(16);
+  const mediaType = mime.startsWith("video/")
+    ? sdk.UploadMediaType.VIDEO
+    : mime.startsWith("image/")
+      ? sdk.UploadMediaType.IMAGE
+      : sdk.UploadMediaType.FILE;
+  const response = await api.getUploadUrl({
+    filekey,
+    media_type: mediaType,
+    to_user_id: toUserId,
+    rawsize,
+    rawfilemd5,
+    filesize,
+    no_need_thumb: true,
+    aeskey: aeskey.toString("hex"),
+  });
+  return {
+    filekey,
+    downloadEncryptedQueryParam: await uploadCiphertext(
+      sdk,
+      resolveUploadUrl(sdk, api.cdnBaseUrl, response, filekey),
+      plaintext,
+      aeskey,
+    ),
+    aeskey: aeskey.toString("hex"),
+    fileSize: rawsize,
+    fileSizeCiphertext: filesize,
+  };
+}
+
+/** Server-provided `upload_full_url` wins; otherwise build it client-side. */
+function resolveUploadUrl(
+  sdk: IlinkSdk,
+  cdnBaseUrl: string,
+  response: GetUploadUrlResp,
+  filekey: string,
+): string {
+  // The server returns `upload_full_url` but it is absent from the 0.1.0
+  // typings, so read it defensively rather than casting the whole response.
+  const full = (response as { upload_full_url?: unknown }).upload_full_url;
+  if (typeof full === "string" && full.trim().length > 0) return full.trim();
+  const param =
+    typeof response.upload_param === "string" ? response.upload_param : "";
+  if (param.length > 0) {
+    return sdk.buildCdnUploadUrl({ cdnBaseUrl, uploadParam: param, filekey });
+  }
+  throw new Error("getUploadUrl returned no upload URL.");
+}
+
+/** POST the AES-128-ECB ciphertext to the CDN; return `x-encrypted-param`. */
+async function uploadCiphertext(
+  sdk: IlinkSdk,
+  url: string,
+  plaintext: Buffer,
+  aeskey: Buffer,
+): Promise<string> {
+  const body = new Uint8Array(sdk.encryptAesEcb(plaintext, aeskey));
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= UPLOAD_MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body,
+        signal: controller.signal,
+      });
+      if (res.status >= 400 && res.status < 500) {
+        const detail =
+          res.headers.get("x-error-message") ??
+          (await res.text().catch(() => ""));
+        throw new NonRetryableUploadError(
+          `CDN upload rejected (${res.status}): ${detail}`,
+        );
+      }
+      if (res.status !== 200) {
+        const detail =
+          res.headers.get("x-error-message") ?? `status ${res.status}`;
+        throw new Error(`CDN upload failed: ${detail}`);
+      }
+      const parameter = res.headers.get("x-encrypted-param");
+      if (!parameter) {
+        throw new NonRetryableUploadError(
+          "CDN upload response missing x-encrypted-param.",
+        );
+      }
+      return parameter;
+    } catch (err) {
+      if (err instanceof NonRetryableUploadError) throw err;
+      lastError = err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("CDN upload failed.");
+}
+
+/** A CDN failure that must never be retried (bad request / bad response). */
+class NonRetryableUploadError extends Error {}
 
 /**
  * iLink's `qrcode_img_content` may be a QR image URL or the raw content to

@@ -28,6 +28,7 @@
   "Arguments": "命令参数",
   "At least one model ID is required.": "至少需要一个模型 ID。",
   "Attach": "添加附件",
+  "Attachment delivery failed: ${names}": "附件发送失败：${names}",
   "Authorization=Bearer xxx": "Authorization=Bearer xxx",
   "Automatic updates are unavailable in this build.": "此版本不支持自动更新。",
   "Base URL must be a valid http(s) URL.": "接口地址必须是有效的 http(s) 地址。",

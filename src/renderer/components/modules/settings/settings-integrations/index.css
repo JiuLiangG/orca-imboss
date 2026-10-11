@@ -91,6 +91,7 @@
   margin: 0 0 var(--imb-space-3);
   font-size: var(--imb-text-sm);
   color: var(--imb-muted);
+  word-wrap: break-word;
 }
 
 .imb-integration-detail.imb-is-error {

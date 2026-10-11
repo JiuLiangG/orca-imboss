@@ -417,6 +417,14 @@ export class IntegrationManager {
     void this.forward(adapter, source.platform, session, text, attachments);
   }
 
+  /**
+   * Forward one app message to the linked platform.
+   *
+   * The text is sent first and unconditionally, then every attachment is
+   * attempted independently. A failed upload must never drop the text (or the
+   * remaining attachments); attachments that have no on-disk path or fail to
+   * send degrade to a single "attachment delivery failed" note.
+   */
   private async forward(
     adapter: IntegrationAdapter,
     platform: IntegrationPlatform,
@@ -424,24 +432,59 @@ export class IntegrationManager {
     text: string,
     attachments: NonNullable<Message["attachments"]>,
   ): Promise<void> {
-    try {
-      const withPath = attachments.filter(
-        (attachment): attachment is typeof attachment & { path: string } =>
-          typeof attachment.path === "string" && attachment.path.length > 0,
-      );
-      if (withPath.length > 0) {
-        for (let index = 0; index < withPath.length; index += 1) {
-          await adapter.sendMedia(
-            session,
-            withPath[index].path,
-            index === 0 && text.length > 0 ? text : undefined,
-          );
-        }
-      } else if (text.length > 0) {
+    if (text.length > 0) {
+      try {
         await adapter.sendText(session, text);
+      } catch (err) {
+        // The text failed, but attachments are still attempted below so a
+        // single transient failure cannot drop the whole message.
+        console.error(
+          `[integrations:${platform}] failed to send message text:`,
+          errorMessage(err),
+        );
+        this.setStatus(platform, { state: "error", detail: errorMessage(err) });
       }
-    } catch (err) {
-      this.setStatus(platform, { state: "error", detail: errorMessage(err) });
+    }
+
+    const undelivered: string[] = [];
+    for (const attachment of attachments) {
+      if (!attachment.path) {
+        // Legacy / JS-constructed attachment: no file to upload.
+        console.warn(
+          `[integrations:${platform}] attachment "${attachment.name}" has no path; degrading to a text note.`,
+        );
+        undelivered.push(attachment.name);
+        continue;
+      }
+      try {
+        await adapter.sendMedia(session, attachment.path);
+      } catch (err) {
+        console.error(
+          `[integrations:${platform}] failed to send attachment "${attachment.name}" (${attachment.path}):`,
+          errorMessage(err),
+        );
+        undelivered.push(attachment.name);
+        this.setStatus(platform, { state: "error", detail: errorMessage(err) });
+      }
+    }
+
+    if (undelivered.length > 0) {
+      try {
+        // No surrounding brackets: some platforms (WeChat) render a bare
+        // `[name]` as a file link that cannot be opened.
+        await adapter.sendText(
+          session,
+          t("Attachment delivery failed: ${names}", {
+            names: undelivered.join(", "),
+          }),
+        );
+      } catch (err) {
+        console.error(
+          `[integrations:${platform}] failed to send attachment note:`,
+          errorMessage(err),
+        );
+        this.setStatus(platform, { state: "error", detail: errorMessage(err) });
+      }
     }
   }
 
