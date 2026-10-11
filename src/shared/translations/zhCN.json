@@ -53,6 +53,7 @@
   "Compacted": "已压缩上下文",
   "Compacting…": "正在压缩上下文……",
   "Configure and connect a new MCP server.": "配置并接入一个新的 MCP 服务。",
+  "Confirm": "完成",
   "Connect a new model provider.": "接入一个新的模型服务商。",
   "Connect personal WeChat via the official iLink Bot": "通过官方 iLink Bot 接入个人微信",
   "Connect QQ via the official QQ Bot platform": "通过 QQ 官方机器人平台接入 QQ",
