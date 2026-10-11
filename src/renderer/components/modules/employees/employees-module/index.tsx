@@ -221,6 +221,7 @@ export function EmployeesModule(): React.JSX.Element {
             selected={isSelectedRow}
             avatar={<EmployeeAvatar employeeId={employee.id} alt />}
             name={employee.name || t("Unnamed")}
+            meta={`#${employee.id}`}
             sub={employee.role || "—"}
             badge={
               employee.id === 0 ? (

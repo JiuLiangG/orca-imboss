@@ -125,7 +125,7 @@ export function EmployeeDetail({
   return (
     <>
       <DetailHead
-        eyebrow="Employee"
+        eyebrow={`Employee #${employee.id}`}
         title={displayName}
         sub={displayRole || "—"}
         actions={
