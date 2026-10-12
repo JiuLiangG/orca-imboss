@@ -902,7 +902,7 @@ export async function initAppStore(): Promise<void> {
 
   // Chats: every message append refreshes that chat's summary (preview,
   // lastAt, unread) and re-sorts the cached list. A lightweight unread-only
-  // event (imb_notify / addUnread) updates items[].unread directly.
+  // event (imb_notify) updates items[].unread directly.
   imb.messages.onChanged(({ chatId, senderEmployeeId, silent, root }) => {
     void appStore.refreshChatSummary(chatId);
     // Beep for any non-silent employee/assistant message in a root chat,

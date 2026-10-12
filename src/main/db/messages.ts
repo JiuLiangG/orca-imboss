@@ -121,7 +121,8 @@ export function getMessageById(id: number): Message | null {
  * serialized on the main-process event loop (synchronous driver).
  *
  * Messages from employees (sender_employee_id != NULL) also bump the chat's
- * unread counter; opening a chat clears it via `chats:markRead`.
+ * unread counter (root chats only — task group chats never record unread);
+ * opening a chat clears it via `chats:markRead`.
  */
 export function appendMessage(
   chatId: number,
@@ -208,8 +209,14 @@ export function appendMessage(
 
   // Unread bump lives here (single append write path): assistant/employee
   // messages mark the chat as unread; user messages do not. Silent messages
-  // (the app-generated receipt ack) never bump the counter.
-  if (senderEmployeeId != null && options.silent !== true) {
+  // (the app-generated receipt ack) never bump the counter. Task group chats
+  // (fromChatId !== null) never record unread — the badge is root-chat only
+  // and group chats track reads via read_cursors.
+  if (
+    senderEmployeeId != null &&
+    options.silent !== true &&
+    chatRow.fromChatId === null
+  ) {
     bumpUnread(chatId);
   }
 

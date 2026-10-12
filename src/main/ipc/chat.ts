@@ -9,7 +9,7 @@ import * as cron from "../cron";
 import * as dbChats from "../db/chats";
 import * as dbMessages from "../db/messages";
 import { listByChat, unlinkSessionFile } from "../db/sessions";
-import { notifyUnread, sendToRenderer } from "../notifications";
+import { sendToRenderer } from "../notifications";
 import { assertInteger, assertString, parsePageQuery } from "./helpers";
 
 export function registerChatHandlers(): void {
@@ -31,16 +31,6 @@ export function registerChatHandlers(): void {
   // to the root-chat session it actually runs in.
   ipcMain.handle("chats:rootId", (_event, id: unknown) =>
     dbChats.getRootChatId(assertInteger(id, "chat id")),
-  );
-
-  // Renderer-initiated unread delta (delegates to notifyUnread).
-  ipcMain.handle(
-    "chats:addUnread",
-    (_event, id: unknown, delta: unknown): number => {
-      const safeId = assertInteger(id, "chat id");
-      const safeDelta = assertInteger(delta, "unread delta");
-      return notifyUnread(safeId, safeDelta, "");
-    },
   );
 
   ipcMain.handle("chats:markRead", (_event, id: unknown) => {

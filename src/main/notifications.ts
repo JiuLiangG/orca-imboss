@@ -32,6 +32,10 @@ export function focusMainWindow(): void {
  * to the renderer, and — when the app window is not focused — show an OS
  * notification that, when clicked, focuses the app and jumps to the chat.
  *
+ * Root chats only: task group chats (fromChatId !== null) never record unread
+ * (the badge is root-chat only and group chats track reads via read_cursors),
+ * so a group chat id is rejected rather than silently ignored.
+ *
  * Returns the new unread count.
  */
 export function notifyUnread(
@@ -39,6 +43,10 @@ export function notifyUnread(
   delta: number,
   text: string,
 ): number {
+  const chat = dbChats.getChat(chatId);
+  if (!chat) return 0;
+  if (chat.fromChatId !== null) return 0;
+
   const newUnread = dbChats.addUnread(chatId, delta);
   sendToRenderer("chats:unreadChanged", { chatId, unread: newUnread });
 

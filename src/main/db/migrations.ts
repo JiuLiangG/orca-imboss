@@ -137,6 +137,15 @@ const MIGRATIONS: Array<(db: Database) => void> = [
       );
     `);
   },
+  // 1 — task group chats (from_chat_id IS NOT NULL) never surface their
+  // `unread` counter (the chat list is root-only and group chats track reads
+  // via the separate read_cursors table), so zero out any stale values left
+  // behind before the write paths were guarded.
+  (db) => {
+    db.exec(`
+      UPDATE chats SET unread = 0 WHERE from_chat_id IS NOT NULL;
+    `);
+  },
 ];
 
 export function migrate(db: Database): void {

@@ -169,8 +169,6 @@ const api = {
       ipcRenderer.invoke("chats:summary", id) as Promise<ChatSummary | null>,
     rootId: (id: number) =>
       ipcRenderer.invoke("chats:rootId", id) as Promise<number>,
-    addUnread: (id: number, delta: number) =>
-      ipcRenderer.invoke("chats:addUnread", id, delta) as Promise<number>,
     markRead: (id: number) =>
       ipcRenderer.invoke("chats:markRead", id) as Promise<void>,
     onUnreadChanged: (
