@@ -21,7 +21,7 @@ import { getAvatarsDir } from "./data-dir";
  * - Writes are atomic (temp file + rename) and chmod 0600 on POSIX.
  */
 
-const AVATAR_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif"] as const;
+const AVATAR_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "avif"] as const;
 type AvatarExt = (typeof AVATAR_EXTENSIONS)[number];
 
 const MAX_AVATAR_BYTES = 10 * 1024 * 1024; // 10 MB — plenty for an avatar
@@ -32,6 +32,7 @@ const MIME_BY_EXT: Record<AvatarExt, string> = {
   jpeg: "image/jpeg",
   webp: "image/webp",
   gif: "image/gif",
+  avif: "image/avif",
 };
 
 /**

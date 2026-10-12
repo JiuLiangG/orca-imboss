@@ -100,13 +100,16 @@ export function EmployeeDetail({
     if (fileRef.current) fileRef.current.value = "";
   };
 
-  const onCropConfirm = async (croppedData: Uint8Array): Promise<void> => {
+  const onCropConfirm = async (
+    croppedData: Uint8Array,
+    ext: string,
+  ): Promise<void> => {
     setAvatarAv(true);
     setAvatarError(null);
     try {
       const updated = await imb.employees.updateAvatar(
         employee.id,
-        "png",
+        ext,
         croppedData,
       );
       if (updated) {

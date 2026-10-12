@@ -15,7 +15,7 @@ export interface AvatarCropModalProps {
   open: boolean;
   imageFile: File | null;
   onClose: () => void;
-  onConfirm: (croppedData: Uint8Array) => Promise<void>;
+  onConfirm: (croppedData: Uint8Array, ext: string) => Promise<void>;
 }
 
 /**
@@ -336,17 +336,56 @@ export function AvatarCropModal({
       const srcW = CROP_SIZE / currentScale;
       const srcH = CROP_SIZE / currentScale;
 
+      // Ensure transparent background is preserved for images with alpha channel
+      ctx.clearRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
       ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
 
-      const blob = await new Promise<Blob | null>((res) =>
-        canvas.toBlob(res, "image/png"),
+      // Compress to AVIF (supporting alpha channel), with fallback to webp/png
+      const MAX_BYTES = 500 * 1024;
+      let targetExt = "avif";
+      let targetMime = "image/avif";
+      let blob: Blob | null = null;
+
+      // Try image/avif encoding with high quality (typically 20KB~60KB)
+      blob = await new Promise<Blob | null>((res) =>
+        canvas.toBlob(res, targetMime, 0.85),
       );
+
+      // If browser doesn't support avif export, fallback to webp then png
+      if (!blob || blob.type !== "image/avif") {
+        targetMime = "image/webp";
+        targetExt = "webp";
+        blob = await new Promise<Blob | null>((res) =>
+          canvas.toBlob(res, targetMime, 0.85),
+        );
+      }
+      if (!blob || (blob.type !== "image/avif" && blob.type !== "image/webp")) {
+        targetMime = "image/png";
+        targetExt = "png";
+        blob = await new Promise<Blob | null>((res) =>
+          canvas.toBlob(res, targetMime),
+        );
+      }
+
       if (!blob) throw new Error("Could not encode image.");
 
+      // Ensure file size is strictly under 500 KB
+      if (blob.size > MAX_BYTES && targetExt !== "png") {
+        for (const q of [0.7, 0.55, 0.4]) {
+          const smaller = await new Promise<Blob | null>((res) =>
+            canvas.toBlob(res, targetMime, q),
+          );
+          if (smaller) {
+            blob = smaller;
+            if (blob.size <= MAX_BYTES) break;
+          }
+        }
+      }
+
       const buffer = await blob.arrayBuffer();
-      await onConfirm(new Uint8Array(buffer));
+      await onConfirm(new Uint8Array(buffer), targetExt);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
