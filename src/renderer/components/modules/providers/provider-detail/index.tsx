@@ -108,10 +108,6 @@ export function ProviderDetail({
         setError(t("At least one model ID is required."));
         return;
       }
-      if (key.length > 0 && key.length < 8) {
-        setError(t("API key looks invalid."));
-        return;
-      }
       input = {
         id: provider.id,
         kind: "custom",

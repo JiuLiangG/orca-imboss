@@ -347,7 +347,7 @@ function validateModelIds(modelIds: string[] | undefined): string[] {
 
 function validateApiKey(key: string | undefined): string | undefined {
   if (key === undefined) return undefined;
-  if (typeof key !== "string" || key.trim().length < 8 || key.length > 4096) {
+  if (typeof key !== "string" || key.length > 4096) {
     throw new Error("API key looks invalid.");
   }
   return key.trim();
