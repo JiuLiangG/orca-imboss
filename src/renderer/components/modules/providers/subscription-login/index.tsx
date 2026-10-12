@@ -109,7 +109,11 @@ export function SubscriptionLogin({
 
   return (
     <>
-      <Button variant="secondary" onClick={start}>
+      <Button
+        style={{ fontSize: "var(--imb-text-sm)" }}
+        variant="secondary"
+        onClick={start}
+      >
         {label}
       </Button>
       <Modal
