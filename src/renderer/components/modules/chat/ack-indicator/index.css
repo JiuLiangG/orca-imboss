@@ -1,6 +1,9 @@
-/* Persisted `ack` receipt rendered as a centered, muted progress-bar-style
-   "thinking" indicator instead of a bubble. The fixed height matches
-   `.imb-run-status` so it does not perturb the thread's vertical rhythm. */
+/* Persisted `ack` receipt rendered as a muted progress-bar-style "thinking"
+   indicator instead of a bubble. It sits in the standard incoming message row
+   (`.imb-msg.imb-other`, alongside the sender avatar), so it aligns to the
+   bubble's left edge and centers on the avatar's height. The fixed height
+   matches `.imb-run-status` so it does not perturb the thread's vertical
+   rhythm. */
 .imb-ack {
   align-self: center;
   display: flex;
@@ -73,7 +76,9 @@
 
 /* Only the trailing ack (nothing below it) stays visible: the moment a real
    message renders after it, the indicator leaves the layout entirely (so its
-   flex gap goes with it). */
-.imb-thread>.imb-ack:has(~ .imb-msg) {
+   flex gap goes with it). The indicator is now wrapped in an `.imb-msg` row,
+   so target that wrapper (the thread's direct child) instead of the bare
+   `.imb-ack`, which is no longer a `.imb-thread` child. */
+.imb-thread>.imb-msg:has(> .imb-ack):has(~ .imb-msg) {
   display: none;
 }

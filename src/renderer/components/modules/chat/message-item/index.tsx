@@ -74,8 +74,19 @@ export function MessageItem({
       return <ChatCard message={message} onAvatarClick={openSession} />;
     case "ack":
       // App-generated receipt: rendered as a transient "thinking" indicator
-      // (never a bubble), hidden by CSS once a real message follows it.
-      return <AckIndicator />;
+      // (never a bubble), hidden by CSS once a real message follows it. It
+      // shares the standard incoming row layout so the sender (assistant)
+      // avatar renders and opens their agent session like any other message.
+      return (
+        <div className="imb-msg imb-other">
+          <EmployeeAvatar
+            employeeId={message.senderEmployeeId ?? 0}
+            size={34}
+            onClick={openSession}
+          />
+          <AckIndicator />
+        </div>
+      );
     default:
       return (
         <MessageBubble
