@@ -20,6 +20,7 @@ import { ContextMenu, type ContextMenuState } from "../../../context-menu";
 import { EmployeeAvatar } from "../../../employee-avatar";
 import { Input } from "../../../input";
 import { ItemList } from "../../../item-list";
+import { useMentionResolver } from "../../../markdown/use-mention";
 import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
 import { Modal } from "../../../modal";
@@ -108,6 +109,9 @@ export function ChatModule(): React.JSX.Element {
     null,
   );
   const locale = getLocale();
+  // Chat-list previews show `@名字` for `@<id>` mentions (plain text, so no
+  // theme color or click target there).
+  const { resolveMention } = useMentionResolver(selectedId ?? 0, false);
 
   // Hybrid search: an empty query reads the appStore chat cache (root-only,
   // recency-ordered); a non-empty query switches to a server-paged FTS/LIKE
@@ -517,7 +521,7 @@ export function ChatModule(): React.JSX.Element {
               </span>
             }
             meta={formatChatTime(chat.lastAt, locale)}
-            sub={previewText(chat.preview ?? "")}
+            sub={previewText(chat.preview ?? "", 80, resolveMention)}
             badge={
               chat.unread > 0 ? (
                 <span className="imb-unread">

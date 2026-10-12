@@ -11,6 +11,7 @@ import { ModuleView } from "../../../app-shell";
 import { EmployeeAvatar } from "../../../employee-avatar";
 import { IconChevronDown } from "../../../icons";
 import { Markdown } from "../../../markdown";
+import { useMentionResolver } from "../../../markdown/use-mention";
 import "../../chat/thread.css";
 import "./index.css";
 
@@ -80,6 +81,10 @@ export function AgentSessionModule({
   const employee = data.employees.items.find((e) => e.id === employeeId);
   const employeeName = employee?.name ?? t("Unnamed");
   const chatTitle = session?.chatTitle ?? t("Conversation");
+  // The transcript shows the raw `@<id>` text the model read; render names but
+  // keep it non-interactive (this session's chat may not be where the mentioned
+  // employee actually works).
+  const { resolveMention } = useMentionResolver(chatId, false);
 
   const loadEntries = useCallback(async (): Promise<void> => {
     // Snapshot before the await: if a new live message starts while the read is
@@ -331,10 +336,18 @@ export function AgentSessionModule({
         ) : (
           <>
             {entries.map((entry) => (
-              <SessionEntry key={entry.id} entry={entry} />
+              <SessionEntry
+                key={entry.id}
+                entry={entry}
+                resolveMention={resolveMention}
+              />
             ))}
             {liveBlocks.map((block) => (
-              <LiveBlockView key={block.key} block={block} />
+              <LiveBlockView
+                key={block.key}
+                block={block}
+                resolveMention={resolveMention}
+              />
             ))}
           </>
         )}
@@ -351,8 +364,10 @@ export function AgentSessionModule({
 /** Render one projected history entry. */
 function SessionEntry({
   entry,
+  resolveMention,
 }: {
   entry: AgentSessionViewEntry;
+  resolveMention: (id: number) => string | null;
 }): React.JSX.Element {
   switch (entry.kind) {
     case "user":
@@ -360,7 +375,7 @@ function SessionEntry({
     case "text":
       return (
         <div className="imb-session-text">
-          <Markdown content={entry.text} />
+          <Markdown content={entry.text} resolveMention={resolveMention} />
         </div>
       );
     case "thinking":
@@ -375,17 +390,28 @@ function SessionEntry({
         />
       );
     case "compaction":
-      return <CompactionBlock summary={entry.summary} />;
+      return (
+        <CompactionBlock
+          summary={entry.summary}
+          resolveMention={resolveMention}
+        />
+      );
   }
 }
 
 /** Render one reconstructed live block. */
-function LiveBlockView({ block }: { block: LiveBlock }): React.JSX.Element {
+function LiveBlockView({
+  block,
+  resolveMention,
+}: {
+  block: LiveBlock;
+  resolveMention: (id: number) => string | null;
+}): React.JSX.Element {
   switch (block.kind) {
     case "text":
       return (
         <div className="imb-session-text">
-          <Markdown content={block.text} />
+          <Markdown content={block.text} resolveMention={resolveMention} />
         </div>
       );
     case "thinking":
@@ -495,12 +521,18 @@ function ToolBlock({
 }
 
 /** A compaction marker with its summary. */
-function CompactionBlock({ summary }: { summary: string }): React.JSX.Element {
+function CompactionBlock({
+  summary,
+  resolveMention,
+}: {
+  summary: string;
+  resolveMention: (id: number) => string | null;
+}): React.JSX.Element {
   return (
     <div className="imb-session-compaction">
       <div className="imb-session-compaction-head">{t("Compacted")}</div>
       <div className="imb-session-compaction-body">
-        <Markdown content={summary} />
+        <Markdown content={summary} resolveMention={resolveMention} />
       </div>
     </div>
   );

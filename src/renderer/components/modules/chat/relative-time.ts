@@ -4,6 +4,7 @@
  * else yyyy/M/d.
  */
 
+import { replaceMentions } from "../../markdown/mention";
 import { toPlainText } from "../../markdown/plain-text";
 
 const WEEKDAYS_ZH = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
@@ -61,9 +62,17 @@ export function formatMessageTime(secs: number, locale: string): string {
 }
 
 /** Truncate a long preview for the chat list (fixed max width, CSS ellipsis). */
-export function previewText(content: string, max = 80): string {
+export function previewText(
+  content: string,
+  max = 80,
+  resolveMention?: (id: number) => string | null,
+): string {
   // Messages are Markdown; show a plain-text teaser so formatting markers and
   // math source do not leak into the list.
-  const collapsed = toPlainText(content).replace(/\s+/g, " ").trim();
+  const plain = toPlainText(content).replace(/\s+/g, " ").trim();
+  // The preview is plain text: mentions become names without theme color.
+  const collapsed = resolveMention
+    ? replaceMentions(plain, resolveMention)
+    : plain;
   return collapsed.length > max ? `${collapsed.slice(0, max)}…` : collapsed;
 }

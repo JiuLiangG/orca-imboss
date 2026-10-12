@@ -2,6 +2,7 @@ import { t } from "@shared/l10n";
 import type { Message } from "@shared/types";
 import { appStore } from "../../../../app-store";
 import { EmployeeAvatar } from "../../../employee-avatar";
+import { useMentionResolver } from "../../../markdown/use-mention";
 import { AnswerCard } from "../answer-card";
 import { AskCard } from "../ask-card";
 import { ChatCard } from "../chat-card";
@@ -28,6 +29,10 @@ export function MessageItem({
   onAnswered,
   askAnswer,
 }: MessageItemProps): React.JSX.Element {
+  // `@<id>` mentions in chat bubbles render as clickable employee names that
+  // open the same agent session as the avatar for this chat.
+  const mentions = useMentionResolver(message.chatId, true);
+
   // Clicking an employee/assistant avatar opens that sender's agent session for
   // this chat. The user (null sender) has no session avatar.
   const sender = message.senderEmployeeId;
@@ -45,6 +50,7 @@ export function MessageItem({
           onAnswered={onAnswered ?? (() => undefined)}
           answer={askAnswer}
           onAvatarClick={openSession}
+          resolveMention={mentions.resolveMention}
         />
       );
     case "answer":
@@ -90,6 +96,8 @@ export function MessageItem({
           attachments={message.attachments}
           attachmentsTotal={message.attachmentsTotal}
           markdown={message.kind === "text" || message.kind === "report"}
+          resolveMention={mentions.resolveMention}
+          onMentionClick={mentions.onMentionClick}
           avatar={
             <EmployeeAvatar
               employeeId={message.senderEmployeeId}

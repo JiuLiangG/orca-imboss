@@ -21,6 +21,8 @@ export interface AskCardProps {
   answer?: Message;
   /** Click handler for the sender avatar (opens the agent session). */
   onAvatarClick?: () => void;
+  /** Resolve `@<id>` mentions in question/option text (non-interactive here). */
+  resolveMention?: (id: number) => string | null;
 }
 
 interface AskQuestion {
@@ -52,6 +54,7 @@ export function AskCard({
   onAnswered,
   answer,
   onAvatarClick,
+  resolveMention,
 }: AskCardProps): React.JSX.Element {
   const self = message.senderEmployeeId === null;
   const payload = parseAsk(message.content);
@@ -85,6 +88,7 @@ export function AskCard({
         content={message.content}
         attachments={message.attachments}
         attachmentsTotal={message.attachmentsTotal}
+        resolveMention={resolveMention}
         avatar={
           <EmployeeAvatar
             employeeId={message.senderEmployeeId}
@@ -132,7 +136,11 @@ export function AskCard({
         {payload.questions.map((q) => (
           <div className="imb-ask-question" key={q.id}>
             <div className="imb-ask-q-text">
-              <Markdown content={q.text} inline />
+              <Markdown
+                content={q.text}
+                inline
+                resolveMention={resolveMention}
+              />
             </div>
             {isFreeForm(q) ? (
               <textarea
@@ -159,7 +167,11 @@ export function AskCard({
                       }}
                     />
                     <span>
-                      <Markdown content={opt} inline />
+                      <Markdown
+                        content={opt}
+                        inline
+                        resolveMention={resolveMention}
+                      />
                     </span>
                   </label>
                 ))}
@@ -196,7 +208,11 @@ export function AskCard({
                       }
                     />
                     <span>
-                      <Markdown content={opt} inline />
+                      <Markdown
+                        content={opt}
+                        inline
+                        resolveMention={resolveMention}
+                      />
                     </span>
                   </label>
                 ))}

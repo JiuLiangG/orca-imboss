@@ -27,6 +27,10 @@ export interface MessageBubbleProps {
    * kinds keep the literal rendering.
    */
   markdown?: boolean;
+  /** Resolve `@<id>` mentions to employee names (Markdown path only). */
+  resolveMention?: (id: number) => string | null;
+  /** When set, a resolved mention becomes a button that opens the agent session. */
+  onMentionClick?: (id: number) => void;
 }
 
 export function MessageBubble({
@@ -37,6 +41,8 @@ export function MessageBubble({
   attachmentsTotal,
   avatar,
   markdown = false,
+  resolveMention,
+  onMentionClick,
 }: MessageBubbleProps): React.JSX.Element {
   const [revealError, setRevealError] = useState<string | null>(null);
   const all = attachments ?? [];
@@ -107,7 +113,11 @@ export function MessageBubble({
         )}
         {content.length > 0 &&
           (markdown ? (
-            <Markdown content={content} />
+            <Markdown
+              content={content}
+              resolveMention={resolveMention}
+              onMentionClick={onMentionClick}
+            />
           ) : (
             <span className="imb-bubble-text">{content}</span>
           ))}
