@@ -11,6 +11,7 @@ import { Button } from "../../../button";
 import { DetailBody } from "../../../detail-pane/detail-body";
 import { DetailHead } from "../../../detail-pane/detail-head";
 import { employeeAvatarSrc } from "../../../employee-avatar/avatar-src";
+import { AvatarCropModal } from "../avatar-crop-modal";
 import { Field } from "../../../field";
 import { IconCamera } from "../../../icons";
 import { Input } from "../../../input";
@@ -69,6 +70,8 @@ export function EmployeeDetail({
   const [avatarUrl, setAvatarUrl] = useState<string | null>(employee.avatarUrl);
   const [avatarAv, setAvatarAv] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [cropOpen, setCropOpen] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -90,17 +93,24 @@ export function EmployeeDetail({
     };
   }, []);
 
-  const onAvatarPicked = async (file: File | undefined): Promise<void> => {
+  const onAvatarPicked = (file: File | undefined): void => {
     if (!file) return;
-    const ext = file.name.includes(".") ? file.name.split(".").pop()! : "png";
+    setCropFile(file);
+    setCropOpen(true);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const onCropConfirm = async (
+    croppedData: Uint8Array,
+    ext: string,
+  ): Promise<void> => {
     setAvatarAv(true);
     setAvatarError(null);
     try {
-      const buffer = await file.arrayBuffer();
       const updated = await imb.employees.updateAvatar(
         employee.id,
         ext,
-        new Uint8Array(buffer),
+        croppedData,
       );
       if (updated) {
         setAvatarUrl(updated.avatarUrl);
@@ -108,9 +118,9 @@ export function EmployeeDetail({
       }
     } catch (err) {
       setAvatarError(err instanceof Error ? err.message : String(err));
+      throw err;
     } finally {
       setAvatarAv(false);
-      if (fileRef.current) fileRef.current.value = "";
     }
   };
 
@@ -332,6 +342,16 @@ export function EmployeeDetail({
           </p>
         </Modal>
       )}
+
+      <AvatarCropModal
+        open={cropOpen}
+        imageFile={cropFile}
+        onClose={() => {
+          setCropOpen(false);
+          setCropFile(null);
+        }}
+        onConfirm={onCropConfirm}
+      />
     </>
   );
 }

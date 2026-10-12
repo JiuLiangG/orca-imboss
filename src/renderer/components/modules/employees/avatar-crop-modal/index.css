@@ -1,0 +1,111 @@
+/* 解除包含头像裁切组件的 Modal 弹窗高度限制，彻底消除弹框高度不足导致的遮挡与滚动条 */
+.imb-modal:has(.imb-avatar-crop-body) .imb-modal-body {
+  max-height: none;
+  overflow: visible;
+}
+
+.imb-avatar-crop-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--imb-space-3);
+  user-select: none;
+}
+
+.imb-crop-viewport {
+  position: relative;
+  width: 260px;
+  height: 260px;
+  background: #121212;
+  border-radius: var(--imb-radius-lg);
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.imb-crop-viewport:active {
+  cursor: grabbing;
+}
+
+.imb-crop-canvas {
+  width: 260px;
+  height: 260px;
+  display: block;
+  user-select: none;
+}
+
+.imb-crop-controls {
+  width: 260px;
+  display: flex;
+  align-items: center;
+  gap: var(--imb-space-3);
+}
+
+.imb-crop-controls span {
+  font-size: var(--imb-text-sm);
+  color: var(--imb-muted);
+  flex-shrink: 0;
+}
+
+.imb-crop-slider {
+  flex: 1;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--imb-border);
+  border-radius: var(--imb-radius-full);
+  outline: none;
+  cursor: pointer;
+  transition: background var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-crop-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--imb-accent);
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-crop-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.imb-crop-slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: var(--imb-focus-ring);
+}
+
+.imb-crop-preview-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--imb-space-3);
+  font-size: var(--imb-text-sm);
+  color: var(--imb-muted);
+}
+
+.imb-crop-mini-preview {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--imb-radius-pill);
+  overflow: hidden;
+  background: var(--imb-surface);
+  border: 1px solid var(--imb-border);
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.imb-crop-mini-preview canvas {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--imb-radius-pill);
+  display: block;
+}
