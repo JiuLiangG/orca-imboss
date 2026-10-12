@@ -1,0 +1,79 @@
+/* Persisted `ack` receipt rendered as a centered, muted progress-bar-style
+   "thinking" indicator instead of a bubble. The fixed height matches
+   `.imb-run-status` so it does not perturb the thread's vertical rhythm. */
+.imb-ack {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  color: var(--imb-muted);
+}
+
+/* Two stacked rows of dots share the exact same geometry: the dim track stays
+   visible at all times, while the lit overlay is clipped and revealed one dot
+   at a time by the animation below. */
+.imb-ack-track {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.imb-ack-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* Direct children of the track are the dim base dots; the overlay's dots stay
+   fully lit and are faded as a whole by the overlay's own opacity. */
+.imb-ack-track>.imb-ack-dot {
+  opacity: 0.3;
+}
+
+.imb-ack-fill {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  clip-path: inset(0 100% 0 0);
+  animation: imb-ack-progress 1.6s linear infinite;
+}
+
+/* Progress-bar loop: the clip-path is stepped in six discrete jumps during the
+   fill phase, so exactly one more dot lights up per step, then the whole
+   overlay holds briefly, fades out together and the loop restarts from an
+   empty row.
+   Keep `steps(…)` in sync with DOT_COUNT and the dot geometry (5px dots + 4px
+   gaps = 50px row): each step must land in a gap, otherwise partially lit
+   dots flicker. */
+@keyframes imb-ack-progress {
+  0% {
+    clip-path: inset(0 100% 0 0);
+    opacity: 1;
+    animation-timing-function: steps(6, end);
+  }
+
+  70%,
+  80% {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+    animation-timing-function: ease-in-out;
+  }
+
+  92%,
+  100% {
+    clip-path: inset(0 0 0 0);
+    opacity: 0;
+  }
+}
+
+/* Only the trailing ack (nothing below it) stays visible: the moment a real
+   message renders after it, the indicator leaves the layout entirely (so its
+   flex gap goes with it). */
+.imb-thread>.imb-ack:has(~ .imb-msg) {
+  display: none;
+}

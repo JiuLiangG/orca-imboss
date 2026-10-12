@@ -1,8 +1,8 @@
-import { t } from "@shared/l10n";
 import type { Message } from "@shared/types";
 import { appStore } from "../../../../app-store";
 import { EmployeeAvatar } from "../../../employee-avatar";
 import { useMentionResolver } from "../../../markdown/use-mention";
+import { AckIndicator } from "../ack-indicator";
 import { AnswerCard } from "../answer-card";
 import { AskCard } from "../ask-card";
 import { ChatCard } from "../chat-card";
@@ -73,24 +73,9 @@ export function MessageItem({
     case "chat":
       return <ChatCard message={message} onAvatarClick={openSession} />;
     case "ack":
-      // App-generated receipt: stored content is empty, the label is localized
-      // at render time so it follows locale switches.
-      return (
-        <MessageBubble
-          self={false}
-          messageId={message.id}
-          content={t("ACK")}
-          attachments={null}
-          attachmentsTotal={null}
-          avatar={
-            <EmployeeAvatar
-              employeeId={message.senderEmployeeId}
-              size={34}
-              onClick={openSession}
-            />
-          }
-        />
-      );
+      // App-generated receipt: rendered as a transient "thinking" indicator
+      // (never a bubble), hidden by CSS once a real message follows it.
+      return <AckIndicator />;
     default:
       return (
         <MessageBubble
