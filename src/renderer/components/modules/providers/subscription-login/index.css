@@ -1,0 +1,28 @@
+.imb-sub-login {
+  display: flex;
+  flex-direction: column;
+  gap: var(--imb-space-3);
+}
+
+.imb-sub-login-note {
+  margin: 0;
+  color: var(--imb-muted);
+  font-size: var(--imb-text-sm);
+}
+
+.imb-sub-login-code {
+  margin: 0;
+  font-family: var(--imb-font-mono);
+  font-size: 28px;
+  letter-spacing: 0.12em;
+  text-align: center;
+  user-select: text;
+}
+
+.imb-sub-login-url {
+  margin: 0;
+  color: var(--imb-muted);
+  font-size: var(--imb-text-xs, var(--imb-text-sm));
+  word-break: break-all;
+  user-select: text;
+}

@@ -1,15 +1,15 @@
 /**
  * Thinking (reasoning) strength levels shared by renderer and main.
  *
- * Mirrors the Pi SDK's `ThinkingLevel`
- * (`@earendil-works/pi-agent-core`, not re-exported by the package root):
- * `"off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"`.
- * The app only exposes a curated subset in its UI (minimal/xhigh handled via
- * the full SDK set for storage safety); the SDK clamps any value to the
- * selected model's capabilities at session build time.
+ * This is Pi's `ModelThinkingLevel` order
+ * (`off | minimal | low | medium | high | xhigh | max`). Which of these a
+ * given model actually accepts comes from that model's `thinkingLevelMap`
+ * (`null` drops the level; `xhigh` and `max` count only when the map names
+ * them). The SDK still clamps a stored value onto the model at request time.
  */
 export const THINKING_LEVELS = [
   "off",
+  "minimal",
   "low",
   "medium",
   "high",
@@ -29,6 +29,7 @@ export const DEFAULT_THINKING_LEVEL: ThinkingLevel = "medium";
  */
 export const THINKING_LEVEL_LABEL_KEYS: Record<ThinkingLevel, string> = {
   off: "Off",
+  minimal: "Minimal",
   low: "Low",
   medium: "Medium",
   high: "High",

@@ -1,11 +1,7 @@
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "@shared/constants/locales";
 import { SettingKeys } from "@shared/constants/settings";
-import {
-  THINKING_LEVELS,
-  THINKING_LEVEL_LABEL_KEYS,
-} from "@shared/constants/thinking";
 import { t } from "@shared/l10n";
-import type { WorkDirState } from "@shared/types";
+import type { ModelOption, WorkDirState } from "@shared/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useApp } from "../../../../app-store";
 import { setLocale } from "../../../../locale";
@@ -15,6 +11,11 @@ import { Field } from "../../../field";
 import { IconPlus, IconTrash } from "../../../icons";
 import { Input } from "../../../input";
 import { Select } from "../../../select";
+import {
+  modelRef,
+  thinkingLevelsFor,
+  thinkingSelectOptions,
+} from "../../../../thinking-options";
 import "./index.css";
 
 interface EnvVar {
@@ -29,7 +30,7 @@ export function SettingsGeneral(): React.JSX.Element {
   const [defaultModel, setDefaultModel] = useState("");
   const [defaultThinking, setDefaultThinking] = useState("");
   const [envVars, setEnvVars] = useState<EnvVar[]>([]);
-  const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const [models, setModels] = useState<ModelOption[]>([]);
   const [workdir, setWorkdir] = useState<WorkDirState | null>(null);
   const [workdirError, setWorkdirError] = useState<string | null>(null);
   const envTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -61,7 +62,7 @@ export function SettingsGeneral(): React.JSX.Element {
       setDefaultModel(defaultModelStored ?? "");
       setDefaultThinking(defaultThinkingStored ?? "");
       setEnvVars(parseEnv(envStored));
-      setModelOptions(models.map((m) => `${m.provider}/${m.id}`));
+      setModels(models);
       setWorkdir(workDir);
     })();
     return () => {
@@ -143,7 +144,10 @@ export function SettingsGeneral(): React.JSX.Element {
             value={defaultModel}
             options={[
               { value: "", label: t("None") },
-              ...modelOptions.map((m) => ({ value: m, label: m })),
+              ...models.map((model) => ({
+                value: modelRef(model),
+                label: modelRef(model),
+              })),
             ]}
             onChange={changeDefaultModel}
           />
@@ -151,18 +155,24 @@ export function SettingsGeneral(): React.JSX.Element {
 
         <Field
           label={t("Default thinking level")}
-          hint={t(
-            "The default thinking strength for new employees / tasks. Unset lets each model apply its own default.",
-          )}
+          hint={
+            defaultModel
+              ? t(
+                  "Only levels this model accepts are listed. Unset lets each model apply its own default.",
+                )
+              : t(
+                  "The default thinking strength for new employees / tasks. Unset lets each model apply its own default.",
+                )
+          }
         >
           <Select
             value={defaultThinking}
             options={[
               { value: "", label: t("None") },
-              ...THINKING_LEVELS.map((level) => ({
-                value: level,
-                label: t(THINKING_LEVEL_LABEL_KEYS[level]),
-              })),
+              ...thinkingSelectOptions(
+                thinkingLevelsFor(models, defaultModel),
+                defaultThinking,
+              ),
             ]}
             onChange={changeDefaultThinking}
           />

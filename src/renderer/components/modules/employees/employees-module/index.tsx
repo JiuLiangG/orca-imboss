@@ -2,8 +2,9 @@ import {
   BUILTIN_REMOVE_CRON_MARKER,
   BUILTIN_SET_CRON_MARKER,
 } from "@shared/constants/agent_tools";
+import { SettingKeys } from "@shared/constants/settings";
 import { t } from "@shared/l10n";
-import type { Employee, EmployeeInput } from "@shared/types";
+import type { Employee, EmployeeInput, ModelOption } from "@shared/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { appStore, useApp } from "../../../../app-store";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
@@ -57,13 +58,17 @@ export function EmployeesModule(): React.JSX.Element {
   }, [data.employees.items, query]);
 
   // Model options still come via IPC (models out of scope); loaded once.
-  const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const [models, setModels] = useState<ModelOption[]>([]);
+  const [defaultModel, setDefaultModel] = useState("");
   useEffect(() => {
-    void imb.models
-      .list()
-      .then((models) =>
-        setModelOptions(models.map((m) => `${m.provider}/${m.id}`)),
-      )
+    void Promise.all([
+      imb.models.list(),
+      imb.settings.get(SettingKeys.DefaultModel),
+    ])
+      .then(([loaded, storedDefault]) => {
+        setModels(loaded);
+        setDefaultModel(storedDefault ?? "");
+      })
       .catch(() => {
         // Best-effort: model selects stay empty on failure.
       });
@@ -273,7 +278,8 @@ export function EmployeesModule(): React.JSX.Element {
         value: s.name,
         label: s.name,
       }))}
-      modelOptions={modelOptions.map((m) => ({ value: m, label: m }))}
+      models={models}
+      defaultModel={defaultModel}
       onPatch={(input) => patch(selected.id, input)}
       onRemove={() => void remove(selected.id)}
       onAvatarUpdated={(employee) => appStore.replaceEmployee(employee)}
@@ -313,7 +319,8 @@ export function EmployeesModule(): React.JSX.Element {
           value: s.name,
           label: s.name,
         }))}
-        modelOptions={modelOptions.map((m) => ({ value: m, label: m }))}
+        models={models}
+        defaultModel={defaultModel}
         onCreate={create}
       />
       {error !== null && (

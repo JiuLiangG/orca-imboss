@@ -1,5 +1,9 @@
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { SettingKeys } from "@shared/constants/settings";
+import {
+  THINKING_LEVELS,
+  type ThinkingLevel,
+} from "@shared/constants/thinking";
 import type { ModelOption } from "@shared/types";
 import { getAuthPath, getModelsPath, getModelsStorePath } from "../data-dir";
 import { getSetting } from "../db/settings";
@@ -136,12 +140,37 @@ export async function listAvailableModels(): Promise<ModelOption[]> {
     const key = `${model.provider}/${model.id}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    models.push({ provider: model.provider, id: model.id, name: model.name });
+    models.push({
+      provider: model.provider,
+      id: model.id,
+      name: model.name,
+      thinkingLevels: supportedThinkingLevels(model),
+    });
   }
 
   return models.sort(
     (a, b) => a.provider.localeCompare(b.provider) || a.id.localeCompare(b.id),
   );
+}
+
+/**
+ * Pi's `getSupportedThinkingLevels` (`@earendil-works/pi-ai` models.js).
+ *
+ * A missing map entry keeps `off` through `high`. `null` removes a level.
+ * `xhigh` and `max` are included only when the map names them. A model that
+ * does not reason accepts `off` only.
+ */
+export function supportedThinkingLevels(model: {
+  reasoning: boolean;
+  thinkingLevelMap?: Partial<Record<string, string | null>>;
+}): ThinkingLevel[] {
+  if (!model.reasoning) return ["off"];
+  return THINKING_LEVELS.filter((level) => {
+    const mapped = model.thinkingLevelMap?.[level];
+    if (mapped === null) return false;
+    if (level === "xhigh" || level === "max") return mapped !== undefined;
+    return true;
+  });
 }
 
 /**

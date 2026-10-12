@@ -1,6 +1,11 @@
-import type { ProviderModelsQuery, ProviderUpsert } from "@shared/types";
-import { clipboard, ipcMain } from "electron";
+import type {
+  ProviderLoginEvent,
+  ProviderModelsQuery,
+  ProviderUpsert,
+} from "@shared/types";
+import { clipboard, ipcMain, shell, type WebContents } from "electron";
 import { listAvailableModels, refreshModelStore } from "../agent/model-runtime";
+import { loginProviderSubscription } from "../agent/provider-login";
 import {
   listModels,
   listProviders,
@@ -10,6 +15,12 @@ import {
   upsertProvider,
 } from "../agent/providers";
 import { assertString, parsePageQuery } from "./helpers";
+
+/** One in-flight subscription sign-in. A second click is rejected. */
+let activeLogin: {
+  controller: AbortController;
+  sender: WebContents;
+} | null = null;
 
 // --- providers / skills ---
 export function registerProviderHandlers(): void {
@@ -41,10 +52,55 @@ export function registerProviderHandlers(): void {
   // auth-configured only) — backs the default-model / employee model selects.
   ipcMain.handle("models:list", () => listAvailableModels());
 
+  ipcMain.handle("providers:login", async (event, id: unknown) => {
+    if (activeLogin) {
+      throw new Error("A sign-in is already in progress.");
+    }
+    const providerId = assertString(id, "provider id");
+    const controller = new AbortController();
+    const sender = event.sender;
+    activeLogin = { controller, sender };
+    const onGone = (): void => controller.abort();
+    sender.once("destroyed", onGone);
+    try {
+      await loginProviderSubscription(
+        providerId,
+        (payload) => deliverLoginEvent(sender, payload),
+        controller.signal,
+      );
+      await refreshModelStore(controller.signal);
+    } finally {
+      sender.removeListener("destroyed", onGone);
+      if (activeLogin?.controller === controller) activeLogin = null;
+    }
+  });
+
+  ipcMain.handle("providers:cancelLogin", () => {
+    activeLogin?.controller.abort();
+  });
+
   ipcMain.handle("providers:copyKey", async (_event, id: unknown) => {
     const key = await revealProviderKey(assertString(id, "provider id"));
     if (!key) throw new Error("No API key set for this provider.");
     clipboard.writeText(key);
     return true;
   });
+}
+
+/** Pi already requires https. Re-check before handing the URL to the OS. */
+function deliverLoginEvent(
+  sender: WebContents,
+  payload: ProviderLoginEvent,
+): void {
+  if (!sender.isDestroyed()) sender.send("providers:loginEvent", payload);
+  if (!isHttpsUrl(payload.verificationUri)) return;
+  void shell.openExternal(payload.verificationUri);
+}
+
+function isHttpsUrl(raw: string): boolean {
+  try {
+    return new URL(raw).protocol === "https:";
+  } catch {
+    return false;
+  }
 }

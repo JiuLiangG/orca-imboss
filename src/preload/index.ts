@@ -25,6 +25,7 @@ import type {
   PageQuery,
   PageResult,
   ProviderInfo,
+  ProviderLoginEvent,
   ProviderModelsQuery,
   ProviderUpsert,
   ThemeState,
@@ -314,6 +315,13 @@ const api = {
       ipcRenderer.invoke("providers:copyKey", id) as Promise<boolean>,
     listModels: (input: ProviderModelsQuery) =>
       ipcRenderer.invoke("providers:listModels", input) as Promise<string[]>,
+    /** Subscription device-code sign-in. Resolves after the credential is stored. */
+    login: (id: string) =>
+      ipcRenderer.invoke("providers:login", id) as Promise<void>,
+    cancelLogin: () =>
+      ipcRenderer.invoke("providers:cancelLogin") as Promise<void>,
+    onLoginEvent: (cb: (event: ProviderLoginEvent) => void) =>
+      on<ProviderLoginEvent>("providers:loginEvent", cb),
   },
 
   models: {

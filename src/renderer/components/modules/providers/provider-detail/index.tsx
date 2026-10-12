@@ -15,6 +15,7 @@ import {
   providerConfigToForm,
   type ProviderConfigFormValue,
 } from "../provider-config-fields";
+import { SubscriptionLogin } from "../subscription-login";
 import "./index.css";
 
 export interface ProviderDetailProps {
@@ -22,6 +23,8 @@ export interface ProviderDetailProps {
   /** Persist the edited configuration (add-or-update). */
   onSave: (input: ProviderUpsert) => Promise<void>;
   onRemove: () => void;
+  /** Subscription sign-in replaced the credential; the parent reloads the list. */
+  onSignedIn: () => Promise<void>;
 }
 
 /** Transient "Saved" feedback duration. */
@@ -31,6 +34,7 @@ export function ProviderDetail({
   provider,
   onSave,
   onRemove,
+  onSignedIn,
 }: ProviderDetailProps): React.JSX.Element {
   const [config, setConfig] = useState<ProviderConfigFormValue>(() =>
     providerConfigToForm(provider),
@@ -195,20 +199,31 @@ export function ProviderDetail({
             />
           </>
         )}
-        <Field label={t("API key")}>
-          <PasswordField
-            value={masked}
-            onCopy={copy}
-            disabled={!provider.hasKey}
-          />
-        </Field>
+        <SubscriptionLogin providerId={provider.id} onSignedIn={onSignedIn} />
+        {provider.authType === "oauth" ? (
+          <Field label={t("Subscription")}>
+            <span className="imb-provider-info">
+              {t("Signed in with SuperGrok or X Premium")}
+            </span>
+          </Field>
+        ) : (
+          <Field label={t("API key")}>
+            <PasswordField
+              value={masked}
+              onCopy={copy}
+              disabled={!provider.hasKey}
+            />
+          </Field>
+        )}
         <Field
           label={t("New API key")}
           htmlFor={`provider-key-${provider.id}`}
           hint={
-            provider.hasKey
-              ? t("Leave blank to keep the current key.")
-              : undefined
+            provider.authType === "oauth"
+              ? t("Saving an API key replaces the subscription sign-in.")
+              : provider.hasKey
+                ? t("Leave blank to keep the current key.")
+                : undefined
           }
         >
           <PasswordInput
