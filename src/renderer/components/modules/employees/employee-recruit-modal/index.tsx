@@ -1,25 +1,28 @@
-import {
-  isThinkingLevel,
-  THINKING_LEVEL_LABEL_KEYS,
-  THINKING_LEVELS,
-} from "@shared/constants/thinking";
+import { isThinkingLevel } from "@shared/constants/thinking";
 import { t } from "@shared/l10n";
-import type { Employee, EmployeeInput } from "@shared/types";
+import type { Employee, EmployeeInput, ModelOption } from "@shared/types";
 import { useState } from "react";
 import { Button } from "../../../button";
 import { Field } from "../../../field";
 import { Input } from "../../../input";
 import { Modal } from "../../../modal";
 import { MultiSelect, type MultiSelectOption } from "../../../multi-select";
-import { Select, type SelectOption } from "../../../select";
+import { Select } from "../../../select";
 import { Textarea } from "../../../textarea";
+import {
+  modelRef,
+  thinkingLevelsFor,
+  thinkingSelectOptions,
+} from "../../../../thinking-options";
 
 export interface EmployeeRecruitModalProps {
   open: boolean;
   onClose: () => void;
   mcpOptions: MultiSelectOption[];
   skillOptions: MultiSelectOption[];
-  modelOptions: SelectOption[];
+  models: ModelOption[];
+  /** App default model (`provider/id`), used when the recruit follows it. */
+  defaultModel: string;
   onCreate: (input: EmployeeInput) => Promise<Employee | null>;
 }
 
@@ -28,7 +31,8 @@ export function EmployeeRecruitModal({
   onClose,
   mcpOptions,
   skillOptions,
-  modelOptions,
+  models,
+  defaultModel,
   onCreate,
 }: EmployeeRecruitModalProps): React.JSX.Element {
   const [name, setName] = useState("");
@@ -153,22 +157,30 @@ export function EmployeeRecruitModal({
       <Field label={t("Model")}>
         <Select
           value={modelId}
-          options={[{ value: "", label: t("Default") }, ...modelOptions]}
+          options={[
+            { value: "", label: t("Default") },
+            ...models.map((model) => ({
+              value: modelRef(model),
+              label: modelRef(model),
+            })),
+          ]}
           onChange={setModelId}
         />
       </Field>
       <Field
         label={t("Thinking level")}
-        hint={t("Unset follows the default thinking level.")}
+        hint={t(
+          "Unset follows the default thinking level. Only levels this model accepts are listed.",
+        )}
       >
         <Select
           value={thinkingLevel}
           options={[
             { value: "", label: t("Default") },
-            ...THINKING_LEVELS.map((level) => ({
-              value: level,
-              label: t(THINKING_LEVEL_LABEL_KEYS[level]),
-            })),
+            ...thinkingSelectOptions(
+              thinkingLevelsFor(models, modelId, defaultModel),
+              thinkingLevel,
+            ),
           ]}
           onChange={setThinkingLevel}
         />

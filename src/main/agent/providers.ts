@@ -49,29 +49,22 @@ export async function listProviders(): Promise<ProviderInfo[]> {
   // Built-in (curated) providers appear only once configured (a key is set);
   // unconfigured built-ins are not shown ("no prefilled providers").
   for (const id of CURATED_PROVIDERS) {
-    const credential = auth[id];
-    const key =
-      credential && typeof credential.key === "string"
-        ? credential.key
-        : undefined;
-    if (!key) continue; // skip unconfigured built-ins
+    const stored = readStoredCredential(auth[id]);
+    if (!stored) continue; // skip unconfigured built-ins
     infos.push({
       id,
       kind: "built-in",
       label: id,
       hasKey: true,
-      keyHint: maskKey(key),
+      authType: stored.authType,
+      keyHint: stored.authType === "api_key" ? maskKey(stored.key) : null,
       modelIds: [],
     });
   }
 
   for (const [id, spec] of Object.entries(custom)) {
     if (!SAFE_ID_RE.test(id)) continue; // skip anything unreadable
-    const credential = auth[id];
-    const key =
-      credential && typeof credential.key === "string"
-        ? credential.key
-        : undefined;
+    const stored = readStoredCredential(auth[id]);
     infos.push({
       id,
       kind: "custom",
@@ -82,8 +75,9 @@ export async function listProviders(): Promise<ProviderInfo[]> {
           ? spec.api
           : undefined,
       modelIds: (spec.models ?? []).map((m) => m.id),
-      hasKey: Boolean(key),
-      keyHint: maskKey(key),
+      hasKey: stored !== null,
+      authType: stored?.authType ?? null,
+      keyHint: stored?.authType === "api_key" ? maskKey(stored.key) : null,
     });
   }
 
@@ -285,6 +279,28 @@ async function readJson<T>(filePath: string): Promise<Partial<T>> {
     // the next write recreate it. (Defensive, per project guidelines.)
     return {};
   }
+}
+
+/**
+ * A credential the provider list can describe without revealing secrets.
+ * OAuth entries (`type: "oauth"`, `access`/`refresh`) count as configured
+ * even though they have no API key. Anything else with a `key` is an API key.
+ */
+function readStoredCredential(
+  credential: AuthFile[string] | undefined,
+): { authType: "api_key"; key: string } | { authType: "oauth" } | null {
+  if (!credential || typeof credential !== "object") return null;
+  if (
+    credential.type === "oauth" &&
+    typeof credential["access"] === "string" &&
+    credential["access"].length > 0
+  ) {
+    return { authType: "oauth" };
+  }
+  if (typeof credential.key === "string" && credential.key.length > 0) {
+    return { authType: "api_key", key: credential.key };
+  }
+  return null;
 }
 
 /** Write atomically and restrict perms on POSIX (both files may embed keys). */

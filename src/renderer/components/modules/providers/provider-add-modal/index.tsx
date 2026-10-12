@@ -1,6 +1,7 @@
 import {
   CURATED_PROVIDERS,
   CURATED_PROVIDERS_LABELS,
+  isSubscriptionLoginProvider,
 } from "@shared/constants/providers";
 import { t } from "@shared/l10n";
 import type { ProviderUpsert } from "@shared/types";
@@ -19,11 +20,14 @@ import {
   ProviderConfigFields,
   type ProviderConfigFormValue,
 } from "../provider-config-fields";
+import { SubscriptionLogin } from "../subscription-login";
 
 export interface ProviderAddModalProps {
   open: boolean;
   onClose: () => void;
   onSaved: (provider: ProviderUpsert) => Promise<void>;
+  /** Subscription sign-in stored the credential; the parent reloads the list. */
+  onSignedIn: (providerId: string) => Promise<void>;
 }
 
 type Mode = "built-in" | "custom";
@@ -32,6 +36,7 @@ export function ProviderAddModal({
   open,
   onClose,
   onSaved,
+  onSignedIn,
 }: ProviderAddModalProps): React.JSX.Element {
   const [mode, setMode] = useState<Mode>("built-in");
   const [builtinId, setBuiltinId] = useState<string>(CURATED_PROVIDERS[0]);
@@ -160,6 +165,19 @@ export function ProviderAddModal({
               onChange={setBuiltinId}
             />
           </Field>
+          <SubscriptionLogin
+            providerId={builtinId}
+            onSignedIn={async () => {
+              await onSignedIn(builtinId);
+              reset();
+              onClose();
+            }}
+          />
+          {isSubscriptionLoginProvider(builtinId) && (
+            <p className="imb-module-note">
+              {t("Subscription sign-in does not need an API key.")}
+            </p>
+          )}
           <Field label={t("API key")}>
             <PasswordInput
               value={apiKey}

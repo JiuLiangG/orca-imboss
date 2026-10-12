@@ -174,10 +174,11 @@ export function ProvidersModule(): React.JSX.Element {
 
   const detail = selected ? (
     <ProviderDetail
-      key={`${selected.kind}:${selected.id}`}
+      key={`${selected.kind}:${selected.id}:${selected.authType}`}
       provider={selected}
       onSave={save}
       onRemove={() => void remove(selected.id)}
+      onSignedIn={() => appStore.reloadProviders()}
     />
   ) : null;
 
@@ -208,6 +209,10 @@ export function ProvidersModule(): React.JSX.Element {
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onSaved={handleSaved}
+        onSignedIn={async (id) => {
+          await appStore.reloadProviders();
+          setSelectedId(id);
+        }}
       />
       {error !== null && (
         <p className="imb-error-text imb-module-error">{error}</p>

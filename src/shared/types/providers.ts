@@ -1,4 +1,5 @@
 import { PROVIDER_API_TYPES } from "@shared/constants/providers";
+import type { ThinkingLevel } from "@shared/constants/thinking";
 
 export type ProviderApiType = (typeof PROVIDER_API_TYPES)[number];
 
@@ -11,8 +12,21 @@ export interface ProviderInfo {
   apiType?: ProviderApiType;
   modelIds: string[];
   hasKey: boolean;
-  /** Last 4 characters of the stored key, for confirmation UI only. */
+  /**
+   * How the stored credential authenticates. `null` when a custom provider
+   * has config but no credential yet. OAuth credentials have no API key.
+   */
+  authType: "api_key" | "oauth" | null;
+  /** Last 4 characters of a stored API key, for confirmation UI only. */
   keyHint: string | null;
+}
+
+/** Pushed while a subscription sign-in is waiting on the user. */
+export interface ProviderLoginEvent {
+  type: "device_code";
+  userCode: string;
+  verificationUri: string;
+  expiresInSeconds?: number;
 }
 
 /**
@@ -24,6 +38,11 @@ export interface ModelOption {
   provider: string;
   id: string;
   name: string;
+  /**
+   * Thinking levels this catalog entry accepts, in Pi's order. Mirrors
+   * `getSupportedThinkingLevels` in `@earendil-works/pi-ai`.
+   */
+  thinkingLevels: ThinkingLevel[];
 }
 
 /** Payload to add/update a provider configuration. */
