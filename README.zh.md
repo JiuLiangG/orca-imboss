@@ -8,6 +8,10 @@ imboss 是一款桌面应用：你与一位担任「幕僚长」的 AI **助理*
 
 <img width="1938" height="1412" alt="imboss" src="https://github.com/user-attachments/assets/e785e2e1-145a-436b-a1e6-975710ffbd24" />
 
+## 介绍视频
+
+[imboss 介绍视频](https://www.bilibili.com/video/BV1e3po6rET6/?share_source=copy_web&vd_source=89506ada1738e6a7900dc6eb24d24da5)
+
 ## 工作原理
 
 1. **你和助理对话。** 像给同事发消息一样自然聊天，无需琢磨提示词。
