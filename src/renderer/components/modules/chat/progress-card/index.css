@@ -1,4 +1,5 @@
 .imb-progress-card {
+  position: relative;
   background: var(--imb-surface);
   border: 1px solid var(--imb-border);
   border-radius: var(--imb-radius-lg);
@@ -11,6 +12,43 @@
 .imb-progress-card-title {
   font-size: var(--imb-text-sm);
   color: var(--imb-muted);
+  /* Keep the title clear of the top-right open-group button. */
+  padding-right: 24px;
+}
+
+/* Open-group affordance: only rendered when the linked chat resolves. */
+.imb-progress-open {
+  position: absolute;
+  top: var(--imb-space-2);
+  right: var(--imb-space-2);
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--imb-radius-sm);
+  background: transparent;
+  color: var(--imb-muted);
+  cursor: pointer;
+  transition:
+    background var(--imb-motion-fast) var(--imb-ease-standard),
+    color var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-progress-open svg {
+  width: 15px;
+  height: 15px;
+}
+
+.imb-progress-open:hover {
+  background: var(--imb-fg-soft);
+  color: var(--imb-text-base);
+}
+
+.imb-progress-open:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
 }
 
 .imb-progress-row {
@@ -34,6 +72,29 @@
   color: var(--imb-muted);
   font-size: var(--imb-text-xs);
   font-weight: 400;
+}
+
+/* Clickable employee name: keeps the row's bold look, highlights on hover. */
+button.imb-pname-link {
+  font: inherit;
+  color: inherit;
+  white-space: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  border-radius: var(--imb-radius-sm);
+  transition: color var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+button.imb-pname-link:hover {
+  color: var(--imb-accent);
+}
+
+button.imb-pname-link:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
 }
 
 .imb-progress-tag {

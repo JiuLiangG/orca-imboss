@@ -149,6 +149,8 @@ async function performSendMessage(
     kind?: string;
     content: string;
     steps?: MessageStep[];
+    /** Task group a `progress` card links to (required alongside `steps`). */
+    groupChatId?: number;
     attachments?: string[];
     attachmentTotal?: number;
     notify?: number[];
@@ -176,6 +178,7 @@ async function performSendMessage(
     {
       kind: input.kind ?? "text",
       steps: input.steps,
+      groupChatId: input.groupChatId,
       attachments,
       attachmentTotal: input.attachmentTotal,
     },
@@ -237,6 +240,8 @@ interface MessageBrief {
   kind: MessageKind;
   content: string;
   steps?: MessageStep[];
+  /** Task group the card reports on; forwarded so a later progress update can reuse it. */
+  groupChatId?: number;
   attachments?: MessageAttachment[];
   /** True attachment count when it exceeds the metadata rows forwarded. */
   attachmentsTotal?: number;
@@ -252,6 +257,7 @@ function toMessageBrief(message: Message): MessageBrief {
     createdAt: message.createdAt,
   };
   if (message.steps && message.steps.length > 0) brief.steps = message.steps;
+  if (message.groupChatId !== null) brief.groupChatId = message.groupChatId;
   if (message.attachments && message.attachments.length > 0) {
     // Forward the on-disk `path` too: the model has filesystem tools and needs
     // the location to read the attached file. Paths are captured by the app
@@ -532,28 +538,35 @@ function sendMessageTool(env: AgentEnvironment): AnyPiTool {
  * `imb_progress` — assistant-only: post a task-progress card into a chat.
  *
  * Split out of `imb_send_message` so publishing progress has a dedicated,
- * typed tool: the sender is always the assistant (id 0) and the card neither
- * notifies anyone nor carries attachments. Registered only for the assistant
- * in `createTeamToolDefinitions`; the shared send pipeline keeps its
- * participant check, which the assistant satisfies in every chat it posts to.
+ * typed tool: the sender is always the assistant (id 0), the card links to the
+ * task group it reports on (`groupChatId`, rendered as an open-group arrow),
+ * and it neither notifies anyone nor carries attachments. Registered only for
+ * the assistant in `createTeamToolDefinitions`; the shared send pipeline keeps
+ * its participant check, which the assistant satisfies in every chat it posts
+ * to.
  */
 function progressTool(env: AgentEnvironment): AnyPiTool {
   return {
     name: "imb_progress",
     label: "Post progress",
     description:
-      "Post a task-progress card into a chat as the assistant. `content` is the card title and " +
-      "`steps` is the full, current step list (one step per employee, `status` `pending` before " +
-      "work is assigned, `busy` once it is assigned and running, `done` when finished). Always " +
-      "resend the whole list on every update; no participant is notified.",
+      "Post a task-progress card into a chat as the assistant. `chatId` is the chat the card is " +
+      "posted into (the boss's chat) and `groupChatId` is the task group the card reports on — the " +
+      "card links to that group so the boss can open it. `content` is the card title and `steps` is " +
+      "the full, current step list (one step per employee, each carrying that employee's " +
+      "`employeeId`; `status` `pending` before work is assigned, `busy` once it is assigned and " +
+      "running, `done` when finished). Always resend the whole list on every update; no " +
+      "participant is notified.",
     promptSnippet: "post a progress card",
     parameters: Type.Object({
       chatId: Type.Integer({ minimum: 1 }),
+      groupChatId: Type.Integer({ minimum: 1 }),
       content: Type.String({ minLength: 1, maxLength: 100000 }),
       steps: Type.Array(
         Type.Object({
           name: Type.String({ minLength: 1, maxLength: 256 }),
           role: Type.String({ maxLength: 256 }),
+          employeeId: Type.Integer({ minimum: 0 }),
           status: Type.Union([
             Type.Literal("done"),
             Type.Literal("busy"),
@@ -566,15 +579,29 @@ function progressTool(env: AgentEnvironment): AnyPiTool {
     execute: async (_toolCallId, params) => {
       const input = params as {
         chatId: number;
+        groupChatId: number;
         content: string;
         steps: MessageStep[];
       };
+      // Validate the link and every step employee before anything is written:
+      // a dangling id would render as a dead click target the model can no
+      // longer repair, so it must be corrected in this call instead.
+      if (!dbChats.getChat(input.groupChatId)) {
+        throw new Error(`Chat ${input.groupChatId} does not exist.`);
+      }
+      for (const step of input.steps) {
+        const employeeId = step.employeeId ?? -1;
+        if (!dbEmployees.getEmployee(employeeId)) {
+          throw new Error(`Employee ${employeeId} does not exist.`);
+        }
+      }
       const message = await performSendMessage(env, {
         senderEmployeeId: ASSISTANT_ID,
         chatId: input.chatId,
         kind: "progress",
         content: input.content,
         steps: input.steps,
+        groupChatId: input.groupChatId,
       });
       return toolResult({ id: message.id });
     },

@@ -15,6 +15,12 @@ export interface MessageStep {
   name: string;
   role: string;
   status: StepStatus;
+  /**
+   * The employee this step tracks, so the card can link to their agent
+   * session. `null` for steps stored before the field existed (or written by
+   * a producer that did not supply one); such rows render non-clickable.
+   */
+  employeeId: number | null;
 }
 
 /** Attachment metadata attached to a (user) message. */
@@ -42,6 +48,12 @@ export interface Message {
   content: string;
   /** Present when `kind` is `progress`. */
   steps: MessageStep[] | null;
+  /**
+   * The task group chat this `progress` card reports on; the UI links the card
+   * (and its steps) to that conversation. `null` for messages stored before
+   * the field existed or when the producer supplied no link.
+   */
+  groupChatId: number | null;
   /** Present when the message carries attachments. */
   attachments: MessageAttachment[] | null;
   /**
@@ -69,6 +81,11 @@ export interface MessageSearchResult {
 export interface AppendMessageOptions {
   kind?: MessageKind;
   steps?: MessageStep[];
+  /**
+   * Task group a `progress` card links to (stored alongside `steps` in the
+   * `steps` column). Required for `kind === "progress"`.
+   */
+  groupChatId?: number;
   attachments?: MessageAttachment[];
   /**
    * True attachment count when it exceeds `attachments.length` (agent tools

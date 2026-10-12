@@ -168,6 +168,21 @@ export function appendMessage(
   if (kind === "progress" && (steps === undefined || steps.length === 0)) {
     throw new Error("Progress messages need at least one step.");
   }
+  const groupChatId = validateGroupChatId(options.groupChatId);
+  if (kind === "progress" && groupChatId === undefined) {
+    throw new Error("Progress messages need a linked group chat.");
+  }
+  if (kind !== "progress" && groupChatId !== undefined) {
+    // Only a progress card links to a task group; reject rather than silently
+    // drop a link the caller explicitly supplied.
+    throw new Error("Only progress messages carry a linked group chat.");
+  }
+  if (groupChatId !== undefined) {
+    const linked = db
+      .prepare("SELECT 1 FROM chats WHERE id = ?")
+      .get(groupChatId);
+    if (!linked) throw new Error("Linked group chat does not exist.");
+  }
   const attachments = validateAttachments(options.attachments);
   const attachmentTotal = validateAttachmentTotal(
     options.attachmentTotal,
@@ -186,7 +201,7 @@ export function appendMessage(
       senderEmployeeId,
       kind,
       content,
-      steps !== undefined ? JSON.stringify({ steps }) : null,
+      steps !== undefined ? serializeSteps(steps, groupChatId) : null,
       attachmentsJson,
       createdAt,
     );
@@ -218,7 +233,7 @@ export function appendMessage(
     sender_employee_id: senderEmployeeId,
     kind,
     content,
-    steps: steps !== undefined ? JSON.stringify({ steps }) : null,
+    steps: steps !== undefined ? serializeSteps(steps, groupChatId) : null,
     attachments: attachmentsJson,
     created_at: createdAt,
   });
@@ -291,6 +306,7 @@ function toMessage(row: MessageRow): Message {
     kind: row.kind || "text",
     content: row.content,
     steps: parseSteps(row.steps),
+    groupChatId: parseGroupChatId(row.steps),
     attachments,
     attachmentsTotal:
       attachments === null
@@ -301,6 +317,34 @@ function toMessage(row: MessageRow): Message {
           ),
     createdAt: row.created_at,
   };
+}
+
+/**
+ * Serialize a progress payload: the step list plus the task group the card
+ * links to. Stored as one object so the link rides along without a schema
+ * change — the same shape the `attachments` column uses for its `total`.
+ */
+function serializeSteps(
+  steps: MessageStep[],
+  groupChatId: number | undefined,
+): string {
+  const payload: { steps: MessageStep[]; chatId?: number } = { steps };
+  if (groupChatId !== undefined) payload.chatId = groupChatId;
+  return JSON.stringify(payload);
+}
+
+/**
+ * Read the optional linked group chat id stored alongside the step list.
+ * Stored values are never trusted: only a safe positive integer surfaces,
+ * anything else (including absence) becomes `null`.
+ */
+function parseGroupChatId(raw: string | null): number | null {
+  if (!raw) return null;
+  const parsed = parseJsonObject(raw);
+  const id = parsed["chatId"];
+  return typeof id === "number" && Number.isSafeInteger(id) && id > 0
+    ? id
+    : null;
 }
 
 function parseSteps(raw: string | null): MessageStep[] | null {
@@ -323,6 +367,12 @@ function parseSteps(raw: string | null): MessageStep[] | null {
       name: record["name"],
       role: record["role"],
       status: record["status"] as StepStatus,
+      employeeId:
+        typeof record["employeeId"] === "number" &&
+        Number.isSafeInteger(record["employeeId"]) &&
+        record["employeeId"] >= 0
+          ? record["employeeId"]
+          : null,
     });
   }
   return result;
@@ -391,6 +441,19 @@ function serializeAttachments(
   return JSON.stringify(payload);
 }
 
+/**
+ * Validate the linked group chat id of a progress payload: a safe positive
+ * integer. Existence is checked by the caller (which has the `db` handle);
+ * `undefined` means "no link supplied" and is an error only where required.
+ */
+function validateGroupChatId(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error("Linked group chat id is invalid.");
+  }
+  return value;
+}
+
 function validateSteps(
   steps: MessageStep[] | undefined,
 ): MessageStep[] | undefined {
@@ -413,7 +476,22 @@ function validateSteps(
     if (!STEP_STATUSES.includes(step.status)) {
       throw new Error("Progress step status must be done, busy, or pending.");
     }
-    result.push({ name, role, status: step.status });
+    // Steps link to an agent session, so the employee must be resolvable at
+    // write time; a dangling id would render a dead click target forever.
+    const employeeId = step.employeeId;
+    if (
+      typeof employeeId !== "number" ||
+      !Number.isSafeInteger(employeeId) ||
+      employeeId < 0
+    ) {
+      throw new Error("Progress step needs a valid employeeId.");
+    }
+    if (
+      !getDB().prepare("SELECT 1 FROM employees WHERE id = ?").get(employeeId)
+    ) {
+      throw new Error("Progress step employee does not exist.");
+    }
+    result.push({ name, role, status: step.status, employeeId });
   }
   return result;
 }

@@ -181,6 +181,7 @@
   "Only levels this model accepts are listed. Unset lets each model apply its own default.": "这里只列出这个模型接受的档位。未设置时由各模型使用自己的默认值。",
   "Open browser": "打开浏览器",
   "Open chat": "打开会话",
+  "Open group chat": "打开群聊",
   "Open this page and enter the code.": "打开这个页面，输入验证码。",
   "Open Telegram and start a chat with @BotFather.": "打开 Telegram，与 @BotFather 开始对话。",
   "Other (type a free-form answer)": "其他（自由填写）",

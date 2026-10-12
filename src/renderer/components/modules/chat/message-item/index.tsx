@@ -63,7 +63,11 @@ export function MessageItem({
             size={34}
             onClick={openSession}
           />
-          <ProgressCard title={message.content} steps={message.steps ?? []} />
+          <ProgressCard
+            title={message.content}
+            steps={message.steps ?? []}
+            groupChatId={message.groupChatId}
+          />
         </div>
       );
     case "chat":
