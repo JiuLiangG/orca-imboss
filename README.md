@@ -8,6 +8,11 @@ imboss is a desktop app where you chat with an AI **Assistant** who acts as your
 
 <img width="1938" height="1412" alt="imboss" src="https://github.com/user-attachments/assets/e785e2e1-145a-436b-a1e6-975710ffbd24" />
 
+## Intro Video
+
+[imboss intro video](https://www.bilibili.com/video/BV1e3po6rET6/?share_source=copy_web&vd_source=89506ada1738e6a7900dc6eb24d24da5)
+
+
 ## How it works
 
 1. **You talk to the Assistant.** Chat naturally, like messaging a colleague — no prompt engineering required.
