@@ -73,10 +73,10 @@ Unless a written agreement grants it, you may not:
 
 ## 4. Contributions
 
-If you contribute code to imboss, you agree that your contribution may be
-distributed under both GPL-3.0 and the commercial license, so that the project can
-continue to offer both options. Contact us if you need a separate contributor
-agreement.
+Contributions are governed by the Contributor License Agreement in [CLA.md](CLA.md),
+which permits your contribution to be distributed under both GPL-3.0 and the
+commercial license so that the project can continue to offer both options. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for how to sign.
 
 ## 5. No warranty
 

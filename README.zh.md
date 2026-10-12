@@ -137,6 +137,8 @@ imboss 采用**双重许可**模式：
 
 若你依据 GPL-3.0 使用 imboss，就需履行其全部义务，包括以相同许可开放你的衍生作品。但请注意，履行 GPL-3.0 本身**并不**授予企业使用权限：只要在企业范围内使用，都需要商业许可。若你无法或不愿履行 GPL-3.0，或者需要企业使用，则需要商业许可。
 
+欢迎参与贡献 —— 请参阅 [CONTRIBUTING.md](CONTRIBUTING.md) 与[贡献者许可协议](CLA.md)。
+
 ## 技术实现
 
 - **运行时** —— Electron 44、React 19 + TypeScript、`electron-vite`。

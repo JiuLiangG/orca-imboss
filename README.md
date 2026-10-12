@@ -137,6 +137,8 @@ imboss is **dual-licensed**:
 
 If you use imboss under GPL-3.0 you must comply with all of its terms, including making your derivative work available under the same license. Note that GPL-3.0 compliance alone does **not** grant enterprise use: any use by or within an enterprise requires a commercial license. If you cannot or do not want to comply with GPL-3.0, or if you need enterprise use, a commercial license is required.
 
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) and the [Contributor License Agreement](CLA.md).
+
 ## Under the hood
 
 - **Runtime** — Electron 44, React 19 + TypeScript, `electron-vite`.
