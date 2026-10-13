@@ -3,6 +3,7 @@ import type { MessageStep, StepStatus } from "@shared/types";
 import { useEffect, useMemo } from "react";
 import { cls } from "reactutils";
 import { appStore, useApp } from "../../../../app-store";
+import { EmployeeAvatar } from "../../../employee-avatar";
 import { IconOpen } from "../../../icons";
 import { useChatSummary } from "../use-chat-summary";
 import "./index.css";
@@ -78,23 +79,28 @@ export function ProgressCard({
         const displayName = currentName?.trim() || step.name;
         return (
           <div key={`${step.name}-${index}`} className="imb-progress-row">
-            <span className="imb-pname">
-              {employeeId !== null &&
-              targetChatId !== null &&
-              currentName !== undefined ? (
-                <button
-                  type="button"
-                  className="imb-pname-link"
-                  onClick={() =>
-                    void appStore.openAgentSession(employeeId, targetChatId)
-                  }
-                >
-                  {displayName}
-                </button>
-              ) : (
-                displayName
+            <span className="imb-pname-wrap">
+              {employeeId !== null && (
+                <EmployeeAvatar employeeId={employeeId} size={18} />
               )}
-              <span className="imb-pname-role"> · {step.role}</span>
+              <span className="imb-pname">
+                {employeeId !== null &&
+                targetChatId !== null &&
+                currentName !== undefined ? (
+                  <button
+                    type="button"
+                    className="imb-pname-link"
+                    onClick={() =>
+                      void appStore.openAgentSession(employeeId, targetChatId)
+                    }
+                  >
+                    {displayName}
+                  </button>
+                ) : (
+                  displayName
+                )}
+                <span className="imb-pname-role"> · {step.role}</span>
+              </span>
             </span>
             <span className={cls("imb-progress-tag", `imb-${step.status}`)}>
               <span className="imb-status-dot" aria-hidden="true" />

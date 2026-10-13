@@ -140,3 +140,12 @@ button.imb-pname-link:focus-visible {
     opacity: 0.35;
   }
 }
+
+/* Left side of a progress row: the assignee's avatar + their name/role. */
+.imb-pname-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
