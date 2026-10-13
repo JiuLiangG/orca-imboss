@@ -29,7 +29,6 @@ export type ShellLayout = "list-detail" | "single";
 const LIST_DETAIL_MODULES: ReadonlySet<AppModule> = new Set([
   "chat",
   "employees",
-  "providers",
   "mcp",
   "skills",
   "settings",

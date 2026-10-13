@@ -8,6 +8,7 @@ import { SettingsAbout } from "../settings-about";
 import { SettingsGeneral } from "../settings-general";
 import { SettingsIntegrations } from "../settings-integrations";
 import { SettingsNetwork } from "../settings-network";
+import { SettingsProviders } from "../settings-providers";
 import { SettingsTheme } from "../settings-theme";
 
 const SECTIONS: Array<{
@@ -21,6 +22,11 @@ const SECTIONS: Array<{
     descKey: "App language and basic settings",
   },
   { id: "theme", labelKey: "Theme", descKey: "Accent color and theme mode" },
+  {
+    id: "providers",
+    labelKey: "Model Providers",
+    descKey: "API keys and model endpoints",
+  },
   {
     id: "integrations",
     labelKey: "Integrations",
@@ -56,6 +62,8 @@ export function SettingsModule(): React.JSX.Element {
   const detail =
     settingsSection === "theme" ? (
       <SettingsTheme />
+    ) : settingsSection === "providers" ? (
+      <SettingsProviders />
     ) : settingsSection === "integrations" ? (
       <SettingsIntegrations />
     ) : settingsSection === "network" ? (

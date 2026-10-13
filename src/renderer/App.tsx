@@ -7,13 +7,11 @@ import { EmployeesModule } from "./components/modules/employees/employees-module
 import { GroupChatModule } from "./components/modules/group-chat/group-chat-module";
 import { McpModule } from "./components/modules/mcp/mcp-module";
 import { MiniAppModule } from "./components/modules/miniapp/miniapp-module";
-import { ProvidersModule } from "./components/modules/providers/providers-module";
 import { SettingsModule } from "./components/modules/settings/settings-module";
 import { SkillsModule } from "./components/modules/skills/skills-module";
 
 const MODULE_VIEWS: Partial<Record<AppModule, () => React.JSX.Element>> = {
   chat: ChatModule,
-  providers: ProvidersModule,
   mcp: McpModule,
   skills: SkillsModule,
   employees: EmployeesModule,

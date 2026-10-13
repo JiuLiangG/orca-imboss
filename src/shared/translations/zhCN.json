@@ -5,6 +5,7 @@
   "A new version v${version} is available.": "新版本 v${version} 已发布。",
   "A sign-in is already in progress.": "已有一个登录正在进行。",
   "About": "关于",
+  "API keys and model endpoints": "API 密钥与模型接口",
   "Accent color and theme mode": "主题色与主题模式",
   "Accent color": "应用主题色",
   "Add environment variable": "添加环境变量",

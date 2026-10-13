@@ -1,0 +1,26 @@
+/* Settings › Model Providers — nested master/detail split inside the Settings
+   detail pane: a compact provider list column beside the selected provider's
+   configuration. */
+.imb-settings-providers {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.imb-settings-providers-list {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  width: 264px;
+  min-height: 0;
+  border-right: 1px solid var(--imb-border);
+}
+
+.imb-settings-providers-detail {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}

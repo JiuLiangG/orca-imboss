@@ -71,7 +71,12 @@ export function parseSessionKey(
 
 /** Sections of the Settings module. Lifted here so main can deep-link to one. */
 export type SettingsSection =
-  "general" | "theme" | "integrations" | "network" | "about";
+  | "general"
+  | "theme"
+  | "providers"
+  | "integrations"
+  | "network"
+  | "about";
 
 /** True when running on macOS (native traffic lights stay, no custom buttons). */
 export const IS_MAC = imb.platform === "darwin";
