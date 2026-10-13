@@ -225,6 +225,17 @@ const api = {
         messageId,
         index,
       ) as Promise<void>,
+    /**
+     * Inline image attachment as a data URL for the in-chat preview, or `null`
+     * when it is not a previewable image / cannot be read (main resolves the
+     * path from the stored record).
+     */
+    attachmentDataUrl: (messageId: number, index: number) =>
+      ipcRenderer.invoke(
+        "messages:attachmentDataUrl",
+        messageId,
+        index,
+      ) as Promise<string | null>,
     onChanged: (
       cb: (payload: {
         chatId: number;

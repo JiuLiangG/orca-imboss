@@ -44,9 +44,62 @@
 
 .imb-bubble-attachments {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.imb-msg.imb-self .imb-bubble-attachments {
+  align-items: flex-end;
+}
+
+/*
+ * Image-only messages drop the bubble chrome: the green (self) / surface
+ * (other) background frames the picture and skews how it reads, so the images
+ * sit directly on the thread background instead.
+ */
+.imb-bubble.imb-bubble-media {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.imb-msg.imb-self .imb-bubble.imb-bubble-media,
+.imb-msg.imb-other .imb-bubble.imb-bubble-media {
+  background: transparent;
+  box-shadow: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.imb-bubble-media .imb-bubble-attachments {
+  margin-bottom: 0;
+}
+
+.imb-bubble-chips {
+  display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-bottom: 6px;
+}
+
+.imb-image-placeholder {
+  width: 190px;
+  height: 190px;
+  border-radius: var(--imb-radius-md);
+  background: var(--imb-fg-soft);
+  animation: imb-image-placeholder-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes imb-image-placeholder-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .imb-bubble-chip {

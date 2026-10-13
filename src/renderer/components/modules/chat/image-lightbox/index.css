@@ -1,0 +1,135 @@
+.imb-lightbox {
+  position: fixed;
+  inset: 0;
+  /* Above every in-app layer (the deck's cards/badge sit near 10-20, the app's
+     toasts near 60), so the thumbnail never shows through the backdrop. */
+  z-index: 300;
+  background: rgba(0, 0, 0, 0.86);
+  display: grid;
+  place-items: center;
+  padding: 48px 64px;
+  animation: imb-lightbox-fade var(--imb-motion-base) var(--imb-ease-standard);
+}
+
+@keyframes imb-lightbox-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.imb-lightbox-figure {
+  margin: 0;
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.imb-lightbox-image {
+  max-width: 90vw;
+  max-height: 80vh;
+  object-fit: contain;
+  border-radius: var(--imb-radius-md);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  background: rgba(255, 255, 255, 0.04);
+  transform-origin: center;
+  /* Also the cross-fade when stepping between images (the element is keyed by
+     index, so it remounts and replays this). */
+  animation: imb-lightbox-image-fade var(--imb-motion-fast)
+    var(--imb-ease-standard);
+  -webkit-user-drag: none;
+}
+
+@keyframes imb-lightbox-image-fade {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.imb-lightbox-caption {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  max-width: 90vw;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: var(--imb-text-sm);
+}
+
+.imb-lightbox-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imb-lightbox-count {
+  flex: none;
+  opacity: 0.7;
+}
+
+.imb-lightbox-close,
+.imb-lightbox-nav {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: var(--imb-radius-pill);
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  cursor: pointer;
+  transition: background var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-lightbox-close:hover,
+.imb-lightbox-nav:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.imb-lightbox-close:focus-visible,
+.imb-lightbox-nav:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.imb-lightbox-close {
+  top: 16px;
+  right: 16px;
+}
+
+.imb-lightbox-nav {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.imb-lightbox-prev {
+  left: 12px;
+}
+
+.imb-lightbox-next {
+  right: 12px;
+}
+
+.imb-lightbox-close svg,
+.imb-lightbox-nav svg {
+  width: 20px;
+  height: 20px;
+}
+
+.imb-lightbox-prev svg {
+  transform: rotate(90deg);
+}
+
+.imb-lightbox-next svg {
+  transform: rotate(-90deg);
+}

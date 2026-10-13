@@ -3,6 +3,7 @@ import { ipcMain, shell } from "electron";
 import { existsSync } from "fs";
 import { isAbsolute } from "path";
 import { wakeAgent } from "../agent/session-queue";
+import { readAttachmentImageDataUrl } from "../attachment-images";
 import * as dbMessages from "../db/messages";
 import { assertInteger, assertObject, assertString } from "./helpers";
 
@@ -70,18 +71,8 @@ export function registerMessageHandlers(): void {
   ipcMain.handle(
     "messages:revealAttachment",
     (_event, messageId: unknown, index: unknown) => {
-      const safeId = assertInteger(messageId, "message id");
-      const safeIndex = assertInteger(index, "attachment index");
-      if (safeIndex < 0) {
-        throw new Error("Attachment index must be non-negative.");
-      }
-      const message = dbMessages.getMessageById(safeId);
-      if (!message) throw new Error("Message does not exist.");
-      const attachments = message.attachments;
-      if (!attachments || safeIndex >= attachments.length) {
-        throw new Error("Attachment does not exist.");
-      }
-      const path = attachments[safeIndex].path;
+      const attachment = resolveAttachment(messageId, index);
+      const path = attachment.path;
       if (!path) throw new Error("Attachment location is unavailable.");
       if (!isAbsolute(path)) {
         throw new Error("Attachment location is invalid.");
@@ -92,4 +83,42 @@ export function registerMessageHandlers(): void {
       shell.showItemInFolder(path);
     },
   );
+
+  // Inline an image attachment as a data URL for the in-chat preview. Same
+  // trust model as `messages:revealAttachment`: the path comes from the stored
+  // record, never from the renderer. Resolves to `null` (rather than throwing)
+  // when the file is missing, oversized, or not a previewable image, so the
+  // bubble can fall back to a plain file chip.
+  ipcMain.handle(
+    "messages:attachmentDataUrl",
+    (_event, messageId: unknown, index: unknown) => {
+      const attachment = resolveAttachment(messageId, index);
+      const path = attachment.path;
+      if (!path || !isAbsolute(path)) return null;
+      return readAttachmentImageDataUrl(attachment.type, attachment.name, path);
+    },
+  );
+}
+
+/**
+ * Resolve an attachment by message id + index from the trusted stored record.
+ * Shared by the reveal and preview handlers so both enforce the same bounds
+ * checks; throws when the message/attachment does not exist.
+ */
+function resolveAttachment(
+  messageId: unknown,
+  index: unknown,
+): { name: string; type: string; path?: string } {
+  const safeId = assertInteger(messageId, "message id");
+  const safeIndex = assertInteger(index, "attachment index");
+  if (safeIndex < 0) {
+    throw new Error("Attachment index must be non-negative.");
+  }
+  const message = dbMessages.getMessageById(safeId);
+  if (!message) throw new Error("Message does not exist.");
+  const attachments = message.attachments;
+  if (!attachments || safeIndex >= attachments.length) {
+    throw new Error("Attachment does not exist.");
+  }
+  return attachments[safeIndex];
 }
