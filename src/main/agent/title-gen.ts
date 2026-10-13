@@ -131,37 +131,10 @@ async function requestTitle(
       .map((block) => (block.type === "text" ? block.text : ""))
       .join("")
       .trim();
-    // A reasoning model can put its whole answer in a thinking block, leaving
-    // the text blocks empty; fall back to any other string the blocks carry
-    // before giving up on this chat.
-    const title =
-      sanitizeTitle(text) ??
-      sanitizeTitle(text.length === 0 ? otherText(response.content) : "");
-    if (title === null) {
-      console.warn(
-        `[title-gen] no usable title for chat ${chatId} ` +
-          `(blocks: ${response.content.map((block) => block.type).join(",")})`,
-      );
-    }
-    return title;
+    return sanitizeTitle(text) || sanitizeTitle(message);
   } finally {
     clearTimeout(timer);
   }
-}
-
-/**
- * Join every string field of an unknown block list, skipping the `type` tag —
- * a last resort for models that hide their answer outside text blocks.
- */
-function otherText(blocks: ReadonlyArray<unknown>): string {
-  const parts: string[] = [];
-  for (const block of blocks) {
-    if (typeof block !== "object" || block === null) continue;
-    for (const [key, value] of Object.entries(block)) {
-      if (key !== "type" && typeof value === "string") parts.push(value);
-    }
-  }
-  return parts.join("\n").trim();
 }
 
 /**
