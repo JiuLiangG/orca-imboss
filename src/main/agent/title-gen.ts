@@ -52,7 +52,7 @@ export function maybeGenerateChatTitle(
 
 async function generate(chatId: number, message: string): Promise<void> {
   try {
-    const title = await requestTitle(message);
+    const title = await requestTitle(chatId, message);
     if (title === null) return;
     // The chat may have been renamed (or deleted) while the call was in
     // flight — never clobber a title that appeared meanwhile.
@@ -75,10 +75,21 @@ async function generate(chatId: number, message: string): Promise<void> {
  * Returns the sanitized title, or `null` when the model produced nothing
  * usable (the chat then stays untitled).
  */
-async function requestTitle(message: string): Promise<string | null> {
+async function requestTitle(
+  chatId: number,
+  message: string,
+): Promise<string | null> {
   const modelRuntime = await getModelRuntime();
   const model = resolveModel(modelRuntime, getEmployee(ASSISTANT_ID)?.modelId);
-  if (!model) return null;
+  if (!model) {
+    // Silent by design before: an empty snapshot left every chat untitled with
+    // nothing in the log. Say why instead.
+    console.warn(
+      `[title-gen] no model resolved for chat ${chatId} ` +
+        `(available models: ${modelRuntime.getAvailableSnapshot().length})`,
+    );
+    return null;
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TITLE_TIMEOUT_MS);
@@ -100,19 +111,49 @@ async function requestTitle(message: string): Promise<string | null> {
           },
         ],
       },
-      { signal: controller.signal, maxTokens: 100 },
+      { signal: controller.signal, maxTokens: 512 },
     );
     if (response.stopReason === "error" || response.stopReason === "aborted") {
+      console.warn(
+        `[title-gen] model call ended with ${response.stopReason} for chat ${chatId}`,
+      );
       return null;
     }
     const text = response.content
       .map((block) => (block.type === "text" ? block.text : ""))
       .join("")
       .trim();
-    return sanitizeTitle(text);
+    // A reasoning model can put its whole answer in a thinking block, leaving
+    // the text blocks empty; fall back to any other string the blocks carry
+    // before giving up on this chat.
+    const title =
+      sanitizeTitle(text) ??
+      sanitizeTitle(text.length === 0 ? otherText(response.content) : "");
+    if (title === null) {
+      console.warn(
+        `[title-gen] no usable title for chat ${chatId} ` +
+          `(blocks: ${response.content.map((block) => block.type).join(",")})`,
+      );
+    }
+    return title;
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Join every string field of an unknown block list, skipping the `type` tag —
+ * a last resort for models that hide their answer outside text blocks.
+ */
+function otherText(blocks: ReadonlyArray<unknown>): string {
+  const parts: string[] = [];
+  for (const block of blocks) {
+    if (typeof block !== "object" || block === null) continue;
+    for (const [key, value] of Object.entries(block)) {
+      if (key !== "type" && typeof value === "string") parts.push(value);
+    }
+  }
+  return parts.join("\n").trim();
 }
 
 /**
