@@ -1,5 +1,6 @@
 import { MAX_VISIBLE_ATTACHMENTS } from "@shared/constants/attachments";
 import { isPreviewableImage } from "@shared/image-attachments";
+import { toImbFileUrl } from "@shared/imb-file";
 import { t } from "@shared/l10n";
 import type { MessageAttachment } from "@shared/types";
 import { useState } from "react";
@@ -11,8 +12,10 @@ import {
   IMAGE_PREVIEW_ENABLED,
   type ImageStackImage,
 } from "../image-stack";
-import { useImageSources } from "../image-stack/use-image-sources";
 import "./index.css";
+
+/** Shared empty set for a message with no failed image loads. */
+const EMPTY_FAILED: ReadonlySet<number> = new Set();
 
 export interface MessageBubbleProps {
   /** `true` = user message (right-aligned, green bubble). */
@@ -52,56 +55,67 @@ export function MessageBubble({
   onMentionClick,
 }: MessageBubbleProps): React.JSX.Element {
   const [revealError, setRevealError] = useState<string | null>(null);
+  // Attachment indices whose `imb-file:` image failed to load (missing file,
+  // undecodable bytes) — they fall back to a plain file chip. Keyed by message
+  // so a recycled bubble (no React key) cannot inherit a previous message's
+  // failures.
+  const [failedState, setFailedState] = useState<{
+    messageId: number;
+    indices: ReadonlySet<number>;
+  }>(() => ({ messageId, indices: new Set() }));
+  const failedImages =
+    failedState.messageId === messageId ? failedState.indices : EMPTY_FAILED;
+  const markImageFailed = (index: number): void =>
+    setFailedState((prev) => {
+      const indices =
+        prev.messageId === messageId
+          ? new Set(prev.indices)
+          : new Set<number>();
+      indices.add(index);
+      return { messageId, indices };
+    });
   const all = attachments ?? [];
   const hasAttachments = all.length > 0;
   const visible = all.slice(0, MAX_VISIBLE_ATTACHMENTS);
   const total = Math.max(attachmentsTotal ?? all.length, all.length);
   const hidden = total - visible.length;
 
-  // Visible attachments that are previewable images, paired with their index in
-  // the full attachment array (main resolves the bytes from message id + index).
-  // Gated by the feature's master switch: disabled, every attachment stays a
-  // plain file chip and no image bytes are ever requested.
-  const imageSlots = IMAGE_PREVIEW_ENABLED
-    ? visible
-        .map((attachment, index) => ({ attachment, index }))
-        .filter(({ attachment }) =>
-          isPreviewableImage(attachment.type, attachment.name),
-        )
-    : [];
-  const { sources, pending } = useImageSources(
-    messageId,
-    imageSlots.map((slot) => slot.index),
-  );
+  // Visible attachments renderable as images: a previewable format with an
+  // on-disk path (the `imb-file:` URL is derived from it directly; main never
+  // reads the bytes). Gated by the feature's master switch — disabled, every
+  // attachment stays a plain file chip.
+  const imageSlots: { index: number; name: string; path: string }[] =
+    IMAGE_PREVIEW_ENABLED
+      ? visible.flatMap((attachment, index) => {
+          const path = attachment.path;
+          return typeof path === "string" &&
+            path.length > 0 &&
+            isPreviewableImage(attachment.type, attachment.name)
+            ? [{ index, name: attachment.name, path }]
+            : [];
+        })
+      : [];
 
-  // Images whose bytes main could inline become the stack; anything that failed
-  // to load (or is not an image) stays a plain file chip.
-  const stack: ImageStackImage[] = [];
-  const failed = new Set<number>();
-  imageSlots.forEach((slot, position) => {
-    const src = sources[position];
-    if (src) stack.push({ index: slot.index, name: slot.attachment.name, src });
-    else if (!pending) failed.add(slot.index);
-  });
+  // Images still in the stack (those whose `<img>` has not errored) plus the
+  // non-image / failed chips.
+  const stack: ImageStackImage[] = imageSlots
+    .filter((slot) => !failedImages.has(slot.index))
+    .map((slot) => ({
+      index: slot.index,
+      name: slot.name,
+      src: toImbFileUrl(slot.path),
+    }));
+  const imageIndices = new Set(imageSlots.map((slot) => slot.index));
 
   const chips = visible
     .map((attachment, index) => ({ attachment, index }))
-    .filter(({ index }) => {
-      const isImage = imageSlots.some((slot) => slot.index === index);
-      if (!isImage) return true;
-      if (pending) return false; // image still loading → placeholder instead
-      return failed.has(index);
-    });
+    .filter(({ index }) => !imageIndices.has(index) || failedImages.has(index));
 
   const showStack = stack.length > 0;
-  const showPlaceholder = pending && imageSlots.length > 0;
   // An image-only message drops the bubble chrome so the picture is not framed
   // by the bubble's color (the green self bubble skews how an image reads).
   const mediaOnly =
-    (showStack || showPlaceholder) &&
-    content.length === 0 &&
-    chips.length === 0 &&
-    hidden === 0;
+    showStack && content.length === 0 && chips.length === 0 && hidden === 0;
 
   const reveal = async (index: number): Promise<void> => {
     setRevealError(null);
@@ -118,9 +132,12 @@ export function MessageBubble({
       <div className={cls("imb-bubble", mediaOnly && "imb-bubble-media")}>
         {hasAttachments && (
           <div className="imb-bubble-attachments">
-            {showStack && <ImageStack images={stack} self={self} />}
-            {showPlaceholder && (
-              <span className="imb-image-placeholder" aria-hidden="true" />
+            {showStack && (
+              <ImageStack
+                images={stack}
+                self={self}
+                onImageError={markImageFailed}
+              />
             )}
             {(chips.length > 0 || hidden > 0) && (
               <div className="imb-bubble-chips">

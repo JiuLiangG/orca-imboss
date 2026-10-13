@@ -71,7 +71,10 @@ export function EmployeeDetail({
           thinkingLevel: employee.thinkingLevel,
         },
   );
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(employee.avatarUrl);
+  const [avatar, setAvatar] = useState<string | null>(employee.avatar);
+  const [avatarVersion, setAvatarVersion] = useState<number | null>(
+    employee.avatarVersion,
+  );
   const [avatarAv, setAvatarAv] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [cropFile, setCropFile] = useState<File | null>(null);
@@ -117,7 +120,8 @@ export function EmployeeDetail({
         croppedData,
       );
       if (updated) {
-        setAvatarUrl(updated.avatarUrl);
+        setAvatar(updated.avatar);
+        setAvatarVersion(updated.avatarVersion);
         onAvatarUpdated?.(updated);
       }
     } catch (err) {
@@ -134,7 +138,11 @@ export function EmployeeDetail({
   // The assistant's role is immutable; show the persisted value rather than a
   // (hidden) editable field.
   const displayRole = isAssistant ? employee.role || "" : (form.role ?? "");
-  const displayAvatarUrl = employeeAvatarSrc({ id: employee.id, avatarUrl });
+  const displayAvatarUrl = employeeAvatarSrc({
+    id: employee.id,
+    avatar,
+    avatarVersion,
+  });
 
   return (
     <>

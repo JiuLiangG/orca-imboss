@@ -1,5 +1,11 @@
 import { t } from "@shared/l10n";
-import { useRef, useState, type CSSProperties, type PointerEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent,
+} from "react";
 import { cls } from "reactutils";
 import { useWheelStep } from "../../../../hooks/use-wheel-step";
 import { IconOpen } from "../../../icons";
@@ -10,7 +16,7 @@ export interface ImageStackImage {
   /** Attachment index within the message; also the stable React key. */
   index: number;
   name: string;
-  /** Inline `data:` URL resolved by main. */
+  /** `imb-file:` URL to the original file on disk. */
   src: string;
 }
 
@@ -18,9 +24,9 @@ export interface ImageStackImage {
  * Master switch for in-chat image previews (thumbnail, card stack, viewer).
  *
  * The whole feature is self-contained under `image-stack/` +
- * `image-lightbox/` + the `messages:attachmentDataUrl` IPC; this constant is
- * its single integration point in the message bubble, so it can be introduced
- * in whichever form suits the project:
+ * `image-lightbox/` + the `imb-file:` protocol (`src/main/imb-file-protocol.ts`);
+ * this constant is its single integration point in the message bubble, so it can
+ * be introduced in whichever form suits the project:
  *
  * - leave it `true` to ship the feature on;
  * - set it `false` to fall back to the plain file chip (the behaviour before
@@ -35,6 +41,12 @@ export interface ImageStackProps {
   images: ImageStackImage[];
   /** Message side; the deck leans away from the bubble's outer edge. */
   self: boolean;
+  /**
+   * Called with an image's attachment index when its thumbnail fails to load
+   * (file moved/deleted, undecodable bytes). The caller drops it from the stack
+   * and falls back to a file chip.
+   */
+  onImageError?: (index: number) => void;
 }
 
 /** Pointer travel (px) past which a drag counts as "swipe to next". */
@@ -75,6 +87,7 @@ interface DragState {
 export function ImageStack({
   images,
   self,
+  onImageError,
 }: ImageStackProps): React.JSX.Element {
   const count = images.length;
   const single = count === 1;
@@ -86,6 +99,13 @@ export function ImageStack({
   const start = useRef<{ x: number; y: number } | null>(null);
   const suppressClick = useRef(false);
   const stackRef = useRef<HTMLDivElement>(null);
+
+  // An image can be dropped from the deck at runtime (its `<img>` failed to
+  // load), shrinking `count` under a stale `front`/`lightbox` position.
+  useEffect(() => {
+    setFront((value) => (count > 0 ? Math.min(value, count - 1) : 0));
+    setLightbox((value) => (value === null || value < count ? value : null));
+  }, [count]);
 
   // Wheel over the deck flips it; a lone image has nothing to flip, so it never
   // intercepts the wheel.
@@ -185,7 +205,12 @@ export function ImageStack({
             onPointerCancel={isFront ? onPointerUp : undefined}
             onClick={(event) => onCardClick(position, event)}
           >
-            <img src={image.src} alt={image.name} draggable={false} />
+            <img
+              src={image.src}
+              alt={image.name}
+              draggable={false}
+              onError={() => onImageError?.(image.index)}
+            />
             {isFront && (
               <span className="imb-image-card-hint" aria-hidden="true">
                 <IconOpen />

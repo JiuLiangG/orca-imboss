@@ -14,7 +14,7 @@ import type {
   PageResult,
   PurgedEmployee,
 } from "@shared/types";
-import { readAvatarDataUrl } from "../avatars";
+import { avatarVersion } from "../avatars";
 import { getDB } from "./index";
 import { parseNumberArray, parseStringArray, stringifyArray } from "./json";
 import { escapeLike } from "./text-search";
@@ -316,9 +316,7 @@ function toEmployee(row: EmployeeRow): Employee {
       ? row.thinking_level
       : null,
     avatar: row.avatar,
-    // Main-owned file read; data URL (or null) is the only form ever sent
-    // to the renderer — raw paths are not useful there.
-    avatarUrl: readAvatarDataUrl(row.id),
+    avatarVersion: avatarVersion(row.avatar),
     disabled: row.disabled === 1,
   };
 }

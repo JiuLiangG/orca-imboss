@@ -3,7 +3,6 @@ import { ipcMain, shell } from "electron";
 import { existsSync } from "fs";
 import { isAbsolute } from "path";
 import { wakeAgent } from "../agent/session-queue";
-import { readAttachmentImageDataUrl } from "../attachment-images";
 import * as dbMessages from "../db/messages";
 import { assertInteger, assertObject, assertString } from "./helpers";
 
@@ -81,21 +80,6 @@ export function registerMessageHandlers(): void {
         throw new Error("Attachment file no longer exists.");
       }
       shell.showItemInFolder(path);
-    },
-  );
-
-  // Inline an image attachment as a data URL for the in-chat preview. Same
-  // trust model as `messages:revealAttachment`: the path comes from the stored
-  // record, never from the renderer. Resolves to `null` (rather than throwing)
-  // when the file is missing, oversized, or not a previewable image, so the
-  // bubble can fall back to a plain file chip.
-  ipcMain.handle(
-    "messages:attachmentDataUrl",
-    (_event, messageId: unknown, index: unknown) => {
-      const attachment = resolveAttachment(messageId, index);
-      const path = attachment.path;
-      if (!path || !isAbsolute(path)) return null;
-      return readAttachmentImageDataUrl(attachment.type, attachment.name, path);
     },
   );
 }

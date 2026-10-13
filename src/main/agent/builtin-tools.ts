@@ -213,7 +213,7 @@ function toolResult(value: unknown): AgentToolResult<unknown> {
 /**
  * Slim employee projection: keeps what the orchestrator uses (id for
  * @-mentions/notify, name/role for step cards, skills/mcp to judge fit) and
- * drops the rest — notably the full `systemPrompt` and the base64 `avatarUrl`.
+ * drops the rest — notably the full `systemPrompt` and the `avatar` path.
  */
 interface EmployeeBrief {
   id: number;

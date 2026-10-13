@@ -1,9 +1,9 @@
 /**
- * Image-attachment helpers shared by the main process (which inlines the bytes
- * as a data URL) and the renderer (which decides whether to preview an
- * attachment as an image). Keeping the whitelist in one place stops the two
- * sides from drifting: an attachment the renderer previews must be one main is
- * willing to read.
+ * Image-attachment helpers shared by the renderer (which decides whether to
+ * preview an attachment as an image) and the main process (which gates the
+ * `imb-file:` protocol handler by extension). Keeping the whitelist in one place
+ * stops the two sides from drifting: an attachment the renderer previews must be
+ * one main is willing to serve.
  *
  * Only raster formats are previewable. SVG is deliberately excluded even though
  * it is `image/*`, because an SVG can carry script/markup we do not want to
@@ -39,4 +39,19 @@ export function previewImageMime(type: string, name: string): string | null {
 /** True when an attachment should be rendered as an image preview. */
 export function isPreviewableImage(type: string, name: string): boolean {
   return previewImageMime(type, name) !== null;
+}
+
+/**
+ * True when a file extension (without the dot, any case) is one this app is
+ * willing to serve as an image. Shared by the `imb-file:` handler, which only
+ * ever has the path (no declared MIME).
+ */
+export function isPreviewableImageExtension(ext: string): boolean {
+  return EXT_TO_MIME[ext.trim().toLowerCase()] !== undefined;
+}
+
+/** True when a path's extension is a previewable image format. */
+export function isPreviewableImagePath(path: string): boolean {
+  const ext = /\.([a-z0-9]+)$/i.exec(path)?.[1];
+  return ext !== undefined && isPreviewableImageExtension(ext);
 }

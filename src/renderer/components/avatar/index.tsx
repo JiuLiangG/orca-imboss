@@ -1,8 +1,9 @@
+import { useEffect, useState } from "react";
 import { cls } from "reactutils";
 import "./index.css";
 
 export interface AvatarProps {
-  /** Image URL (data URL from main); falls back to letter when absent. */
+  /** Image URL (`imb-file:` or a bundled asset); falls back to letter when absent. */
   src?: string | null;
   /** Letter/initials shown when there is no image. */
   letter?: string;
@@ -23,6 +24,13 @@ export function Avatar({
   active = false,
   className,
 }: AvatarProps): React.JSX.Element {
+  // A moved/deleted avatar file must fall back to the letter rather than show
+  // the browser's broken-image placeholder.
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
+
+  const showImage = Boolean(src) && !failed;
+
   return (
     <span
       className={cls(
@@ -34,8 +42,8 @@ export function Avatar({
       style={{ width: size, height: size, fontSize: Math.max(11, size * 0.35) }}
       title={name}
     >
-      {src ? (
-        <img src={src} alt={name ?? ""} />
+      {showImage ? (
+        <img src={src ?? ""} alt={name ?? ""} onError={() => setFailed(true)} />
       ) : (
         letter.slice(0, 1).toUpperCase()
       )}
