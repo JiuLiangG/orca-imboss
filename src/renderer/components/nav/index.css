@@ -83,8 +83,32 @@
   object-fit: cover;
 }
 
-.imb-nav-item.imb-is-dragging {
+/* Bound the sortable list's overflow. The dragged row's transform would
+   otherwise extend the scroll container's scrollable area, and dnd-kit's
+   auto-scroll would chase it (the list appears to grow and scrolls away). The
+   4px clip margin keeps focus rings from being cut off. */
+.imb-nav-items.imb-nav-sortable-list {
+  overflow: clip;
+  overflow-clip-margin: 4px;
+}
+
+/* Sortable sidebar row. The wrapper owns the dnd-kit transform so `Tooltip`'s
+   ref on the inner button is never clobbered. */
+.imb-nav-sortable {
+  position: relative;
+}
+
+.imb-nav-sortable > .imb-nav-item {
+  cursor: grab;
+}
+
+.imb-nav-sortable.imb-is-dragging {
+  z-index: 1;
+}
+
+.imb-nav-sortable.imb-is-dragging > .imb-nav-item {
   opacity: 0.5;
+  cursor: grabbing;
 }
 
 /* Long chat titles truncate with an ellipsis instead of hard-clipping. */

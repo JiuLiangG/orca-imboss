@@ -32,7 +32,7 @@ const groupChatScrollStore = new Map<number, GroupChatScroll>();
 export function GroupChatModule({
   chatId,
 }: GroupChatModuleProps): React.JSX.Element {
-  const { openedChats } = useApp();
+  const { openedItems } = useApp();
   const [messages, setMessages] = useState<Message[]>([]);
   const [error, setError] = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
@@ -41,7 +41,10 @@ export function GroupChatModule({
     null,
   );
 
-  const chat = openedChats.find((c) => c.id === chatId) ?? null;
+  const chatItem = openedItems.find(
+    (item) => item.kind === "chat" && item.id === chatId,
+  );
+  const chat = chatItem?.kind === "chat" ? chatItem : null;
 
   const loadMessages = useCallback(async (id: number): Promise<void> => {
     try {

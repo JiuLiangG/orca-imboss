@@ -51,9 +51,30 @@ export interface OpenedSession {
   chatTitle: string;
 }
 
+/**
+ * One entry of the combined Nav "opened" section. Group chats and agent
+ * sessions share one ordered list so they can be interleaved and reordered
+ * together (drag-and-drop).
+ */
+export type OpenedItem =
+  ({ kind: "chat" } & OpenedChat) | ({ kind: "session" } & OpenedSession);
+
+/** Structural subset of `OpenedItem` needed to derive its stable Nav key.
+ *  Also accepts the deeply-readonly valtio snapshot of an `OpenedItem`. */
+export type OpenedItemRef =
+  | { kind: "chat"; id: number }
+  | { kind: "session"; employeeId: number; chatId: number };
+
 /** Stable key for an opened `(employee, chat)` agent session. */
 export function sessionKey(employeeId: number, chatId: number): string {
   return `${employeeId}/${chatId}`;
+}
+
+/** Stable Nav key (drag-and-drop id + order map key) for an opened entry. */
+export function openedItemKey(item: OpenedItemRef): string {
+  return item.kind === "chat"
+    ? `chat:${item.id}`
+    : `session:${sessionKey(item.employeeId, item.chatId)}`;
 }
 
 /** Parse a `sessionKey` back into its ids, or `null` when malformed. */
@@ -71,12 +92,7 @@ export function parseSessionKey(
 
 /** Sections of the Settings module. Lifted here so main can deep-link to one. */
 export type SettingsSection =
-  | "general"
-  | "theme"
-  | "providers"
-  | "integrations"
-  | "network"
-  | "about";
+  "general" | "theme" | "providers" | "integrations" | "network" | "about";
 
 /** True when running on macOS (native traffic lights stay, no custom buttons). */
 export const IS_MAC = imb.platform === "darwin";
@@ -114,16 +130,12 @@ export const appStore = proxy({
   // reloads a page. Session-only: deliberately not persisted.
   visitedMiniAppIds: [] as string[],
 
-  // Group chats opened from `chat`-kind link cards, rendered in the Nav
-  // "chats" section. Session-only: deliberately not persisted, so a restart
-  // starts with none and the app falls back to the chat module.
-  openedChats: [] as OpenedChat[],
+  // Group chats opened from `chat`-kind link cards and agent sessions opened
+  // from a chat avatar, rendered together in one Nav "opened" section and
+  // reorderable as a whole. Session-only: deliberately not persisted, so a
+  // restart starts with none and the app falls back to the chat module.
+  openedItems: [] as OpenedItem[],
   activeChatId: null as number | null,
-
-  // Agent sessions opened from a chat avatar, rendered in the Nav "sessions"
-  // section. Session-only: deliberately not persisted, so a restart starts
-  // with none and the app falls back to the chat module.
-  openedSessions: [] as OpenedSession[],
   activeSessionKey: null as string | null,
 
   // Pending chat to select when the chat module is mounted (set by an OS
@@ -609,15 +621,14 @@ export const appStore = proxy({
     if (appStore.focusChatId !== null && deleted.has(appStore.focusChatId)) {
       appStore.focusChatId = null;
     }
-    // Close opened group chats (closeChat picks a neighbour / the chat module
-    // fallback when the active one is removed).
-    for (const chat of [...appStore.openedChats]) {
-      if (deleted.has(chat.id)) appStore.closeChat(chat.id);
-    }
-    // Close agent sessions bound to deleted chats.
-    for (const session of [...appStore.openedSessions]) {
-      if (deleted.has(session.chatId)) {
-        appStore.closeSession(sessionKey(session.employeeId, session.chatId));
+    // Close opened group chats and agent sessions bound to deleted chats
+    // (close* picks a merged-list neighbour / the chat module fallback when the
+    // active one is removed).
+    for (const item of [...appStore.openedItems]) {
+      if (item.kind === "chat") {
+        if (deleted.has(item.id)) appStore.closeChat(item.id);
+      } else if (deleted.has(item.chatId)) {
+        appStore.closeSession(sessionKey(item.employeeId, item.chatId));
       }
     }
   },
@@ -749,49 +760,49 @@ export const appStore = proxy({
     await imb.updater.install();
   },
 
-  // --- Opened group chats (Nav "chats" section) -------------------------------
+  // --- Opened chats & agent sessions (combined Nav section) -------------------
   /** Open (or focus) a group chat linked by a `chat`-kind card. */
   openChat(chat: ChatSummary): void {
-    const existing = appStore.openedChats.find((c) => c.id === chat.id);
-    if (existing) {
+    const existing = appStore.openedItems.find(
+      (item) => item.kind === "chat" && item.id === chat.id,
+    );
+    if (existing?.kind === "chat") {
       existing.title = chat.title;
       existing.participants = chat.participants;
     } else {
-      appStore.openedChats.push({
+      appStore.openedItems.push({
+        kind: "chat",
         id: chat.id,
         title: chat.title,
         participants: chat.participants,
       });
     }
     appStore.activeChatId = chat.id;
-    // Deliberately not persisted: opened chats are session-only.
+    // Deliberately not persisted: opened entries are session-only.
     appStore.module = "group-chat";
   },
 
   /** Focus an already-opened group chat (Nav item click). */
   activateChat(id: number): void {
-    if (!appStore.openedChats.some((c) => c.id === id)) return;
+    if (
+      !appStore.openedItems.some(
+        (item) => item.kind === "chat" && item.id === id,
+      )
+    ) {
+      return;
+    }
     appStore.activeChatId = id;
     appStore.module = "group-chat";
   },
 
-  /** Close an opened group chat; fall back to a neighbour or the chat module. */
+  /** Close an opened group chat; activate the merged-list neighbour or Chat. */
   closeChat(id: number): void {
-    const index = appStore.openedChats.findIndex((c) => c.id === id);
-    if (index < 0) return;
-    appStore.openedChats.splice(index, 1);
-    if (appStore.activeChatId !== id) return;
-    const next =
-      appStore.openedChats[index] ?? appStore.openedChats[index - 1] ?? null;
-    if (next) {
-      appStore.activeChatId = next.id;
-    } else {
-      appStore.activeChatId = null;
-      appStore.module = "chat";
-    }
+    const index = appStore.openedItems.findIndex(
+      (item) => item.kind === "chat" && item.id === id,
+    );
+    if (index >= 0) closeOpenedItemAt(index);
   },
 
-  // --- Opened agent sessions (Nav "sessions" section) -------------------------
   /**
    * Open (or focus) an employee's agent session for a chat. The assistant has
    * no session in task group chats (it runs in its root chat), so its requests
@@ -817,13 +828,16 @@ export const appStore = proxy({
 
     const key = sessionKey(employeeId, targetChatId);
     const chatTitle = await resolveChatTitle(targetChatId);
-    const existing = appStore.openedSessions.find(
-      (s) => sessionKey(s.employeeId, s.chatId) === key,
+    const existing = appStore.openedItems.find(
+      (item) =>
+        item.kind === "session" &&
+        sessionKey(item.employeeId, item.chatId) === key,
     );
-    if (existing) {
+    if (existing?.kind === "session") {
       existing.chatTitle = chatTitle;
     } else {
-      appStore.openedSessions.push({
+      appStore.openedItems.push({
+        kind: "session",
         employeeId,
         chatId: targetChatId,
         chatTitle,
@@ -838,8 +852,10 @@ export const appStore = proxy({
   /** Focus an already-opened agent session (Nav item click). */
   activateSession(key: string): void {
     if (
-      !appStore.openedSessions.some(
-        (s) => sessionKey(s.employeeId, s.chatId) === key,
+      !appStore.openedItems.some(
+        (item) =>
+          item.kind === "session" &&
+          sessionKey(item.employeeId, item.chatId) === key,
       )
     ) {
       return;
@@ -848,24 +864,37 @@ export const appStore = proxy({
     appStore.module = "agent-session";
   },
 
-  /** Close an opened agent session; fall back to a neighbour or the chat module. */
+  /** Close an opened agent session; activate the merged-list neighbour or Chat. */
   closeSession(key: string): void {
-    const index = appStore.openedSessions.findIndex(
-      (s) => sessionKey(s.employeeId, s.chatId) === key,
+    const index = appStore.openedItems.findIndex(
+      (item) =>
+        item.kind === "session" &&
+        sessionKey(item.employeeId, item.chatId) === key,
     );
-    if (index < 0) return;
-    appStore.openedSessions.splice(index, 1);
-    if (appStore.activeSessionKey !== key) return;
-    const next =
-      appStore.openedSessions[index] ??
-      appStore.openedSessions[index - 1] ??
-      null;
-    if (next) {
-      appStore.activeSessionKey = sessionKey(next.employeeId, next.chatId);
-    } else {
-      appStore.activeSessionKey = null;
-      appStore.module = "chat";
+    if (index >= 0) closeOpenedItemAt(index);
+  },
+
+  /**
+   * Apply a new combined Nav order (drag-and-drop). Session-only, so nothing is
+   * persisted. Unknown/duplicate keys are ignored and any omitted entry is kept
+   * (appended) so the live set always matches the rendered order.
+   */
+  reorderOpenedItems(keys: string[]): void {
+    const byKey = new Map(
+      appStore.openedItems.map((item) => [openedItemKey(item), item]),
+    );
+    const next: OpenedItem[] = [];
+    const seen = new Set<string>();
+    for (const key of keys) {
+      const item = byKey.get(key);
+      if (!item || seen.has(key)) continue;
+      next.push(item);
+      seen.add(key);
     }
+    for (const item of appStore.openedItems) {
+      if (!seen.has(openedItemKey(item))) next.push(item);
+    }
+    appStore.openedItems.splice(0, appStore.openedItems.length, ...next);
   },
 });
 
@@ -1014,12 +1043,61 @@ function sortChats(): void {
   );
 }
 
+/**
+ * Remove the opened entry at `index`. When it was the entry currently shown,
+ * activate the adjacent merged-list entry (of either kind) or fall back to the
+ * Chat module; otherwise only clear its active pointer so it cannot stay stale.
+ */
+function closeOpenedItemAt(index: number): void {
+  const removed = appStore.openedItems[index];
+  if (!removed) return;
+
+  const removedSessionKey =
+    removed.kind === "session"
+      ? sessionKey(removed.employeeId, removed.chatId)
+      : null;
+  const wasDisplayed =
+    removed.kind === "chat"
+      ? appStore.module === "group-chat" && appStore.activeChatId === removed.id
+      : appStore.module === "agent-session" &&
+        appStore.activeSessionKey === removedSessionKey;
+
+  appStore.openedItems.splice(index, 1);
+
+  // Clear the closed entry's active pointer.
+  if (removed.kind === "chat") {
+    if (appStore.activeChatId === removed.id) appStore.activeChatId = null;
+  } else if (appStore.activeSessionKey === removedSessionKey) {
+    appStore.activeSessionKey = null;
+  }
+
+  if (!wasDisplayed) return;
+
+  const next =
+    appStore.openedItems[index] ?? appStore.openedItems[index - 1] ?? null;
+  if (!next) {
+    appStore.module = "chat";
+    return;
+  }
+  if (next.kind === "chat") {
+    appStore.activeChatId = next.id;
+    appStore.module = "group-chat";
+  } else {
+    appStore.activeSessionKey = sessionKey(next.employeeId, next.chatId);
+    appStore.module = "agent-session";
+  }
+}
+
 /** Best-effort chat title for a Nav session label (root or group chat). */
 async function resolveChatTitle(chatId: number): Promise<string> {
   const cached = appStore.data.chats.items.find((c) => c.id === chatId);
   if (cached && cached.title.trim().length > 0) return cached.title.trim();
-  const opened = appStore.openedChats.find((c) => c.id === chatId);
-  if (opened && opened.title.trim().length > 0) return opened.title.trim();
+  const opened = appStore.openedItems.find(
+    (item) => item.kind === "chat" && item.id === chatId,
+  );
+  if (opened?.kind === "chat" && opened.title.trim().length > 0) {
+    return opened.title.trim();
+  }
   try {
     const summary = await imb.chats.summary(chatId);
     if (summary && summary.title.trim().length > 0) return summary.title.trim();

@@ -66,7 +66,7 @@ export function AgentSessionModule({
   employeeId,
   chatId,
 }: AgentSessionModuleProps): React.JSX.Element {
-  const { data, openedSessions } = useApp();
+  const { data, openedItems } = useApp();
   const [entries, setEntries] = useState<AgentSessionViewEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -94,9 +94,13 @@ export function AgentSessionModule({
         : null;
   }, [sessionKeyStr]);
 
-  const session = openedSessions.find(
-    (s) => s.employeeId === employeeId && s.chatId === chatId,
+  const sessionItem = openedItems.find(
+    (item) =>
+      item.kind === "session" &&
+      item.employeeId === employeeId &&
+      item.chatId === chatId,
   );
+  const session = sessionItem?.kind === "session" ? sessionItem : null;
   const employee = data.employees.items.find((e) => e.id === employeeId);
   const employeeName = employee?.name ?? t("Unnamed");
   const chatTitle = session?.chatTitle ?? t("Conversation");
