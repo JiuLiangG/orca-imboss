@@ -64,21 +64,62 @@ export function resolveModel(
   return modelRuntime.getAvailableSnapshot()[0];
 }
 
-/** Resolve a single `"provider/modelId"` reference against the runtime. */
+/**
+ * Resolve a model reference against the runtime.
+ * Supports:
+ * - "provider/modelId" (e.g. "openai/gpt-4o", or multi-slash "openrouter/ag/gemini-3.8-flash-high")
+ * - Direct model id match across configured providers (e.g. "ag/gemini-3.8-flash-high" or "gpt-4o")
+ * - Direct key match `${model.provider}/${model.id}`
+ */
 function resolveModelRef(
   modelRuntime: ModelRuntime,
-  ref: string | null | undefined,
+  rawRef: string | null | undefined,
 ): PiModel | undefined {
+  if (!rawRef) return undefined;
+  const ref = rawRef.trim();
   if (!ref) return undefined;
+
+  // 1. Try splitting at the first slash (standard "provider/modelId").
   const slash = ref.indexOf("/");
-  if (slash <= 0 || slash === ref.length - 1) return undefined;
-  const provider = ref.slice(0, slash);
-  const modelId = ref.slice(slash + 1);
-  const model = modelRuntime.getModel(provider, modelId);
-  if (!model || !modelRuntime.hasConfiguredAuth(model.provider)) {
-    return undefined;
+  if (slash > 0 && slash < ref.length - 1) {
+    const provider = ref.slice(0, slash);
+    const modelId = ref.slice(slash + 1);
+    const model = modelRuntime.getModel(provider, modelId);
+    if (model && modelRuntime.hasConfiguredAuth(model.provider)) {
+      return model;
+    }
   }
-  return model;
+
+  const available = modelRuntime.getAvailableSnapshot();
+
+  // 2. Try exact match on `${model.provider}/${model.id}` from available snapshot.
+  const byKey = available.find(
+    (m) =>
+      `${m.provider}/${m.id}` === ref &&
+      modelRuntime.hasConfiguredAuth(m.provider),
+  );
+  if (byKey) return byKey;
+
+  // 3. Try matching direct `model.id` (e.g. when ref is "ag/gemini-3.8-flash-high"
+  // without a provider prefix, or bare model id).
+  const byModelId = available.find(
+    (m) => m.id === ref && modelRuntime.hasConfiguredAuth(m.provider),
+  );
+  if (byModelId) return byModelId;
+
+  // 4. Try matching against known providers if ref starts with "<providerId>/"
+  // (handles cases where provider prefix was followed by multiple slashes).
+  for (const p of modelRuntime.getProviders()) {
+    if (ref.startsWith(`${p.id}/`)) {
+      const candidateModelId = ref.slice(p.id.length + 1);
+      const model = modelRuntime.getModel(p.id, candidateModelId);
+      if (model && modelRuntime.hasConfiguredAuth(model.provider)) {
+        return model;
+      }
+    }
+  }
+
+  return undefined;
 }
 
 /**

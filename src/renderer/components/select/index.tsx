@@ -54,14 +54,36 @@ export function Select({
   const bufferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selectedIndex = options.findIndex((o) => o.value === value);
-  const selected = selectedIndex >= 0 ? options[selectedIndex] : null;
+  const fallbackIndex =
+    selectedIndex >= 0
+      ? selectedIndex
+      : value
+        ? options.findIndex(
+            (o) =>
+              o.value.endsWith(`/${value}`) ||
+              value.endsWith(`/${o.value}`) ||
+              o.value === value,
+          )
+        : -1;
+  const selected =
+    fallbackIndex >= 0
+      ? options[fallbackIndex]
+      : value
+        ? { value, label: value }
+        : null;
 
   const openPanel = useCallback((): void => {
     if (disabled) return;
     positionPanel();
     setOpen(true);
-    setActiveIndex(selectedIndex >= 0 ? selectedIndex : 0);
-  }, [disabled, positionPanel, selectedIndex]);
+    setActiveIndex(
+      selectedIndex >= 0
+        ? selectedIndex
+        : fallbackIndex >= 0
+          ? fallbackIndex
+          : 0,
+    );
+  }, [disabled, fallbackIndex, positionPanel, selectedIndex]);
 
   const closePanel = useCallback((): void => {
     setOpen(false);
