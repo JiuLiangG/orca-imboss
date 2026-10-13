@@ -17,8 +17,9 @@ import {
 import { useClickOutside } from "../../../../hooks/use-click-outside";
 import { useDropdownPosition } from "../../../../hooks/use-dropdown-position";
 import { useEscapeKey } from "../../../../hooks/use-escape-key";
-import { IconAttach, IconFile, IconImage, IconSend } from "../../../icons";
+import { IconAttach, IconFile, IconFolder, IconImage, IconSend } from "../../../icons";
 import { Textarea } from "../../../textarea";
+import { Tooltip } from "../../../tooltip";
 import "./index.css";
 
 export interface ChatInputBarProps {
@@ -242,13 +243,40 @@ export function ChatInputBar({
 
   const addFiles = (files: readonly File[] | null): void => {
     if (!files || files.length === 0) return;
+    addEntries(Array.from(files).map((file) => ({ file, kind: "file" as const })));
+  };
+
+  const addEntries = (
+    entries: readonly { file: File; kind: "file" | "folder" }[],
+  ): void => {
+    if (entries.length === 0) return;
     setNotice(null);
-    const selected = Array.from(files);
     const next: PendingAttachment[] = [];
-    for (const file of selected.slice(0, capCount(selected.length))) {
+    let failedFolders = 0;
+    for (const { file, kind } of entries.slice(0, capCount(entries.length))) {
       // `webUtils.getPathForFile` (preload) yields "" for JS-constructed files;
       // only persist a real on-disk path so the chip is revealable.
       const path = imb.files.getPath(file);
+      if (kind === "folder") {
+        // A folder is only useful through its absolute path: the model reads
+        // the directory in place and the chip has no bytes to preview. A
+        // folder without a resolvable path is rejected rather than attached.
+        if (!path) {
+          failedFolders += 1;
+          continue;
+        }
+        next.push({
+          id: nextAttachmentId(),
+          attachment: {
+            name: file.name || path,
+            size: 0,
+            type: "folder",
+            path,
+            kind: "folder",
+          },
+        });
+        continue;
+      }
       next.push(
         buildPending(file, {
           name: file.name || pastedName(file),
@@ -257,6 +285,47 @@ export function ChatInputBar({
           ...(path ? { path } : {}),
         }),
       );
+    }
+    if (failedFolders > 0) {
+      setNotice(
+        failedFolders === 1
+          ? t("Could not attach the folder.")
+          : t("Could not attach ${count} folders.", {
+              count: String(failedFolders),
+            }),
+      );
+    }
+    commitPending(next);
+    setPopupOpen(false);
+  };
+
+  /**
+   * Attach folders chosen through the native directory dialog. The absolute
+   * path originates in main, so it is authoritative; a folder counts as one
+   * attachment toward the cap but has no bytes to preview.
+   */
+  const chooseFolders = async (): Promise<void> => {
+    setNotice(null);
+    let directories: { name: string; path: string }[] | null;
+    try {
+      directories = await imb.files.chooseDirectories();
+    } catch {
+      setNotice(t("Could not attach the folder."));
+      return;
+    }
+    if (!directories || directories.length === 0) return;
+    const next: PendingAttachment[] = [];
+    for (const directory of directories.slice(0, capCount(directories.length))) {
+      next.push({
+        id: nextAttachmentId(),
+        attachment: {
+          name: directory.name,
+          size: 0,
+          type: "folder",
+          path: directory.path,
+          kind: "folder",
+        },
+      });
     }
     commitPending(next);
     setPopupOpen(false);
@@ -326,11 +395,11 @@ export function ChatInputBar({
     void addPastedFiles(files);
   };
 
-  // Folders cannot be attached, and a `File` alone cannot be told apart from an
-  // empty file; Chromium's entry API distinguishes them synchronously (no IPC).
+  // Folders dropped from the OS are attached by path (kind = "folder"); a
+  // `File` alone cannot be told apart from an empty file, so Chromium's entry
+  // API distinguishes them synchronously (no IPC).
   const addDropped = (dataTransfer: DataTransfer): void => {
-    const dropped: File[] = [];
-    let skippedFolder = false;
+    const entries: { file: File; kind: "file" | "folder" }[] = [];
     for (const item of Array.from(dataTransfer.items)) {
       if (item.kind !== "file") continue;
       const file = item.getAsFile();
@@ -342,22 +411,15 @@ export function ChatInputBar({
         // Some sources throw; treat the entry as a regular file.
         isDirectory = false;
       }
-      if (isDirectory) {
-        skippedFolder = true;
-        continue;
-      }
-      dropped.push(file);
+      entries.push({ file, kind: isDirectory ? "folder" : "file" });
     }
     // Sources without `items` (or with only string items) fall back to `files`.
-    if (dropped.length === 0 && !skippedFolder) {
-      dropped.push(...Array.from(dataTransfer.files));
+    if (entries.length === 0) {
+      for (const file of Array.from(dataTransfer.files)) {
+        entries.push({ file, kind: "file" });
+      }
     }
-    const remaining = Math.max(MAX_USER_ATTACHMENTS - attachments.length, 0);
-    addFiles(dropped);
-    // Only surface the folder notice when the cap notice did not take over.
-    if (skippedFolder && dropped.length <= remaining) {
-      setNotice(t("Folders cannot be attached."));
-    }
+    addEntries(entries);
   };
 
   const onDragOver = (event: React.DragEvent<HTMLDivElement>): void => {
@@ -399,32 +461,55 @@ export function ChatInputBar({
       onDrop={onDrop}
     >
       {dropActive && (
-        <div className="imb-drop-hint">{t("Drop files to attach")}</div>
+        <div className="imb-drop-hint">
+          {t("Drop files or folders to attach")}
+        </div>
       )}
       <div className="imb-chat-input-card">
         {attachments.length > 0 && (
           <div className="imb-attached-files">
-            {attachments.map((item, index) => (
-              <div className="imb-attached-file-thumb" key={item.id}>
-                {item.previewUrl ? (
-                  <img src={item.previewUrl} alt={item.attachment.name} />
-                ) : (
-                  <div className="imb-file-icon-placeholder">
-                    <IconFile />
-                  </div>
-                )}
-                <button
-                  type="button"
-                  className="imb-attached-file-remove"
-                  aria-label={`${t("Remove")} ${item.attachment.name}`}
-                  onClick={() =>
-                    appStore.removeChatDraftAttachment(chatId, index)
+            {attachments.map((item, index) => {
+              // Show the on-disk location so identical-looking chips (and
+              // nameless thumbnails) can be told apart. Fall back to the name
+              // when no path is available (e.g. a JS-constructed file).
+              const location =
+                item.attachment.path && item.attachment.path.length > 0
+                  ? item.attachment.path
+                  : item.attachment.name;
+              return (
+                <Tooltip
+                  key={item.id}
+                  placement="top"
+                  content={
+                    <span className="imb-attach-tooltip-path">{location}</span>
                   }
                 >
-                  ×
-                </button>
-              </div>
-            ))}
+                  <div className="imb-attached-file-thumb">
+                    {item.previewUrl ? (
+                      <img src={item.previewUrl} alt={item.attachment.name} />
+                    ) : (
+                      <div className="imb-file-icon-placeholder">
+                        {item.attachment.kind === "folder" ? (
+                          <IconFolder />
+                        ) : (
+                          <IconFile />
+                        )}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      className="imb-attached-file-remove"
+                      aria-label={`${t("Remove")} ${item.attachment.name}`}
+                      onClick={() =>
+                        appStore.removeChatDraftAttachment(chatId, index)
+                      }
+                    >
+                      ×
+                    </button>
+                  </div>
+                </Tooltip>
+              );
+            })}
           </div>
         )}
         {notice !== null && <div className="imb-attach-notice">{notice}</div>}
@@ -504,6 +589,18 @@ export function ChatInputBar({
                   >
                     <IconFile />
                     <span>{t("File")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="imb-attach-popup-item"
+                    onClick={() => {
+                      setPopupOpen(false);
+                      void chooseFolders();
+                    }}
+                  >
+                    <IconFolder />
+                    <span>{t("Folder")}</span>
                   </button>
                 </div>,
                 document.body,

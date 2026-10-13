@@ -3,7 +3,7 @@ import { t } from "@shared/l10n";
 import type { MessageAttachment } from "@shared/types";
 import { useState } from "react";
 import { cls } from "reactutils";
-import { IconFile } from "../../../icons";
+import { IconFile, IconFolder } from "../../../icons";
 import { Markdown } from "../../../markdown";
 import "./index.css";
 
@@ -81,17 +81,25 @@ export function MessageBubble({
                   aria-disabled={!hasPath}
                   title={
                     hasPath
-                      ? t("Show in folder")
+                      ? attachment.kind === "folder"
+                        ? t("Open folder")
+                        : t("Show in folder")
                       : t("File location is unavailable.")
                   }
                   onClick={hasPath ? () => void reveal(index) : undefined}
                 >
-                  <IconFile className="imb-icon imb-sm" />
+                  {attachment.kind === "folder" ? (
+                    <IconFolder className="imb-icon imb-sm" />
+                  ) : (
+                    <IconFile className="imb-icon imb-sm" />
+                  )}
                   <span className="imb-bubble-chip-name">
                     {attachment.name}
                   </span>
                   <span className="imb-bubble-chip-size">
-                    {formatSize(attachment.size)}
+                    {attachment.kind === "folder"
+                      ? t("Folder")
+                      : formatSize(attachment.size)}
                   </span>
                 </button>
               );

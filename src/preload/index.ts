@@ -106,6 +106,15 @@ const api = {
      */
     deletePastedFile: (path: string) =>
       ipcRenderer.invoke("files:deletePastedFile", path) as Promise<void>,
+    /**
+     * Choose one or more folders from the native directory dialog. Resolves to
+     * the folder name + absolute path, or `null` when cancelled. The path is
+     * minted by main (never the renderer), so it is safe to forward to agents.
+     */
+    chooseDirectories: () =>
+      ipcRenderer.invoke("files:chooseDirectories") as Promise<
+        { name: string; path: string }[] | null
+      >,
   },
 
   getVersion: () => ipcRenderer.invoke("app:getVersion") as Promise<string>,

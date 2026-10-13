@@ -1,6 +1,9 @@
 import { MAX_ATTACHMENT_BYTES } from "@shared/constants/attachments";
+import { t } from "@shared/l10n";
 import { ipcMain } from "electron";
+import { basename, isAbsolute } from "path";
 import { deletePastedFile, savePastedFile } from "../attachments";
+import { showOpenDialog } from "./dialog";
 import { assertInteger, assertString } from "./helpers";
 
 export function registerFileHandlers(): void {
@@ -22,6 +25,21 @@ export function registerFileHandlers(): void {
   // disk-backed user file (original path) is never removed.
   ipcMain.handle("files:deletePastedFile", (_event, path: unknown) => {
     deletePastedFile(assertString(path, "attachment path"));
+  });
+
+  // Choose one or more folders from the native directory dialog. The path
+  // always originates in main (never a renderer-supplied string), matching the
+  // workdir picker and the reveal IPC's trust model. A folder is attached by
+  // path only — no bytes are copied; the model reads the directory in place.
+  ipcMain.handle("files:chooseDirectories", async () => {
+    const paths = await showOpenDialog({
+      title: t("Select folder"),
+      properties: ["openDirectory", "multiSelections"],
+    });
+    if (!paths) return null;
+    return paths
+      .filter((path) => isAbsolute(path))
+      .map((path) => ({ name: basename(path), path }));
   });
 }
 

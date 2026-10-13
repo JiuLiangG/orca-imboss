@@ -60,6 +60,9 @@ export function toPlainAttachment(
   if (typeof attachment.path === "string" && attachment.path.length > 0) {
     plain.path = attachment.path;
   }
+  if (attachment.kind === "file" || attachment.kind === "folder") {
+    plain.kind = attachment.kind;
+  }
   return plain;
 }
 

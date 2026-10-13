@@ -404,6 +404,7 @@ function parseAttachments(raw: string | null): MessageAttachment[] | null {
       continue;
     }
     const path = record["path"];
+    const kind = record["kind"];
     result.push({
       name: record["name"],
       size: typeof record["size"] === "number" ? record["size"] : 0,
@@ -413,6 +414,7 @@ function parseAttachments(raw: string | null): MessageAttachment[] | null {
       path.length <= MAX_ATTACH_PATH_LENGTH
         ? { path }
         : {}),
+      ...(kind === "file" || kind === "folder" ? { kind } : {}),
     });
   }
   return result;
@@ -536,6 +538,12 @@ function validateAttachments(
       throw new Error("Attachment type is too long.");
     }
     const attachment: MessageAttachment = { name, size: item.size, type };
+    if (item.kind !== undefined) {
+      if (item.kind !== "file" && item.kind !== "folder") {
+        throw new Error("Attachment kind is invalid.");
+      }
+      attachment.kind = item.kind;
+    }
     if (item.path !== undefined) {
       if (
         typeof item.path !== "string" ||

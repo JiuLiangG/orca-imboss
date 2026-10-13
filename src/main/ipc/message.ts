@@ -69,7 +69,7 @@ export function registerMessageHandlers(): void {
   // record so a compromised renderer can never reveal arbitrary paths.
   ipcMain.handle(
     "messages:revealAttachment",
-    (_event, messageId: unknown, index: unknown) => {
+    async (_event, messageId: unknown, index: unknown) => {
       const safeId = assertInteger(messageId, "message id");
       const safeIndex = assertInteger(index, "attachment index");
       if (safeIndex < 0) {
@@ -81,13 +81,21 @@ export function registerMessageHandlers(): void {
       if (!attachments || safeIndex >= attachments.length) {
         throw new Error("Attachment does not exist.");
       }
-      const path = attachments[safeIndex].path;
+      const attachment = attachments[safeIndex];
+      const path = attachment.path;
       if (!path) throw new Error("Attachment location is unavailable.");
       if (!isAbsolute(path)) {
         throw new Error("Attachment location is invalid.");
       }
       if (!existsSync(path)) {
         throw new Error("Attachment file no longer exists.");
+      }
+      if (attachment.kind === "folder") {
+        // Open the folder itself; `showItemInFolder` would only select it in
+        // its parent. `openPath` resolves to an error string ("" on success).
+        const error = await shell.openPath(path);
+        if (error) throw new Error(error);
+        return;
       }
       shell.showItemInFolder(path);
     },

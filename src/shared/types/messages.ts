@@ -31,10 +31,15 @@ export interface MessageAttachment {
   /**
    * Absolute on-disk path of the original file, when known. Captured from the
    * file picker (`webUtils.getPathForFile`) or resolved from a tool-supplied
-   * path. Used to reveal the file in the OS file manager; never shown to the
-   * model.
+   * path. Used to reveal the file in the OS file manager and to tell the model
+   * where to read the attachment.
    */
   path?: string;
+  /**
+   * `"folder"` for a directory attachment; absent means a regular file. When a
+   * folder is chosen from the picker, `size` is `0` and `type` is `"folder"`.
+   */
+  kind?: "file" | "folder";
 }
 
 /** Row of the `messages` table, ordered per chat by `created_at`. */
