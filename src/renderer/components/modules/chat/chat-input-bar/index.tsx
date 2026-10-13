@@ -548,23 +548,26 @@ export function ChatInputBar({
     name?: string;
     role?: string;
   }): void => {
+    const textarea = textareaRef.current;
+    // The textarea is uncontrolled: the DOM owns the live value, so rebuild the
+    // text from it rather than from the (possibly one frame stale) snapshot.
+    const prevText = textarea?.value ?? text;
     const mentionTag = `@${employee.name || employee.role || employee.id} `;
-    const prevText = text;
     const nextText =
       prevText.slice(0, mentionCaret.start) +
       mentionTag +
       prevText.slice(mentionCaret.end);
+    const newCursor = mentionCaret.start + mentionTag.length;
+    if (textarea) {
+      // Write through the DOM directly: React never rewrites an uncontrolled
+      // value, so updating only the store would leave the visible input
+      // unchanged (the mention would never appear).
+      textarea.value = nextText;
+      textarea.focus();
+      textarea.setSelectionRange(newCursor, newCursor);
+    }
     appStore.setChatDraftText(chatId, nextText);
     setMentionOpen(false);
-
-    setTimeout(() => {
-      const textarea = textareaRef.current;
-      if (textarea) {
-        textarea.focus();
-        const newCursor = mentionCaret.start + mentionTag.length;
-        textarea.setSelectionRange(newCursor, newCursor);
-      }
-    }, 0);
   };
 
   return (
