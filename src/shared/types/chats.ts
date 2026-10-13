@@ -15,6 +15,8 @@ export interface Chat {
    * Doubles as the conversation's platform label in the UI.
    */
   source: IntegrationPlatform | null;
+  /** Pinned conversations sort above the rest of the list. */
+  pinned: boolean;
 }
 
 /** List item of the chat module: chat + derived last-message preview. */
@@ -44,6 +46,7 @@ export interface ChatRow {
   created_at: number;
   from_chat_id: number | null;
   source: string | null;
+  pinned: number;
 }
 
 export interface ChatSummaryRow extends ChatRow {

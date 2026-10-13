@@ -18,6 +18,19 @@ export function registerChatHandlers(): void {
 
   ipcMain.handle("chats:summaries", () => dbChats.listChatSummaries());
 
+  // Pin/unpin one conversation (sorts above the rest of the list).
+  ipcMain.handle(
+    "chats:setPinned",
+    (_event, id: unknown, pinned: unknown) => {
+      const safeId = assertInteger(id, "chat id");
+      const updated = dbChats.setPinned(safeId, pinned === true);
+      if (updated !== null) {
+        sendToRenderer("chats:changed", { chatId: safeId });
+      }
+      return updated;
+    },
+  );
+
   ipcMain.handle("chats:summariesPage", (_event, page: unknown) =>
     dbChats.listChatSummariesPage(parsePageQuery(page)),
   );

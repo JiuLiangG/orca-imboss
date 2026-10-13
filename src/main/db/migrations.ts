@@ -146,6 +146,12 @@ const MIGRATIONS: Array<(db: Database) => void> = [
       UPDATE chats SET unread = 0 WHERE from_chat_id IS NOT NULL;
     `);
   },
+  // 2 — pinned conversations (sort above the rest of the chat list)
+  (db) => {
+    db.exec(`
+      ALTER TABLE chats ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
+    `);
+  },
 ];
 
 export function migrate(db: Database): void {

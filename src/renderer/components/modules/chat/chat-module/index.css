@@ -33,6 +33,11 @@
   min-width: 0;
 }
 
+.imb-chat-pin {
+  flex: none;
+  color: var(--imb-muted);
+}
+
 .imb-chat-name-text {
   min-width: 0;
   overflow: hidden;
