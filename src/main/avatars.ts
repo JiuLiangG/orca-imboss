@@ -1,14 +1,13 @@
 import {
   chmodSync,
-  existsSync,
   mkdirSync,
-  readFileSync,
   readdirSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "fs";
-import { extname, join } from "path";
+import { join } from "path";
 import { getAvatarsDir } from "./data-dir";
 
 /**
@@ -17,23 +16,24 @@ import { getAvatarsDir } from "./data-dir";
  * Security posture:
  * - File names are derived from integer employee ids only — never from
  *   user-controlled strings — so path traversal is impossible by construction.
- * - Extensions are whitelisted; reads never follow files outside the dir.
+ * - Extensions are whitelisted.
  * - Writes are atomic (temp file + rename) and chmod 0600 on POSIX.
+ *
+ * The renderer displays an avatar by building an `imb-file:` URL from the stored
+ * absolute path (`Employee.avatar`); this module never reads the bytes.
  */
 
-const AVATAR_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "avif"] as const;
+const AVATAR_EXTENSIONS = [
+  "png",
+  "jpg",
+  "jpeg",
+  "webp",
+  "gif",
+  "avif",
+] as const;
 type AvatarExt = (typeof AVATAR_EXTENSIONS)[number];
 
 const MAX_AVATAR_BYTES = 10 * 1024 * 1024; // 10 MB — plenty for an avatar
-
-const MIME_BY_EXT: Record<AvatarExt, string> = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  webp: "image/webp",
-  gif: "image/gif",
-  avif: "image/avif",
-};
 
 /**
  * Persist an avatar image for an employee. Replaces any previous avatar
@@ -99,16 +99,15 @@ export function deleteAvatarFiles(id: number): void {
   }
 }
 
-/** Read an employee's avatar as a data URL, or null when absent. */
-export function readAvatarDataUrl(id: number): string | null {
-  validateEmployeeId(id);
-  const file = findAvatarFile(id);
-  if (!file) return null;
-  const ext = extname(file).slice(1).toLowerCase() as AvatarExt;
-  const mime = MIME_BY_EXT[ext] ?? "image/png";
+/**
+ * Change key for an avatar file: its last-modified time in ms, or `null` when
+ * the path is empty/unreadable. Busts the browser's image cache for an
+ * `imb-file:` URL after a same-format re-upload (the path stays identical).
+ */
+export function avatarVersion(path: string | null): number | null {
+  if (!path) return null;
   try {
-    const data = readFileSync(file);
-    return `data:${mime};base64,${data.toString("base64")}`;
+    return statSync(path).mtimeMs;
   } catch {
     return null;
   }
@@ -126,25 +125,4 @@ function validateExt(ext: string): AvatarExt {
     throw new Error("Unsupported avatar format.");
   }
   return normalized as AvatarExt;
-}
-
-/** Existing avatar file for an employee, or null. */
-function findAvatarFile(id: number): string | null {
-  const dir = getAvatarsDir();
-  try {
-    const entries = readdirSync(dir);
-    for (const entry of entries) {
-      // `name = employee id int` — match exactly, ignore anything else.
-      if (entry === `${id}`) continue; // not a file we own
-      const match = /^(\d+)\.([a-z]+)$/.exec(entry);
-      if (!match || match[1] !== String(id)) continue;
-      const ext = match[2].toLowerCase();
-      if (!(AVATAR_EXTENSIONS as readonly string[]).includes(ext)) continue;
-      const file = join(dir, entry);
-      if (existsSync(file)) return file;
-    }
-  } catch {
-    // Missing/corrupt dir → no avatar.
-  }
-  return null;
 }

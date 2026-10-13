@@ -70,19 +70,8 @@ export function registerMessageHandlers(): void {
   ipcMain.handle(
     "messages:revealAttachment",
     async (_event, messageId: unknown, index: unknown) => {
-      const safeId = assertInteger(messageId, "message id");
-      const safeIndex = assertInteger(index, "attachment index");
-      if (safeIndex < 0) {
-        throw new Error("Attachment index must be non-negative.");
-      }
-      const message = dbMessages.getMessageById(safeId);
-      if (!message) throw new Error("Message does not exist.");
-      const attachments = message.attachments;
-      if (!attachments || safeIndex >= attachments.length) {
-        throw new Error("Attachment does not exist.");
-      }
-      const attachment = attachments[safeIndex];
-      const path = attachment.path;
+      const attachment = resolveAttachment(messageId, index);
+      const path = attachments[safeIndex].path;
       if (!path) throw new Error("Attachment location is unavailable.");
       if (!isAbsolute(path)) {
         throw new Error("Attachment location is invalid.");
@@ -100,4 +89,27 @@ export function registerMessageHandlers(): void {
       shell.showItemInFolder(path);
     },
   );
+}
+
+/**
+ * Resolve an attachment by message id + index from the trusted stored record.
+ * Shared by the reveal and preview handlers so both enforce the same bounds
+ * checks; throws when the message/attachment does not exist.
+ */
+function resolveAttachment(
+  messageId: unknown,
+  index: unknown,
+): { name: string; type: string; path?: string } {
+  const safeId = assertInteger(messageId, "message id");
+  const safeIndex = assertInteger(index, "attachment index");
+  if (safeIndex < 0) {
+    throw new Error("Attachment index must be non-negative.");
+  }
+  const message = dbMessages.getMessageById(safeId);
+  if (!message) throw new Error("Message does not exist.");
+  const attachments = message.attachments;
+  if (!attachments || safeIndex >= attachments.length) {
+    throw new Error("Attachment does not exist.");
+  }
+  return attachments[safeIndex];
 }

@@ -1,11 +1,21 @@
 import { MAX_VISIBLE_ATTACHMENTS } from "@shared/constants/attachments";
+import { isPreviewableImage } from "@shared/image-attachments";
+import { toImbFileUrl } from "@shared/imb-file";
 import { t } from "@shared/l10n";
 import type { MessageAttachment } from "@shared/types";
 import { useState } from "react";
 import { cls } from "reactutils";
 import { IconFile, IconFolder } from "../../../icons";
 import { Markdown } from "../../../markdown";
+import {
+  IMAGE_PREVIEW_ENABLED,
+  ImageStack,
+  type ImageStackImage,
+} from "../image-stack";
 import "./index.css";
+
+/** Shared empty set for a message with no failed image loads. */
+const EMPTY_FAILED: ReadonlySet<number> = new Set();
 
 export interface MessageBubbleProps {
   /** `true` = user message (right-aligned, green bubble). */
@@ -45,11 +55,67 @@ export function MessageBubble({
   onMentionClick,
 }: MessageBubbleProps): React.JSX.Element {
   const [revealError, setRevealError] = useState<string | null>(null);
+  // Attachment indices whose `imb-file:` image failed to load (missing file,
+  // undecodable bytes) — they fall back to a plain file chip. Keyed by message
+  // so a recycled bubble (no React key) cannot inherit a previous message's
+  // failures.
+  const [failedState, setFailedState] = useState<{
+    messageId: number;
+    indices: ReadonlySet<number>;
+  }>(() => ({ messageId, indices: new Set() }));
+  const failedImages =
+    failedState.messageId === messageId ? failedState.indices : EMPTY_FAILED;
+  const markImageFailed = (index: number): void =>
+    setFailedState((prev) => {
+      const indices =
+        prev.messageId === messageId
+          ? new Set(prev.indices)
+          : new Set<number>();
+      indices.add(index);
+      return { messageId, indices };
+    });
   const all = attachments ?? [];
   const hasAttachments = all.length > 0;
   const visible = all.slice(0, MAX_VISIBLE_ATTACHMENTS);
   const total = Math.max(attachmentsTotal ?? all.length, all.length);
   const hidden = total - visible.length;
+
+  // Visible attachments renderable as images: a previewable format with an
+  // on-disk path (the `imb-file:` URL is derived from it directly; main never
+  // reads the bytes). Gated by the feature's master switch — disabled, every
+  // attachment stays a plain file chip.
+  const imageSlots: { index: number; name: string; path: string }[] =
+    IMAGE_PREVIEW_ENABLED
+      ? visible.flatMap((attachment, index) => {
+          const path = attachment.path;
+          return typeof path === "string" &&
+            path.length > 0 &&
+            isPreviewableImage(attachment.type, attachment.name)
+            ? [{ index, name: attachment.name, path }]
+            : [];
+        })
+      : [];
+
+  // Images still in the stack (those whose `<img>` has not errored) plus the
+  // non-image / failed chips.
+  const stack: ImageStackImage[] = imageSlots
+    .filter((slot) => !failedImages.has(slot.index))
+    .map((slot) => ({
+      index: slot.index,
+      name: slot.name,
+      src: toImbFileUrl(slot.path),
+    }));
+  const imageIndices = new Set(imageSlots.map((slot) => slot.index));
+
+  const chips = visible
+    .map((attachment, index) => ({ attachment, index }))
+    .filter(({ index }) => !imageIndices.has(index) || failedImages.has(index));
+
+  const showStack = stack.length > 0;
+  // An image-only message drops the bubble chrome so the picture is not framed
+  // by the bubble's color (the green self bubble skews how an image reads).
+  const mediaOnly =
+    showStack && content.length === 0 && chips.length === 0 && hidden === 0;
 
   const reveal = async (index: number): Promise<void> => {
     setRevealError(null);
@@ -63,56 +129,67 @@ export function MessageBubble({
   return (
     <div className={cls("imb-msg", self ? "imb-self" : "imb-other")}>
       {avatar}
-      <div className="imb-bubble">
+      <div className={cls("imb-bubble", mediaOnly && "imb-bubble-media")}>
         {hasAttachments && (
           <div className="imb-bubble-attachments">
-            {visible.map((attachment, index) => {
-              const hasPath =
-                typeof attachment.path === "string" &&
-                attachment.path.length > 0;
-              return (
-                <button
-                  key={`${attachment.name}-${attachment.size}-${index}`}
-                  type="button"
-                  className={cls(
-                    "imb-bubble-chip",
-                    !hasPath && "imb-bubble-chip-static",
-                  )}
-                  aria-disabled={!hasPath}
-                  title={
-                    hasPath
-                      ? attachment.kind === "folder"
-                        ? t("Open folder")
-                        : t("Show in folder")
-                      : t("File location is unavailable.")
-                  }
-                  onClick={hasPath ? () => void reveal(index) : undefined}
-                >
-                  {attachment.kind === "folder" ? (
-                    <IconFolder className="imb-icon imb-sm" />
-                  ) : (
-                    <IconFile className="imb-icon imb-sm" />
-                  )}
-                  <span className="imb-bubble-chip-name">
-                    {attachment.name}
-                  </span>
-                  <span className="imb-bubble-chip-size">
-                    {attachment.kind === "folder"
-                      ? t("Folder")
-                      : formatSize(attachment.size)}
-                  </span>
-                </button>
-              );
-            })}
-            {hidden > 0 && (
-              <span
-                className="imb-bubble-chip imb-bubble-chip-more"
-                title={t("${count} attachments in total", {
-                  count: String(total),
+            {showStack && (
+              <ImageStack
+                images={stack}
+                self={self}
+                onImageError={markImageFailed}
+              />
+            )}
+            {(chips.length > 0 || hidden > 0) && (
+              <div className="imb-bubble-chips">
+                {chips.map(({ attachment, index }) => {
+                  const hasPath =
+                    typeof attachment.path === "string" &&
+                    attachment.path.length > 0;
+                  return (
+                    <button
+                      key={`${attachment.name}-${attachment.size}-${index}`}
+                      type="button"
+                      className={cls(
+                        "imb-bubble-chip",
+                        !hasPath && "imb-bubble-chip-static",
+                      )}
+                      aria-disabled={!hasPath}
+                      title={
+                        hasPath
+                          ? attachment.kind === "folder"
+                            ? t("Open folder")
+                            : t("Show in folder")
+                          : t("File location is unavailable.")
+                      }
+                      onClick={hasPath ? () => void reveal(index) : undefined}
+                    >
+                      {attachment.kind === "folder" ? (
+                        <IconFolder className="imb-icon imb-sm" />
+                      ) : (
+                        <IconFile className="imb-icon imb-sm" />
+                      )}
+                      <span className="imb-bubble-chip-name">
+                        {attachment.name}
+                      </span>
+                      <span className="imb-bubble-chip-size">
+                        {attachment.kind === "folder"
+                          ? t("Folder")
+                          : formatSize(attachment.size)}
+                      </span>
+                    </button>
+                  );
                 })}
-              >
-                {`+${hidden}`}
-              </span>
+                {hidden > 0 && (
+                  <span
+                    className="imb-bubble-chip imb-bubble-chip-more"
+                    title={t("${count} attachments in total", {
+                      count: String(total),
+                    })}
+                  >
+                    {`+${hidden}`}
+                  </span>
+                )}
+              </div>
             )}
           </div>
         )}

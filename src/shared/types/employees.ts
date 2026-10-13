@@ -13,10 +13,17 @@ export interface Employee {
   modelId: string | null;
   /** Per-employee thinking strength; null = follow the global default. */
   thinkingLevel: ThinkingLevel | null;
-  /** Stored avatar file path (main-process only, may be null). */
+  /**
+   * Absolute on-disk avatar path (null when none). The renderer turns this into
+   * an `imb-file:` URL for display; main never reads the bytes.
+   */
   avatar: string | null;
-  /** Avatar as a data URL for renderer display (may be null). */
-  avatarUrl: string | null;
+  /**
+   * Last-modified time (ms) of the avatar file, used as an `imb-file:` cache key
+   * so a same-format re-upload is not masked by the browser's image cache.
+   * `null` when there is no avatar (or it could not be stat'ed).
+   */
+  avatarVersion: number | null;
   /** `true` when the employee is disabled (soft-deleted, still a chat participant). */
   disabled: boolean;
 }

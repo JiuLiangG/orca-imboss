@@ -11,6 +11,10 @@ import { initDatabase } from "./db";
 import { purgeDisabledEmployees } from "./db/employees";
 import { unlinkSessionFile } from "./db/sessions";
 import { applyStoredHttpProxy } from "./http-proxy";
+import {
+  registerImbFileHandler,
+  registerImbFileScheme,
+} from "./imb-file-protocol";
 import { initIntegrations, shutdownIntegrations } from "./integrations";
 import { registerIpcHandlers } from "./ipc";
 import { getResolvedLocale, initLocale } from "./locale";
@@ -32,6 +36,10 @@ import {
 // app passes explicit `agentDir`/paths everywhere else, and the MCP extension's
 // server discovery is supplied by the app's own `loadConfig`.
 process.env.PI_CODING_AGENT_DIR = getAgentRoot();
+
+// Must run before the `app` `ready` event (Electron requires it): registers the
+// `imb-file:` scheme used by `<img>` to load attachment/avatar files directly.
+registerImbFileScheme();
 
 // Single instance
 const singleInstanceLock = app.requestSingleInstanceLock();
@@ -85,6 +93,10 @@ app.whenReady().then(() => {
   materializeBuiltinSkills();
   registerIpcHandlers();
   initTheme();
+
+  // Serve `imb-file:` requests (attachment / avatar images). Must be registered
+  // before the first window loads.
+  registerImbFileHandler();
 
   // Start enabled IM integrations (WeChat / QQ / Telegram) in the background.
   void initIntegrations();
