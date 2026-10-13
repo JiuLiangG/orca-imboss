@@ -11,6 +11,7 @@ import {
 } from "@shared/constants/attachments";
 import { ASSISTANT_ID } from "@shared/constants/employees";
 import { READ_CHAT_PROMPT } from "@shared/constants/prompts";
+import { t } from "@shared/l10n";
 import type {
   AgentEnvironment,
   AnyPiTool,
@@ -937,7 +938,9 @@ function addParticipantTool(env: AgentEnvironment): AnyPiTool {
         senderEmployeeId: ASSISTANT_ID,
         chatId: updated.id,
         kind: "text",
-        content: `New participant(s) joined: ${names.join(", ")}`,
+        content: t("New participant(s) joined: ${names}", {
+          names: names.join(", "),
+        }),
         skipSenderCheck: true,
       });
 
