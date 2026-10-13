@@ -10,6 +10,8 @@ export interface SearchInputProps extends Omit<
 > {
   value: string;
   onValueChange: (value: string) => void;
+  /** Shortcut hint shown at the right while the field is empty (e.g. "⌘K"). */
+  hint?: string;
 }
 
 export function SearchInput({
@@ -17,6 +19,7 @@ export function SearchInput({
   onValueChange,
   placeholder,
   className,
+  hint,
   ...rest
 }: SearchInputProps): React.JSX.Element {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -35,8 +38,18 @@ export function SearchInput({
         onChange={(e) => onValueChange(e.target.value)}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
+        onKeyDown={(event) => {
+          // Escape clears the query rather than closing anything.
+          if (event.key === "Escape" && value.length > 0) {
+            event.preventDefault();
+            onValueChange("");
+          }
+        }}
         {...rest}
       />
+      {value.length === 0 && hint !== undefined && (
+        <kbd className="imb-searchbox-hint">{hint}</kbd>
+      )}
       {value.length > 0 && (
         <button
           type="button"
