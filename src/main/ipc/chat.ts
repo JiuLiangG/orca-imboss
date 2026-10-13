@@ -3,6 +3,7 @@ import type { ChatParticipantUpdate, MessageAttachment } from "@shared/types";
 import { ipcMain } from "electron";
 import { isAbsolute } from "path";
 import { deliver, disposeForChat } from "../agent/session-queue";
+import { deletePastedFilesForChat } from "../attachments";
 import { integrationManager } from "../integrations";
 import { maybeGenerateChatTitle } from "../agent/title-gen";
 import * as cron from "../cron";
@@ -93,9 +94,13 @@ export function registerChatHandlers(): void {
     const removed = dbChats.deleteChats(chatIds) > 0;
     if (removed) {
       await Promise.all(records.map((r) => unlinkSessionFile(r.session)));
-      // Drop any platform media downloaded for these bridged chats.
+      // Drop platform media downloaded for these bridged chats and files
+      // pasted into their composers.
       await Promise.all(
-        chatIds.map((chatId) => integrationManager.deleteChatMedia(chatId)),
+        chatIds.flatMap((chatId) => [
+          integrationManager.deleteChatMedia(chatId),
+          deletePastedFilesForChat(chatId),
+        ]),
       );
       // Keep every window in sync: chat caches + opened group-chat entries.
       sendToRenderer("chats:deleted", { chatIds });

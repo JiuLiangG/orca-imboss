@@ -6,6 +6,13 @@
 /** Max attachments a user may attach in the chat input bar. */
 export const MAX_USER_ATTACHMENTS = 16;
 
+/**
+ * Max byte size of a single attachment. Enforced by the main-process DB
+ * validation, the built-in team tools and the composer's pasted-file store so
+ * the limit can never drift between producers.
+ */
+export const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
+
 /** Max file paths a single agent tool call may attach. */
 export const MAX_TOOL_ATTACHMENTS = 5;
 

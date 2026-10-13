@@ -652,6 +652,11 @@ export const appStore = proxy({
     if (!draft) return;
     const [removed] = draft.attachments.splice(index, 1);
     if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+    // Delete the on-disk copy of a pasted attachment. Main verifies ownership,
+    // so a disk-backed user file (original path) is never removed.
+    if (removed?.attachment.path) {
+      void imb.files.deletePastedFile(removed.attachment.path);
+    }
     // Drop the entry entirely once it is empty so the store holds only real
     // drafts and `EMPTY_DRAFT` remains the only empty shape.
     if (draft.text.length === 0 && draft.attachments.length === 0) {

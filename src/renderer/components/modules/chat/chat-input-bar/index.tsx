@@ -1,4 +1,7 @@
-import { MAX_USER_ATTACHMENTS } from "@shared/constants/attachments";
+import {
+  MAX_ATTACHMENT_BYTES,
+  MAX_USER_ATTACHMENTS,
+} from "@shared/constants/attachments";
 import { t } from "@shared/l10n";
 import type { MessageAttachment } from "@shared/types";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -45,6 +48,45 @@ function isImageFile(file: File): boolean {
 /** True when a drag payload carries OS files (ignores text/link drags). */
 function hasDroppedFiles(dataTransfer: DataTransfer): boolean {
   return dataTransfer.types.includes("Files");
+}
+
+/**
+ * Collect clipboard files synchronously. `DataTransferItem`s are only valid
+ * during the paste event, so this must not be deferred behind an await. Falls
+ * back to `clipboardData.files` for sources without `items`.
+ */
+function filesFromClipboard(data: DataTransfer): File[] {
+  const files: File[] = [];
+  for (const item of Array.from(data.items)) {
+    if (item.kind !== "file") continue;
+    const file = item.getAsFile();
+    if (file) files.push(file);
+  }
+  if (files.length === 0 && data.files.length > 0) {
+    files.push(...Array.from(data.files));
+  }
+  return files;
+}
+
+/** Safe extension for a pasted file: its name first, then its MIME subtype. */
+function extensionFor(file: File): string {
+  const match = /\.([a-z0-9]{1,8})$/i.exec(file.name);
+  if (match) return match[1].toLowerCase();
+  const slash = file.type.indexOf("/");
+  if (slash < 0) return "";
+  const subtype = file.type.slice(slash + 1).toLowerCase();
+  if (subtype === "jpeg") return "jpg";
+  return /^[a-z0-9]{1,8}$/.test(subtype) ? subtype : "";
+}
+
+/** `pasted-YYYYMMDD-HHmmss.<ext>` name for a clipboard-synthesized file. */
+function pastedName(file: File): string {
+  const now = new Date();
+  const pad = (value: number): string => String(value).padStart(2, "0");
+  const date = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+  const time = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  const ext = extensionFor(file);
+  return `pasted-${date}-${time}${ext.length > 0 ? `.${ext}` : ""}`;
 }
 
 export function ChatInputBar({
@@ -148,42 +190,140 @@ export function ChatInputBar({
     setNotice(null);
   };
 
-  const addFiles = (files: readonly File[] | null): void => {
-    if (!files || files.length === 0) return;
-    setNotice(null);
-    const selected = Array.from(files);
+  /** Cap a requested count to the free slots, warning on overflow. */
+  const capCount = (count: number): number => {
     const remaining = Math.max(MAX_USER_ATTACHMENTS - attachments.length, 0);
-    if (selected.length > remaining) {
+    if (count > remaining) {
       setNotice(
         t("Up to ${count} attachments allowed.", {
           count: String(MAX_USER_ATTACHMENTS),
         }),
       );
     }
+    return remaining;
+  };
+
+  /** Build a chip for a file, minting a thumbnail URL for images. */
+  const buildPending = (
+    file: File,
+    attachment: MessageAttachment,
+  ): PendingAttachment => {
+    const previewUrl = isImageFile(file)
+      ? URL.createObjectURL(file)
+      : undefined;
+    return {
+      id: nextAttachmentId(),
+      attachment,
+      ...(previewUrl ? { previewUrl } : {}),
+    };
+  };
+
+  /**
+   * Append chips, re-checking the cap against the live draft so an async add
+   * cannot overshoot a concurrent one. Preview URLs for dropped chips are
+   * revoked so they never leak.
+   */
+  const commitPending = (items: PendingAttachment[]): void => {
+    if (items.length === 0) return;
+    const liveCount = appStore.chatDrafts[chatId]?.attachments.length ?? 0;
+    const room = Math.max(MAX_USER_ATTACHMENTS - liveCount, 0);
+    for (const item of items.slice(room)) {
+      if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      // A persisted pasted file whose chip did not fit is now unreferenced.
+      if (item.attachment.path) {
+        void imb.files.deletePastedFile(item.attachment.path);
+      }
+    }
+    const accepted = items.slice(0, room);
+    if (accepted.length > 0) {
+      appStore.addChatDraftAttachments(chatId, accepted);
+    }
+  };
+
+  const addFiles = (files: readonly File[] | null): void => {
+    if (!files || files.length === 0) return;
+    setNotice(null);
+    const selected = Array.from(files);
     const next: PendingAttachment[] = [];
-    for (const file of selected.slice(0, remaining)) {
+    for (const file of selected.slice(0, capCount(selected.length))) {
       // `webUtils.getPathForFile` (preload) yields "" for JS-constructed files;
       // only persist a real on-disk path so the chip is revealable.
       const path = imb.files.getPath(file);
-      let previewUrl: string | undefined;
-      if (isImageFile(file)) {
-        previewUrl = URL.createObjectURL(file);
-      }
-      next.push({
-        id: nextAttachmentId(),
-        attachment: {
-          name: file.name,
+      next.push(
+        buildPending(file, {
+          name: file.name || pastedName(file),
           size: file.size,
           type: file.type,
           ...(path ? { path } : {}),
-        },
-        ...(previewUrl ? { previewUrl } : {}),
-      });
+        }),
+      );
     }
-    if (next.length > 0) {
-      appStore.addChatDraftAttachments(chatId, next);
-    }
+    commitPending(next);
     setPopupOpen(false);
+  };
+
+  /**
+   * Attach files from a paste. Clipboard-synthesized files have no backing
+   * path, so their bytes are first persisted to the per-chat folder (giving the
+   * agent a readable `path`); files already on disk keep their original path.
+   */
+  const addPastedFiles = async (files: readonly File[]): Promise<void> => {
+    setNotice(null);
+    const selected = Array.from(files);
+    const next: PendingAttachment[] = [];
+    let failed = 0;
+    for (const file of selected.slice(0, capCount(selected.length))) {
+      const path = imb.files.getPath(file);
+      if (path) {
+        next.push(
+          buildPending(file, {
+            name: file.name || pastedName(file),
+            size: file.size,
+            type: file.type,
+            path,
+          }),
+        );
+        continue;
+      }
+      // Reject oversized images before reading their bytes into memory.
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        failed += 1;
+        continue;
+      }
+      try {
+        const data = new Uint8Array(await file.arrayBuffer());
+        const saved = await imb.files.savePastedFile(
+          chatId,
+          pastedName(file),
+          file.type,
+          data,
+        );
+        next.push(buildPending(file, saved));
+      } catch {
+        failed += 1;
+      }
+    }
+    if (failed > 0) {
+      setNotice(
+        failed === 1
+          ? t("Could not attach the pasted file.")
+          : t("Could not attach ${count} pasted files.", {
+              count: String(failed),
+            }),
+      );
+    }
+    commitPending(next);
+    setPopupOpen(false);
+  };
+
+  const onPaste = (event: React.ClipboardEvent<HTMLDivElement>): void => {
+    if (disabled) return;
+    const files = filesFromClipboard(event.clipboardData);
+    if (files.length === 0) return;
+    // Consume the paste so an accompanying text/HTML representation (e.g. an
+    // image copied from a web page) is not also inserted into the textarea.
+    event.preventDefault();
+    void addPastedFiles(files);
   };
 
   // Folders cannot be attached, and a `File` alone cannot be told apart from an
@@ -252,6 +392,7 @@ export function ChatInputBar({
   return (
     <div
       className={cls("imb-chat-input-wrap", dropActive && "imb-drop-active")}
+      onPaste={onPaste}
       onDragEnter={onDragOver}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}

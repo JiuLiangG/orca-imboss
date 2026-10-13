@@ -81,6 +81,31 @@ const api = {
         return "";
       }
     },
+    /**
+     * Persist bytes pasted into the composer that have no backing file on disk
+     * (screenshots / copied image data) and return the stored attachment
+     * metadata, including the absolute `path` the agent can read.
+     */
+    savePastedFile: (
+      chatId: number,
+      name: string,
+      type: string,
+      data: Uint8Array,
+    ) =>
+      ipcRenderer.invoke(
+        "files:savePastedFile",
+        chatId,
+        name,
+        type,
+        data,
+      ) as Promise<MessageAttachment>,
+    /**
+     * Remove the on-disk copy of a pasted attachment (chip discarded). Main
+     * verifies ownership and silently ignores anything outside the pasted
+     * store, so a disk-backed user file is never deleted.
+     */
+    deletePastedFile: (path: string) =>
+      ipcRenderer.invoke("files:deletePastedFile", path) as Promise<void>,
   },
 
   getVersion: () => ipcRenderer.invoke("app:getVersion") as Promise<string>,

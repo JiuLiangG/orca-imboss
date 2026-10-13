@@ -5,6 +5,7 @@ import {
   BUILTIN_TOOL_OPTIONS,
 } from "@shared/constants/agent_tools";
 import {
+  MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENT_TOTAL,
   MAX_TOOL_ATTACHMENTS,
 } from "@shared/constants/attachments";
@@ -64,7 +65,6 @@ import { listSkills } from "./skills";
 
 const getEmployee = dbEmployees.getEmployee;
 
-const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
 const MIME_BY_EXT: Record<string, string> = {
   png: "image/png",
   jpg: "image/jpeg",

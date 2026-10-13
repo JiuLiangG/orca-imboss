@@ -46,6 +46,15 @@ export function getAvatarsDir(): string {
 }
 
 /**
+ * Directory holding files pasted into the chat composer
+ * (`<chatId>/pasted-<timestamp>.<ext>`). Removed per chat when the chat is
+ * deleted, mirroring integration media.
+ */
+export function getAttachmentsDir(): string {
+  return join(getDataRoot(), "attachments");
+}
+
+/**
  * Root of the user/AI-authored Mini Apps (`<id>/metadata.json`). Scanned by
  * `src/main/mini-apps.ts`; the renderer never touches it directly.
  */
@@ -105,6 +114,7 @@ export function ensureDataDir(): void {
     getDataRoot(),
     join(getDataRoot(), "db"),
     getAvatarsDir(),
+    getAttachmentsDir(),
     getAgentRoot(),
     getAgentSkillsDir(),
     getBuiltinSkillsDir(),

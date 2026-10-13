@@ -1,4 +1,5 @@
 import {
+  MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENT_TOTAL,
   MAX_USER_ATTACHMENTS,
 } from "@shared/constants/attachments";
@@ -37,7 +38,7 @@ const MAX_STEP_ROLE_LENGTH = 256;
 const MAX_ATTACH_NAME_LENGTH = 256;
 const MAX_ATTACH_TYPE_LENGTH = 128;
 const MAX_ATTACH_PATH_LENGTH = 4096;
-const MAX_ATTACH_SIZE = 50 * 1024 * 1024; // metadata only
+const MAX_ATTACH_SIZE = MAX_ATTACHMENT_BYTES; // metadata only
 
 /**
  * Synchronous observers notified after every successful `appendMessage`.
