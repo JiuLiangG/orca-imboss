@@ -319,5 +319,21 @@
   "Working directory": "工作目录",
   "XHigh": "很高",
   "You're up to date.": "已是最新版本。",
-  "Zoom": "缩放"
+  "Zoom": "缩放",
+  "All employees": "全部员工",
+  "By model": "按模型",
+  "Cache read": "缓存读取",
+  "Cache write": "缓存写入",
+  "Calls": "调用次数",
+  "Cost": "费用",
+  "Daily trend": "每日趋势",
+  "Failed to load spend statistics": "加载花费统计失败",
+  "Input tokens": "输入 Token",
+  "No spend recorded yet": "暂无花费记录",
+  "Output tokens": "输出 Token",
+  "Spend": "花费",
+  "Time range": "时间范围",
+  "Tokens": "Token",
+  "Total": "总计"
 }
+

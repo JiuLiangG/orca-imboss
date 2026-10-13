@@ -11,6 +11,7 @@ import type {
   McpServer,
   MiniApp,
   ProviderInfo,
+  SpendRange,
   ThemeState,
   UpdaterState,
 } from "@shared/types";
@@ -34,7 +35,8 @@ export type AppModule =
   | "settings"
   | "miniapp"
   | "group-chat"
-  | "agent-session";
+  | "agent-session"
+  | "spend";
 
 /** A group chat opened from a `chat`-kind card and shown in the Nav. */
 export interface OpenedChat {
@@ -113,6 +115,7 @@ const VALID_MODULES: AppModule[] = [
   "skills",
   "settings",
   "miniapp",
+  "spend",
 ];
 
 /** Global renderer app state (valtio proxy — replaces the former context). */
@@ -141,6 +144,12 @@ export const appStore = proxy({
   // Pending chat to select when the chat module is mounted (set by an OS
   // notification click). Cleared once consumed.
   focusChatId: null as number | null,
+
+  // Spend module selection: the time window and the employee whose detail is
+  // shown. `null` employee = the grand total row. Session-only, so a module
+  // switch keeps the view the user left.
+  spendRange: "all" as SpendRange,
+  activeSpendEmployeeId: null as number | null,
 
   // Per-chat composer drafts (text + pending attachments). Kept here so the
   // chat module can be unmounted on a module switch without losing input.

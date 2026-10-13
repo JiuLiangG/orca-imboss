@@ -28,6 +28,8 @@ import type {
   ProviderLoginEvent,
   ProviderModelsQuery,
   ProviderUpsert,
+  SpendRange,
+  SpendReport,
   ThemeState,
   UpdaterState,
   WorkDirState,
@@ -435,6 +437,12 @@ const api = {
     /** Ensure the app's server is running and reachable, then return it. */
     open: (id: string) =>
       ipcRenderer.invoke("miniapps:open", id) as Promise<MiniApp>,
+  },
+
+  spend: {
+    /** Aggregated token/cost report, per employee and as a grand total. */
+    report: (range: SpendRange) =>
+      ipcRenderer.invoke("spend:report", range) as Promise<SpendReport>,
   },
 };
 

@@ -32,6 +32,7 @@ const LIST_DETAIL_MODULES: ReadonlySet<AppModule> = new Set([
   "mcp",
   "skills",
   "settings",
+  "spend",
 ]);
 
 /**

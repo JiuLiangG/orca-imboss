@@ -1,3 +1,4 @@
+import { SPEND_STATS_ENABLED } from "@shared/constants/spend";
 import { SettingKeys } from "@shared/constants/settings";
 import { t } from "@shared/l10n";
 import {
@@ -36,6 +37,7 @@ import {
   IconGear,
   IconMcp,
   IconSkills,
+  IconSpend,
 } from "../icons";
 import { Tooltip } from "../tooltip";
 import "./index.css";
@@ -73,6 +75,17 @@ const NAV_ITEMS: NavItem[] = [
     icon: IconGear,
     section: "bottom",
   },
+  // Pluggable feature: its own master switch (see `SPEND_STATS_ENABLED`).
+  ...(SPEND_STATS_ENABLED
+    ? [
+        {
+          module: "spend" as const,
+          labelKey: "Spend",
+          icon: IconSpend,
+          section: "main" as const,
+        },
+      ]
+    : []),
 ];
 
 export interface NavProps {

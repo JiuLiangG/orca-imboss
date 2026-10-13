@@ -427,3 +427,22 @@ function stripFromAllChats(db: ReturnType<typeof getDB>, id: number): void {
     }
   }
 }
+
+/** `id`/`name`/`role` of one employee (spend attribution). */
+export interface EmployeeIdentity {
+  id: number;
+  name: string;
+  role: string;
+}
+
+/**
+ * `id`/`name`/`role` for every employee, including soft-deleted ones: their
+ * recorded session files still hold spend, and dropping them would make that
+ * usage unattributable.
+ */
+export function listEmployeeIdentities(): EmployeeIdentity[] {
+  return getDB()
+    .prepare("SELECT id, name, role FROM employees ORDER BY id ASC")
+    .all() as EmployeeIdentity[];
+}
+

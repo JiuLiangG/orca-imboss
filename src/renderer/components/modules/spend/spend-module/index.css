@@ -1,0 +1,27 @@
+/* Placeholder avatar for the grand-total row, matching the employee avatar
+   size so the two row kinds align. */
+.imb-spend-total-avatar {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: var(--imb-radius-pill);
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklch, var(--imb-accent) 15%, var(--imb-surface));
+  color: var(--imb-accent);
+}
+
+.imb-spend-total-avatar svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* The range selector fills the list header row it is mounted in. */
+.imb-pane-header .imb-segmented-group {
+  width: 100%;
+}
+
+.imb-pane-header .imb-segmented-btn {
+  flex: 1;
+  padding-inline: var(--imb-space-2);
+}

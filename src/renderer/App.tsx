@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { SPEND_STATS_ENABLED } from "@shared/constants/spend";
 import { parseSessionKey, useApp, type AppModule } from "./app-store";
 import { AppShell } from "./components/app-shell";
 import { AgentSessionModule } from "./components/modules/agent-session/agent-session-module";
@@ -9,6 +10,7 @@ import { McpModule } from "./components/modules/mcp/mcp-module";
 import { MiniAppModule } from "./components/modules/miniapp/miniapp-module";
 import { SettingsModule } from "./components/modules/settings/settings-module";
 import { SkillsModule } from "./components/modules/skills/skills-module";
+import { SpendModule } from "./components/modules/spend/spend-module";
 
 const MODULE_VIEWS: Partial<Record<AppModule, () => React.JSX.Element>> = {
   chat: ChatModule,
@@ -16,6 +18,8 @@ const MODULE_VIEWS: Partial<Record<AppModule, () => React.JSX.Element>> = {
   skills: SkillsModule,
   employees: EmployeesModule,
   settings: SettingsModule,
+  // Pluggable feature: its own master switch (see `SPEND_STATS_ENABLED`).
+  ...(SPEND_STATS_ENABLED ? { spend: SpendModule } : {}),
 };
 
 export default function App(): React.JSX.Element {
