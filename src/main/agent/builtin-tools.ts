@@ -2,6 +2,7 @@ import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import {
   BUILTIN_REMOVE_CRON_MARKER,
   BUILTIN_SET_CRON_MARKER,
+  BUILTIN_TOOL_OPTIONS,
 } from "@shared/constants/agent_tools";
 import {
   MAX_ATTACHMENT_TOTAL,
@@ -32,9 +33,11 @@ import * as dbEmployees from "../db/employees";
 import * as dbMessages from "../db/messages";
 import * as dbReadCursors from "../db/read-cursors";
 import * as dbSessions from "../db/sessions";
+import { readMcpServers } from "../mcp-store";
 import { notifyUnread, sendToRenderer } from "../notifications";
 import { materializeSessionFile, sessionPathFor } from "./session-files";
 import { wakeAgent } from "./session-queue";
+import { listSkills } from "./skills";
 
 /**
  * Imboss built-in team tools.
@@ -233,6 +236,82 @@ function toEmployeeBrief(employee: Employee): EmployeeBrief {
   };
 }
 
+/**
+ * Catalog of values the assistant may assign to an employee's `mcp` / `skills`.
+ * MCP servers expose only their name and description — never `config`, which
+ * holds `env`/`headers` secrets; choosing a server does not require them.
+ */
+interface AssignmentCapabilities {
+  skills: Array<{ name: string; description: string | null }>;
+  mcpServers: Array<{ name: string; description: string }>;
+  builtinToolOptions: Array<{
+    value: string;
+    label: string;
+    description: string;
+  }>;
+}
+
+/** Build the assignable-capability catalog from on-disk app state. */
+async function loadAssignmentCapabilities(): Promise<AssignmentCapabilities> {
+  const skills = (await listSkills()).map((skill) => ({
+    name: skill.name,
+    description: skill.description,
+  }));
+  const mcpServers = readMcpServers()
+    .map((server) => ({ name: server.name, description: server.description }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const builtinToolOptions = BUILTIN_TOOL_OPTIONS.map((option) => ({
+    ...option,
+  }));
+  return { skills, mcpServers, builtinToolOptions };
+}
+
+/** Cap on the valid options enumerated in a validation error message. */
+const MAX_VALID_OPTIONS_IN_ERROR = 50;
+
+function formatValidOptions(options: string[]): string {
+  if (options.length === 0) return "(none)";
+  const shown = options.slice(0, MAX_VALID_OPTIONS_IN_ERROR);
+  return options.length > shown.length
+    ? `${shown.join(", ")}, …`
+    : shown.join(", ");
+}
+
+/**
+ * Reject `mcp` / `skills` entries that do not correspond to a configured MCP
+ * server, a built-in tool option, or an installed skill. The session composes
+ * its tool/skill set by filtering, so an unknown value is silently ineffective;
+ * failing loudly with the valid options lets the model correct itself at once.
+ */
+function assertAssignableRefs(
+  item: { mcp?: string[]; skills?: string[] },
+  capabilities: AssignmentCapabilities,
+): void {
+  if (item.mcp !== undefined) {
+    const valid = new Set<string>([
+      ...capabilities.mcpServers.map((server) => server.name),
+      ...capabilities.builtinToolOptions.map((option) => option.value),
+    ]);
+    const unknown = [...new Set(item.mcp)].filter((value) => !valid.has(value));
+    if (unknown.length > 0) {
+      throw new Error(
+        `Unknown MCP entries: ${unknown.join(", ")}. Valid values: ${formatValidOptions([...valid])}.`,
+      );
+    }
+  }
+  if (item.skills !== undefined) {
+    const valid = new Set(capabilities.skills.map((skill) => skill.name));
+    const unknown = [...new Set(item.skills)].filter(
+      (value) => !valid.has(value),
+    );
+    if (unknown.length > 0) {
+      throw new Error(
+        `Unknown skills: ${unknown.join(", ")}. Valid skills: ${formatValidOptions([...valid])}.`,
+      );
+    }
+  }
+}
+
 /** Slim message projection; `steps`/`attachments` are omitted when absent. */
 interface MessageBrief {
   id: number;
@@ -353,7 +432,8 @@ function setEmployeesTool(): AnyPiTool {
     description:
       "Batch create or update employees (name, role, system prompt, linked MCP servers, skills, model, thinking level). " +
       "Each item omits `id` to create a new employee or passes `id` to update an existing one. " +
-      "Returns the array of employee ids created or updated.",
+      "`mcp` and `skills` entries must come from the `capabilities` catalog returned by `imb_list_employees`; " +
+      "any value outside it is rejected. Returns the array of employee ids created or updated.",
     promptSnippet: "batch create/edit employees",
     parameters: Type.Object({
       employees: Type.Array(
@@ -363,10 +443,18 @@ function setEmployeesTool(): AnyPiTool {
           role: Type.Optional(Type.String({ maxLength: 200 })),
           systemPrompt: Type.Optional(Type.String({ maxLength: 100000 })),
           mcp: Type.Optional(
-            Type.Array(Type.String({ maxLength: 256 }), { maxItems: 256 }),
+            Type.Array(Type.String({ maxLength: 256 }), {
+              maxItems: 256,
+              description:
+                "Names of configured MCP servers and/or built-in tool option values to link (see `imb_list_employees.capabilities`).",
+            }),
           ),
           skills: Type.Optional(
-            Type.Array(Type.String({ maxLength: 256 }), { maxItems: 256 }),
+            Type.Array(Type.String({ maxLength: 256 }), {
+              maxItems: 256,
+              description:
+                "Names of installed skills to assign (see `imb_list_employees.capabilities.skills`).",
+            }),
           ),
           modelId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
           thinkingLevel: Type.Optional(
@@ -398,6 +486,19 @@ function setEmployeesTool(): AnyPiTool {
             "off" | "low" | "medium" | "high" | "xhigh" | "max" | null;
         }[];
       };
+      // Reject invented MCP/skill names: the session composes its tools and
+      // skills by filtering, so a value that does not resolve would be stored
+      // but never take effect. The catalog is only read when needed.
+      if (
+        input.employees.some(
+          (item) => item.mcp !== undefined || item.skills !== undefined,
+        )
+      ) {
+        const capabilities = await loadAssignmentCapabilities();
+        for (const item of input.employees) {
+          assertAssignableRefs(item, capabilities);
+        }
+      }
       const ids = dbEmployees.upsertEmployees(
         input.employees.map((item) => ({ ...item })),
       );
@@ -646,20 +747,25 @@ function readChatTool(employeeId: number): AnyPiTool {
   };
 }
 
-/** `imb_list_employees` — active employees, excluding the built-in assistant. */
+/** `imb_list_employees` — active employees + the assignable capabilities catalog. */
 function listEmployeesTool(): AnyPiTool {
   return {
     name: "imb_list_employees",
     label: "List employees",
     description:
-      "List all active employees (excluding the built-in assistant), ordered by id.",
-    promptSnippet: "active team members",
+      "List all active employees (excluding the built-in assistant), ordered by id, " +
+      "together with `capabilities`: the installed `skills`, the configured `mcpServers`, " +
+      "and the built-in `builtinToolOptions` that can be assigned to an employee. " +
+      "Use `capabilities` when choosing `mcp` / `skills` in `imb_set_employees`.",
+    promptSnippet: "team members + assignable skills/MCP",
     parameters: Type.Object({}),
     execute: async (_toolCallId, _params) => {
       const employees = dbEmployees
         .listEmployees()
-        .filter((employee) => employee.id !== ASSISTANT_ID);
-      return toolResult(employees.map(toEmployeeBrief));
+        .filter((employee) => employee.id !== ASSISTANT_ID)
+        .map(toEmployeeBrief);
+      const capabilities = await loadAssignmentCapabilities();
+      return toolResult({ employees, capabilities });
     },
   };
 }
