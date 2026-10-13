@@ -69,3 +69,7 @@
   font-size: var(--imb-text-xl);
   font-weight: 600;
 }
+
+.imb-chat-pinned {
+  background: var(--imb-bg-2);
+}

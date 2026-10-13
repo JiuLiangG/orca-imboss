@@ -1,5 +1,6 @@
 :root {
   --imb-bg: #ededed;
+  --imb-bg-2: rgb(from var(--imb-bg) r g b / 0.75);
   --imb-surface: #f7f7f7;
   --imb-surface-warm: var(--imb-surface);
   --imb-fg: #1a1a1a;

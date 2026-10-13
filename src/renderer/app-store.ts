@@ -1002,10 +1002,15 @@ export function useAppSync() {
   return useSnapshot(appStore, { sync: true });
 }
 
-/** Keep the chat cache ordered newest-message-first (recency key, id breaks ties). */
+/** Keep the chat cache ordered pinned-first, then newest-message-first
+ *  (recency key, id breaks ties). Mirrors the SQL ordering in
+ *  `listChatSummaries` so a client-side re-sort cannot drop pinned chats. */
 function sortChats(): void {
   appStore.data.chats.items.sort(
-    (a, b) => b.lastMessageAt - a.lastMessageAt || b.id - a.id,
+    (a, b) =>
+      Number(b.pinned) - Number(a.pinned) ||
+      b.lastMessageAt - a.lastMessageAt ||
+      b.id - a.id,
   );
 }
 

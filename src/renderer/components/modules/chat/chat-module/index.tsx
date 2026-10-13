@@ -10,6 +10,7 @@ import type {
   PageResult,
 } from "@shared/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { cls } from "reactutils";
 import { appStore, IS_MAC, useApp } from "../../../../app-store";
 import { useInfiniteList } from "../../../../hooks/use-infinite-list";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
@@ -348,7 +349,10 @@ export function ChatModule(): React.JSX.Element {
   // Cmd/Ctrl+K focuses the chat search (the same muscle memory as most apps).
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "k") {
+      if (
+        !(event.metaKey || event.ctrlKey) ||
+        event.key.toLowerCase() !== "k"
+      ) {
         return;
       }
       const input = document.querySelector<HTMLInputElement>(
@@ -536,6 +540,7 @@ export function ChatModule(): React.JSX.Element {
         }
         renderItem={(chat, { selected: isSelectedRow }) => (
           <ListRow
+            className={cls(chat.pinned && "imb-chat-pinned")}
             active={chat.id === selectedId}
             selected={isSelectedRow}
             avatar={

@@ -12,6 +12,7 @@ export interface ListRowProps {
   meta?: ReactNode;
   sub?: ReactNode;
   badge?: ReactNode;
+  className?: string;
 }
 
 /** Generic list row reused by every module's list pane. */
@@ -25,6 +26,7 @@ export function ListRow({
   meta,
   sub,
   badge,
+  className,
 }: ListRowProps): React.JSX.Element {
   return (
     <button
@@ -33,6 +35,7 @@ export function ListRow({
         "imb-list-row",
         active && "imb-is-active",
         selected && "imb-is-selected",
+        className,
       )}
       onClick={onClick}
       onContextMenu={onContextMenu}

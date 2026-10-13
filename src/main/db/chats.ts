@@ -104,16 +104,17 @@ export function getChatSummary(id: number): ChatSummary | null {
 }
 
 /**
- * One page of chat summaries, root-only, ordered `last_message_at DESC,
- * id DESC` (same as the full list). Search semantics (pushes the module's
- * server-side FTS/LIKE filter):
+ * One page of chat summaries, root-only, ordered `pinned DESC,
+ * last_message_at DESC, id DESC` (same as the full list). Search semantics
+ * (pushes the module's server-side FTS/LIKE filter):
  * - `query.length >= 3` → title LIKE  **OR** FTS5 trigram match over any
  *   message content (phrase-quoted, same as `searchMessages`);
  * - shorter queries → title LIKE **OR** plain `content LIKE` scan (no
  *   trigram index; keeps 1–2 char / Chinese queries working).
  *
- * Cursor stability: seeks with the row-value comparison `(last_message_at,
- * id) <` so inserts/deletes during scrolling never skip or duplicate rows.
+ * Cursor stability: seeks with the row-value comparison `(pinned,
+ * last_message_at, id) <` so inserts/deletes during scrolling never skip or
+ * duplicate rows.
  */
 export function listChatSummariesPage(
   page: PageQuery = {},
@@ -131,8 +132,8 @@ export function listChatSummariesPage(
   if (page.cursor) {
     const cursor = decodeChatCursor(page.cursor);
     if (cursor) {
-      conditions.push("(c.last_message_at, c.id) < (?, ?)");
-      params.push(cursor.lastMessageAt, cursor.id);
+      conditions.push("(c.pinned, c.last_message_at, c.id) < (?, ?, ?)");
+      params.push(cursor.pinned ? 1 : 0, cursor.lastMessageAt, cursor.id);
     }
   }
 
@@ -167,7 +168,7 @@ export function listChatSummariesPage(
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_at
        FROM chats c
        WHERE ${conditions.join(" AND ")}
-       ORDER BY c.last_message_at DESC, c.id DESC
+       ORDER BY c.pinned DESC, c.last_message_at DESC, c.id DESC
        LIMIT ?`,
     )
     .all(...params, limit + 1) as ChatSummaryRow[];
@@ -178,7 +179,9 @@ export function listChatSummariesPage(
   return {
     items,
     nextCursor:
-      hasMore && last ? encodeChatCursor(last.lastMessageAt, last.id) : null,
+      hasMore && last
+        ? encodeChatCursor(last.pinned, last.lastMessageAt, last.id)
+        : null,
     hasMore,
   };
 }
@@ -405,19 +408,44 @@ function toChatSummary(row: ChatSummaryRow): ChatSummary {
   };
 }
 
-/** Cursor payload: `"<lastMessageAt>:<id>"` of the last row of the previous page. */
-function encodeChatCursor(lastMessageAt: number, id: number): string {
-  return `${lastMessageAt}:${id}`;
+/**
+ * Cursor payload: `"<pinned>:<lastMessageAt>:<id>"` of the last row of the
+ * previous page. The legacy 2-field form (pre-pin) is still accepted so a
+ * cursor minted before an in-session reload keeps working.
+ */
+function encodeChatCursor(
+  pinned: boolean,
+  lastMessageAt: number,
+  id: number,
+): string {
+  return `${pinned ? 1 : 0}:${lastMessageAt}:${id}`;
 }
 
 function decodeChatCursor(cursor: string): {
+  pinned: boolean;
   lastMessageAt: number;
   id: number;
 } | null {
-  const split = cursor.lastIndexOf(":");
-  if (split <= 0) return null;
-  const lastMessageAt = Number(cursor.slice(0, split));
-  const id = Number(cursor.slice(split + 1));
-  if (!Number.isFinite(lastMessageAt) || !Number.isSafeInteger(id)) return null;
-  return { lastMessageAt, id };
+  const parts = cursor.split(":");
+  // Legacy `<lastMessageAt>:<id>` (no leading pinned flag) → treat as unpinned.
+  if (parts.length === 2) {
+    const lastMessageAt = Number(parts[0]);
+    const id = Number(parts[1]);
+    if (!Number.isFinite(lastMessageAt) || !Number.isSafeInteger(id)) {
+      return null;
+    }
+    return { pinned: false, lastMessageAt, id };
+  }
+  if (parts.length !== 3) return null;
+  const pinned = parts[0] === "1" ? true : parts[0] === "0" ? false : null;
+  const lastMessageAt = Number(parts[1]);
+  const id = Number(parts[2]);
+  if (
+    pinned === null ||
+    !Number.isFinite(lastMessageAt) ||
+    !Number.isSafeInteger(id)
+  ) {
+    return null;
+  }
+  return { pinned, lastMessageAt, id };
 }
