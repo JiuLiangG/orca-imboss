@@ -371,14 +371,18 @@ function validateRefList(
   return [...new Set(values)];
 }
 
-/** Validate `model_id` — either NULL/empty or `"provider/modelId"` form. */
+/** Validate `model_id` — either NULL/empty or valid model identifier form. */
 function validateModelId(modelId: string | null | undefined): string | null {
   if (modelId == null || modelId === "") return null;
-  const valid = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(modelId);
-  if (!valid) {
-    throw new Error('Model id must look like "provider/model".');
+  const trimmed = modelId.trim();
+  if (trimmed.length === 0 || trimmed.length > 256) {
+    throw new Error("Invalid model id length.");
   }
-  return modelId;
+  const valid = /^[A-Za-z0-9._/@:-]+$/.test(trimmed);
+  if (!valid) {
+    throw new Error('Model id must look like "provider/model" or a valid model identifier.');
+  }
+  return trimmed;
 }
 
 /**

@@ -338,7 +338,7 @@ function validateModelIds(modelIds: string[] | undefined): string[] {
   }
   if (modelIds.length > 256) throw new Error("Too many model ids.");
   for (const mid of modelIds) {
-    if (typeof mid !== "string" || !MODEL_ID_RE.test(mid) || mid.length > 128) {
+    if (typeof mid !== "string" || !MODEL_ID_RE.test(mid) || mid.length > 256) {
       throw new Error(`Invalid model id: ${String(mid).slice(0, 32)}`);
     }
   }
