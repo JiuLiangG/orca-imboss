@@ -3,11 +3,15 @@ import { t } from "@shared/l10n";
 import type { Employee, EmployeeInput, ModelOption } from "@shared/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cls } from "reactutils";
+import {
+  modelRef,
+  thinkingLevelsFor,
+  thinkingSelectOptions,
+} from "../../../../thinking-options";
 import { Button } from "../../../button";
 import { DetailBody } from "../../../detail-pane/detail-body";
 import { DetailHead } from "../../../detail-pane/detail-head";
 import { employeeAvatarSrc } from "../../../employee-avatar/avatar-src";
-import { AvatarCropModal } from "../avatar-crop-modal";
 import { Field } from "../../../field";
 import { IconCamera } from "../../../icons";
 import { Input } from "../../../input";
@@ -15,12 +19,8 @@ import { Modal } from "../../../modal";
 import { MultiSelect, type MultiSelectOption } from "../../../multi-select";
 import { Select } from "../../../select";
 import { Textarea } from "../../../textarea";
+import { AvatarCropModal } from "../avatar-crop-modal";
 import { EmployeeCronJobs } from "../employee-cron-jobs";
-import {
-  modelRef,
-  thinkingLevelsFor,
-  thinkingSelectOptions,
-} from "../../../../thinking-options";
 import "./index.css";
 
 export interface EmployeeDetailProps {
@@ -248,7 +248,7 @@ export function EmployeeDetail({
             placeholder={t(
               "Define this employee's responsibilities and output standards…",
             )}
-            minHeight={120}
+            minHeight={250}
             onChange={(e) => setForm({ ...form, systemPrompt: e.target.value })}
             onValueCommit={(systemPrompt) =>
               scheduleSave({ ...form, systemPrompt })

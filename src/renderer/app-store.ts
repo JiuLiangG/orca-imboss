@@ -630,12 +630,15 @@ export const appStore = proxy({
    * `appStore.chatDrafts[chatId] ?? EMPTY_DRAFT` (`src/renderer/chat-draft.ts`).
    */
   ensureChatDraft(chatId: number): ChatDraft {
-    let draft = appStore.chatDrafts[chatId];
-    if (!draft) {
-      draft = { text: "", attachments: [] };
-      appStore.chatDrafts[chatId] = draft;
-    }
-    return draft;
+    const existing = appStore.chatDrafts[chatId];
+    if (existing) return existing;
+    // Assigning a plain object makes valtio store a proxy whose target is that
+    // object; read the entry back through the store so mutations go through the
+    // proxy's set trap. Mutating the raw object directly never notifies
+    // subscribers, so the first keystroke/paste into an empty composer would be
+    // dropped from the snapshot (send stays disabled until the next input).
+    appStore.chatDrafts[chatId] = { text: "", attachments: [] };
+    return appStore.chatDrafts[chatId];
   },
   setChatDraftText(chatId: number, text: string): void {
     appStore.ensureChatDraft(chatId).text = text;
