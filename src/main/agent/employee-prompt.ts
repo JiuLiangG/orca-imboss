@@ -3,6 +3,7 @@ import {
   buildEmployeeRolePrompt,
   EMPLOYEE_REPORT_PROMPT,
   MENTION_HANDLING_PROMPT,
+  NEVER_BLOCK_WAITING_PROMPT,
   RESPONSE_LANGUAGE_PROMPT,
   TOOLS_GUIDELINES,
 } from "@shared/constants/prompts";
@@ -23,6 +24,8 @@ import { BuildEmployeeSystemPromptArgs } from "@shared/types";
  * [role: generated for non-assistants; baked into ASSISTANT_SYSTEM_PROMPT for the assistant]
  * [employeePrompt: persona]
  * [report skill: assistant aggregation/progress/summary OR employee result report]
+ * [@-mention handling]
+ * [never block waiting]
  * [builtinSkills]
  * [response language]
  * [tools]
@@ -90,6 +93,7 @@ export function buildEmployeeSystemPrompt({
     persona,
     reportBlock,
     MENTION_HANDLING_PROMPT,
+    NEVER_BLOCK_WAITING_PROMPT,
     RESPONSE_LANGUAGE_PROMPT,
     toolsBlock,
     metaBlock,
