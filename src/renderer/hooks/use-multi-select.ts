@@ -28,12 +28,23 @@ export interface MultiSelect<T, K> {
   selectedKeys: ReadonlySet<K>;
   isSelected: (key: K) => boolean;
   /**
-   * - plain click → `onActivate(item)`, clears the set, re-anchors shift;
+   * - plain click → `onActivate(item)`, selects only that item, re-anchors
+   *   shift;
    * - ctrl/meta + click → toggles membership (no activate, no re-anchor);
    * - shift + click → adds the contiguous range [anchor..clicked] over loaded
    *   items (anchor = clicked index when none; range adds, never replaces).
    */
   onItemClick: (item: T, index: number, mods: ClickModifiers) => void;
+  /**
+   * Ensure `key` is selected — used to mirror the module's active item (the
+   * auto-selected first row) into the selection. If `key` is not already in
+   * the set, the set is replaced with just `{key}` and shift is re-anchored;
+   * if it is already selected, the rest of a live multi-selection is left
+   * untouched (so a background list refresh cannot wipe it). Unlike
+   * `onItemClick` / `selectAll`, `isSelectable` is ignored: the active item
+   * (e.g. the built-in assistant) must always be reflected here.
+   */
+  select: (key: K) => void;
   /** Clear the selection set and the shift anchor. */
   clear: () => void;
   /** Select every currently loaded item. */
@@ -84,13 +95,25 @@ export function useMultiSelect<T, K>({
     setSelectedKeys(next);
   }, []);
 
+  const select = useCallback((key: K): void => {
+    const index = itemsRef.current.findIndex(
+      (item, i) => getKeyRef.current(item, i) === key,
+    );
+    anchorRef.current = { key, index };
+    setSelectedKeys((current) => {
+      if (current.has(key)) return current;
+      return new Set([key]);
+    });
+  }, []);
+
   const onItemClick = useCallback(
     (item: T, index: number, mods: ClickModifiers): void => {
       const key = getKeyRef.current(item, index);
       if (isSelectableRef.current && !isSelectableRef.current(item, index)) {
         // Not selectable (e.g. the built-in assistant): always do a plain
-        // activate — never toggle / add to the selection set.
-        setSelectedKeys(new Set());
+        // activate — select just this row (the active item is always
+        // reflected in `selectedKeys`) but never toggle / grow a range.
+        setSelectedKeys(new Set([key]));
         anchorRef.current = { key, index };
         onActivateRef.current(item);
         return;
@@ -141,8 +164,8 @@ export function useMultiSelect<T, K>({
         });
         return;
       }
-      // Plain click: activate + clear selection + re-anchor shift.
-      setSelectedKeys(new Set());
+      // Plain click: activate + select + re-anchor shift.
+      setSelectedKeys(new Set([key]));
       anchorRef.current = { key, index };
       onActivateRef.current(item);
     },
@@ -154,5 +177,5 @@ export function useMultiSelect<T, K>({
     [selectedKeys],
   );
 
-  return { selectedKeys, isSelected, onItemClick, clear, selectAll };
+  return { selectedKeys, isSelected, onItemClick, select, clear, selectAll };
 }

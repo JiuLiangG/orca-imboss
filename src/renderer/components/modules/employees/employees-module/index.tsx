@@ -5,7 +5,7 @@ import {
 import { SettingKeys } from "@shared/constants/settings";
 import { t } from "@shared/l10n";
 import type { Employee, EmployeeInput, ModelOption } from "@shared/types";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appStore, useApp } from "../../../../app-store";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
 import { ModuleView } from "../../../app-shell";
@@ -101,6 +101,9 @@ export function EmployeesModule(): React.JSX.Element {
     isSelectable: (employee) => employee.id !== 0,
   });
   const clearSelection = multi.clear;
+  const selectSelection = multi.select;
+  const selectedIdRef = useRef<number | null>(null);
+  selectedIdRef.current = selectedId;
 
   // Query changes reset the selection.
   useEffect(() => {
@@ -108,20 +111,23 @@ export function EmployeesModule(): React.JSX.Element {
   }, [clearSelection, query]);
 
   // Auto-select the first employee after page 1 loads (and recover when the
-  // selected employee disappears, e.g. bulk delete).
+  // selected employee disappears, e.g. bulk delete). The resolved active item
+  // is mirrored into `selectedKeys` so the active row is always selected.
   useEffect(() => {
     if (loading) return;
     if (employees.length === 0) {
       setSelectedId(null);
+      clearSelection();
       return;
     }
-    setSelectedId((current) =>
+    const current = selectedIdRef.current;
+    const nextId =
       current !== null && employees.some((employee) => employee.id === current)
         ? current
-        : employees[0].id,
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [employees, loading]);
+        : employees[0].id;
+    setSelectedId(nextId);
+    selectSelection(nextId);
+  }, [employees, loading, clearSelection, selectSelection]);
 
   const selected =
     employees.find((employee) => employee.id === selectedId) ?? null;
@@ -176,18 +182,25 @@ export function EmployeesModule(): React.JSX.Element {
         await imb.employees.remove(id);
         appStore.removeEmployee(id);
       }
+      // Drop the just-deleted keys so a subsequent bulk action only acts on
+      // the live list.
+      clearSelection();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [deleteIds]);
+  }, [deleteIds, clearSelection]);
 
   const toggleSelectAll = useCallback((): void => {
-    // Compare against selectable rows only (the assistant is never selectable,
-    // so counting every loaded row would break the toggle-to-clear branch).
+    // Compare against selectable rows only. The assistant (id 0) is never
+    // selectable but can be the active item in `selectedKeys`, so it must be
+    // excluded from the count or the toggle-to-clear branch would misfire.
     const selectableCount = employees.filter(
       (employee) => employee.id !== 0,
     ).length;
-    if (multi.selectedKeys.size === selectableCount && selectableCount > 0) {
+    const selectedSelectableCount = [...multi.selectedKeys].filter(
+      (id) => id !== 0,
+    ).length;
+    if (selectedSelectableCount === selectableCount && selectableCount > 0) {
       multi.clear();
     } else {
       multi.selectAll();

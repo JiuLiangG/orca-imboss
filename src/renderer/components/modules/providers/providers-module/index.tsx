@@ -1,7 +1,7 @@
 import { CURATED_PROVIDERS_LABELS } from "@shared/constants/providers";
 import { t } from "@shared/l10n";
 import { type ProviderInfo, type ProviderUpsert } from "@shared/types";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { appStore, useApp } from "../../../../app-store";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
 import { ModuleView } from "../../../app-shell";
@@ -40,22 +40,29 @@ export function ProvidersModule(): React.JSX.Element {
     items: providers,
     onActivate: (provider) => setSelectedId(provider.id),
   });
+  const clearSelection = multi.clear;
+  const selectSelection = multi.select;
+  const selectedIdRef = useRef<string | null>(null);
+  selectedIdRef.current = selectedId;
 
   // Auto-select the first provider after load (and recover when the selected
-  // provider disappears, e.g. bulk delete).
+  // provider disappears, e.g. bulk delete). The resolved active item is
+  // mirrored into `selectedKeys` so the active row is always selected.
   useEffect(() => {
     if (loading) return;
     if (providers.length === 0) {
       setSelectedId(null);
+      clearSelection();
       return;
     }
-    setSelectedId((current) =>
+    const current = selectedIdRef.current;
+    const nextId =
       current !== null && providers.some((provider) => provider.id === current)
         ? current
-        : providers[0].id,
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [providers, loading]);
+        : providers[0].id;
+    setSelectedId(nextId);
+    selectSelection(nextId);
+  }, [providers, loading, clearSelection, selectSelection]);
 
   const remove = useCallback(async (id: string): Promise<void> => {
     try {
@@ -74,10 +81,13 @@ export function ProvidersModule(): React.JSX.Element {
         await imb.providers.remove(id);
       }
       await appStore.reloadProviders();
+      // Drop the just-deleted keys so a subsequent bulk action only acts on
+      // the live list.
+      clearSelection();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [deleteIds]);
+  }, [deleteIds, clearSelection]);
 
   const toggleSelectAll = useCallback((): void => {
     if (multi.selectedKeys.size === providers.length && providers.length > 0) {

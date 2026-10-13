@@ -20,9 +20,9 @@ import { ContextMenu, type ContextMenuState } from "../../../context-menu";
 import { EmployeeAvatar } from "../../../employee-avatar";
 import { Input } from "../../../input";
 import { ItemList } from "../../../item-list";
-import { useMentionResolver } from "../../../markdown/use-mention";
 import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
+import { useMentionResolver } from "../../../markdown/use-mention";
 import { Modal } from "../../../modal";
 import { SearchInput } from "../../../search-input";
 import { Tooltip } from "../../../tooltip";
@@ -214,6 +214,7 @@ export function ChatModule(): React.JSX.Element {
     onActivate: (chat) => selectChat(chat.id),
   });
   const clearSelection = multi.clear;
+  const selectSelection = multi.select;
 
   // Switching between browse/search (query change) clears the selection.
   useEffect(() => {
@@ -281,20 +282,23 @@ export function ChatModule(): React.JSX.Element {
   }, [applyAgentEvent]);
 
   // Auto-select the first chat after page 1 loads (and recover when the
-  // selected chat disappears, e.g. bulk delete).
+  // selected chat disappears, e.g. bulk delete). The resolved active item is
+  // mirrored into `selectedKeys` so the active row is always selected.
   useEffect(() => {
     if (listLoading) return;
     if (chats.length === 0) {
       setSelectedId(null);
+      clearSelection();
       return;
     }
-    setSelectedId((current) =>
+    const current = selectedIdRef.current;
+    const nextId =
       current !== null && chats.some((chat) => chat.id === current)
         ? current
-        : chats[0].id,
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chats, listLoading]);
+        : chats[0].id;
+    setSelectedId(nextId);
+    selectSelection(nextId);
+  }, [chats, listLoading, clearSelection, selectSelection]);
 
   // Jump to a focused chat (an OS notification click) once it is loaded.
   useEffect(() => {

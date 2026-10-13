@@ -1,6 +1,6 @@
 import { t } from "@shared/l10n";
 import type { McpServer, McpServerInput } from "@shared/types";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appStore, useApp } from "../../../../app-store";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
 import { ModuleView } from "../../../app-shell";
@@ -46,6 +46,9 @@ export function McpModule(): React.JSX.Element {
     onActivate: (server) => setSelectedName(server.name),
   });
   const clearSelection = multi.clear;
+  const selectSelection = multi.select;
+  const selectedNameRef = useRef<string | null>(null);
+  selectedNameRef.current = selectedName;
 
   // Query changes reset the selection (the old paginated resetVersion bump).
   useEffect(() => {
@@ -59,20 +62,23 @@ export function McpModule(): React.JSX.Element {
   }, []);
 
   // Auto-select the first server after page 1 loads (and recover when the
-  // selected server disappears, e.g. bulk delete).
+  // selected server disappears, e.g. bulk delete). The resolved active item is
+  // mirrored into `selectedKeys` so the active row is always selected.
   useEffect(() => {
     if (loading) return;
     if (servers.length === 0) {
       setSelectedName(null);
+      clearSelection();
       return;
     }
-    setSelectedName((current) =>
+    const current = selectedNameRef.current;
+    const nextName =
       current !== null && servers.some((server) => server.name === current)
         ? current
-        : servers[0].name,
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [servers, loading]);
+        : servers[0].name;
+    setSelectedName(nextName);
+    selectSelection(nextName);
+  }, [servers, loading, clearSelection, selectSelection]);
 
   const selected =
     servers.find((server) => server.name === selectedName) ?? null;
@@ -120,10 +126,13 @@ export function McpModule(): React.JSX.Element {
         await imb.mcp.remove(name);
         appStore.removeMcp(name);
       }
+      // Drop the just-deleted keys so a subsequent bulk action only acts on
+      // the live list.
+      clearSelection();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [deleteNames]);
+  }, [deleteNames, clearSelection]);
 
   const toggleSelectAll = useCallback((): void => {
     if (multi.selectedKeys.size === servers.length && servers.length > 0) {

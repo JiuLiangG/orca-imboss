@@ -1,6 +1,6 @@
 import { t } from "@shared/l10n";
 import type { InstalledSkill } from "@shared/types";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appStore, useApp } from "../../../../app-store";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
 import { ModuleView } from "../../../app-shell";
@@ -50,6 +50,9 @@ export function SkillsModule(): React.JSX.Element {
     onActivate: (skill) => setSelectedName(skill.name),
   });
   const clearSelection = multi.clear;
+  const selectSelection = multi.select;
+  const selectedNameRef = useRef<string | null>(null);
+  selectedNameRef.current = selectedName;
 
   // Query changes reset the selection.
   useEffect(() => {
@@ -64,20 +67,23 @@ export function SkillsModule(): React.JSX.Element {
   }, []);
 
   // Auto-select the first skill after page 1 loads (and recover when the
-  // selected skill disappears, e.g. uninstall).
+  // selected skill disappears, e.g. uninstall). The resolved active item is
+  // mirrored into `selectedKeys` so the active row is always selected.
   useEffect(() => {
     if (loading) return;
     if (skills.length === 0) {
       setSelectedName(null);
+      clearSelection();
       return;
     }
-    setSelectedName((current) =>
+    const current = selectedNameRef.current;
+    const nextName =
       current !== null && skills.some((skill) => skill.name === current)
         ? current
-        : skills[0].name,
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [skills, loading]);
+        : skills[0].name;
+    setSelectedName(nextName);
+    selectSelection(nextName);
+  }, [skills, loading, clearSelection, selectSelection]);
 
   const importFromFolder = async (): Promise<void> => {
     setBusy(true);
@@ -117,6 +123,9 @@ export function SkillsModule(): React.JSX.Element {
       }
       setBulkOpen(false);
       await appStore.reloadSkills();
+      // Drop the just-uninstalled keys so a subsequent bulk action only acts
+      // on the live list.
+      clearSelection();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
