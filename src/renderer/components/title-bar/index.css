@@ -5,7 +5,7 @@
   right: 0;
   height: var(--imb-titlebar-h, 32px);
   display: flex;
-  align-items: center;
+  align-items: start;
   justify-content: flex-end;
   -webkit-app-region: drag;
   app-region: drag;
@@ -25,12 +25,12 @@
   -webkit-app-region: no-drag;
   app-region: no-drag;
   width: 28px;
-  height: 20px;
+  height: 24px;
   display: grid;
   place-items: center;
   background: transparent;
   border: 0;
-  padding: 0;
+  padding: 2px 0 0;
   color: var(--imb-text-2);
   cursor: default;
 }
