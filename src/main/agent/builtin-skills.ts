@@ -13,7 +13,7 @@ import { getResolvedLocale } from "../locale";
  *
  * These are ordinary `SKILL.md` folders, but they live in a dedicated dir
  * (`~/.imboss/agent/builtin-skills`, see `getBuiltinSkillsDir`) instead of the
- * user skills dir, so the Skills module — which lists only
+ * user skills dir, so Settings › Skills — which lists only
  * `~/.imboss/agent/skills` — never shows them. They are force-injected into the
  * assistant's session and cannot be uninstalled. They are generated on disk at
  * startup (and defensively before a session is built) because the Pi SDK
@@ -35,8 +35,8 @@ const SKILL_FILE = "SKILL.md";
 /**
  * Names of the app's built-in skills, in the order they are advertised. They
  * are force-injected into the assistant's session and deliberately hidden from
- * the Skills module / employee picker: they are app-owned capabilities, not
- * user-managed skills.
+ * the Settings › Skills page / employee picker: they are app-owned
+ * capabilities, not user-managed skills.
  */
 export const BUILTIN_SKILL_NAMES = [
   "mcp-management",

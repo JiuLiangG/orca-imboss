@@ -87,7 +87,7 @@ app.whenReady().then(() => {
   // Localize main-process strings (native dialogs, OS notifications) from the
   // stored/system locale. Must run after the database is available.
   initLocale();
-  // Generate the app's built-in Skills (hidden from the Skills module) so the
+  // Generate the app's built-in Skills (hidden from Settings › Skills) so the
   // assistant's sessions can load them. Best-effort: a failure is logged and
   // never blocks startup.
   materializeBuiltinSkills();

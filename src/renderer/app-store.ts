@@ -29,9 +29,6 @@ import { updateThemeState } from "./theme";
 export type AppModule =
   | "chat"
   | "employees"
-  | "providers"
-  | "mcp"
-  | "skills"
   | "settings"
   | "miniapp"
   | "group-chat"
@@ -94,7 +91,14 @@ export function parseSessionKey(
 
 /** Sections of the Settings module. Lifted here so main can deep-link to one. */
 export type SettingsSection =
-  "general" | "theme" | "providers" | "integrations" | "network" | "about";
+  | "general"
+  | "theme"
+  | "providers"
+  | "mcp"
+  | "skills"
+  | "integrations"
+  | "network"
+  | "about";
 
 /** True when running on macOS (native traffic lights stay, no custom buttons). */
 export const IS_MAC = imb.platform === "darwin";
@@ -110,13 +114,22 @@ export const contentPaneRef = createRef<HTMLElement | null>();
 const VALID_MODULES: AppModule[] = [
   "chat",
   "employees",
-  "providers",
-  "mcp",
-  "skills",
+  "spend",
   "settings",
   "miniapp",
-  "spend",
 ];
+
+/**
+ * Sidebar modules that were moved into the Settings module (model providers,
+ * MCP, Skills). A `ui.module` stored by a build from before the migration
+ * still opens Settings on the matching section instead of silently falling
+ * back to Chat.
+ */
+const LEGACY_MODULE_SECTIONS: Record<string, SettingsSection> = {
+  providers: "providers",
+  mcp: "mcp",
+  skills: "skills",
+};
 
 /** Global renderer app state (valtio proxy — replaces the former context). */
 export const appStore = proxy({
@@ -923,8 +936,14 @@ export async function initAppStore(): Promise<void> {
     if (collapsed === "1") {
       appStore.navCollapsed = true;
     }
-    if (storedModule && (VALID_MODULES as string[]).includes(storedModule)) {
-      appStore.module = storedModule as AppModule;
+    if (storedModule) {
+      const legacySection = LEGACY_MODULE_SECTIONS[storedModule] ?? null;
+      if (legacySection !== null) {
+        appStore.settingsSection = legacySection;
+        appStore.module = "settings";
+      } else if ((VALID_MODULES as string[]).includes(storedModule)) {
+        appStore.module = storedModule as AppModule;
+      }
     }
     appStore.activeMiniAppId = storedMiniApp;
   });

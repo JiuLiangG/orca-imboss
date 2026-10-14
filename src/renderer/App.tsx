@@ -1,21 +1,17 @@
-import { useEffect } from "react";
 import { SPEND_STATS_ENABLED } from "@shared/constants/spend";
+import { useEffect } from "react";
 import { parseSessionKey, useApp, type AppModule } from "./app-store";
 import { AppShell } from "./components/app-shell";
 import { AgentSessionModule } from "./components/modules/agent-session/agent-session-module";
 import { ChatModule } from "./components/modules/chat/chat-module";
 import { EmployeesModule } from "./components/modules/employees/employees-module";
 import { GroupChatModule } from "./components/modules/group-chat/group-chat-module";
-import { McpModule } from "./components/modules/mcp/mcp-module";
 import { MiniAppModule } from "./components/modules/miniapp/miniapp-module";
 import { SettingsModule } from "./components/modules/settings/settings-module";
-import { SkillsModule } from "./components/modules/skills/skills-module";
 import { SpendModule } from "./components/modules/spend/spend-module";
 
 const MODULE_VIEWS: Partial<Record<AppModule, () => React.JSX.Element>> = {
   chat: ChatModule,
-  mcp: McpModule,
-  skills: SkillsModule,
   employees: EmployeesModule,
   settings: SettingsModule,
   // Pluggable feature: its own master switch (see `SPEND_STATS_ENABLED`).

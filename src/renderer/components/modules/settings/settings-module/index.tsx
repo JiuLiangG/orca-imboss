@@ -7,8 +7,10 @@ import "../../module-common.css";
 import { SettingsAbout } from "../settings-about";
 import { SettingsGeneral } from "../settings-general";
 import { SettingsIntegrations } from "../settings-integrations";
+import { SettingsMcp } from "../settings-mcp";
 import { SettingsNetwork } from "../settings-network";
 import { SettingsProviders } from "../settings-providers";
+import { SettingsSkills } from "../settings-skills";
 import { SettingsTheme } from "../settings-theme";
 
 const SECTIONS: Array<{
@@ -26,6 +28,12 @@ const SECTIONS: Array<{
     id: "providers",
     labelKey: "Model Providers",
     descKey: "API keys and model endpoints",
+  },
+  { id: "mcp", labelKey: "MCP", descKey: "MCP servers and tools for agents" },
+  {
+    id: "skills",
+    labelKey: "Skills",
+    descKey: "Import and manage agent skills",
   },
   {
     id: "integrations",
@@ -64,6 +72,10 @@ export function SettingsModule(): React.JSX.Element {
       <SettingsTheme />
     ) : settingsSection === "providers" ? (
       <SettingsProviders />
+    ) : settingsSection === "mcp" ? (
+      <SettingsMcp />
+    ) : settingsSection === "skills" ? (
+      <SettingsSkills />
     ) : settingsSection === "integrations" ? (
       <SettingsIntegrations />
     ) : settingsSection === "network" ? (

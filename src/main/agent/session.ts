@@ -444,8 +444,8 @@ export class AgentSession {
         ),
         diagnostics: base.diagnostics,
       }),
-      // Built-in skills live in their own dir so they never show up in the
-      // Skills module; only the assistant loads them.
+      // Built-in skills live in their own dir so they never show up under
+      // Settings › Skills; only the assistant loads them.
       ...(spec.isAssistant
         ? { additionalSkillPaths: [getBuiltinSkillsDir()] }
         : {}),

@@ -1,13 +1,13 @@
-/* Settings › Model Providers — nested master/detail split inside the Settings
-   detail pane: a compact provider list column beside the selected provider's
-   configuration. */
-.imb-settings-providers {
+/* Settings › nested master/detail split inside the Settings detail pane: a
+   compact section list column beside the selected item's detail. Shared by
+   Settings › Model Providers / MCP / Skills. */
+.imb-settings-split {
   display: flex;
   flex: 1;
   min-height: 0;
 }
 
-.imb-settings-providers-list {
+.imb-settings-split-list {
   display: flex;
   flex-direction: column;
   flex: none;
@@ -16,7 +16,7 @@
   border-right: 1px solid var(--imb-border);
 }
 
-.imb-settings-providers-detail {
+.imb-settings-split-detail {
   display: flex;
   flex-direction: column;
   flex: 1;

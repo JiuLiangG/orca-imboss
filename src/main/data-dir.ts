@@ -28,7 +28,8 @@ export function getAgentSkillsDir(): string {
 
 /**
  * Directory holding the app's built-in (code-shipped) Skills. Deliberately
- * separate from the user skills dir so they never appear in the Skills module;
+ * separate from the user skills dir so they never appear under
+ * Settings › Skills;
  * they are loaded into the assistant's session via `additionalSkillPaths`.
  */
 export function getBuiltinSkillsDir(): string {

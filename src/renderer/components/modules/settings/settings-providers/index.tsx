@@ -15,7 +15,7 @@ import { Modal } from "../../../modal";
 import "../../module-common.css";
 import { ProviderAddModal } from "../../providers/provider-add-modal";
 import { ProviderDetail } from "../../providers/provider-detail";
-import "./index.css";
+import "../settings-split.css";
 
 /**
  * Settings › Model Providers — the provider manager, embedded in the Settings
@@ -116,8 +116,8 @@ export function SettingsProviders(): React.JSX.Element {
   const selected =
     providers.find((provider) => provider.id === selectedId) ?? null;
   return (
-    <div className="imb-settings-providers">
-      <div className="imb-settings-providers-list">
+    <div className="imb-settings-split">
+      <div className="imb-settings-split-list">
         <ListPane
           title={t("Model Providers")}
           footer={
@@ -184,7 +184,7 @@ export function SettingsProviders(): React.JSX.Element {
         </ListPane>
       </div>
 
-      <div className="imb-settings-providers-detail">
+      <div className="imb-settings-split-detail">
         {selected ? (
           <ProviderDetail
             key={`${selected.kind}:${selected.id}:${selected.authType}`}

@@ -3,7 +3,8 @@ import type { McpServer, McpServerInput } from "@shared/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appStore, useApp } from "../../../../app-store";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
-import { ModuleView } from "../../../app-shell";
+import { McpAddModal } from "../../mcp/mcp-add-modal";
+import { McpDetail } from "../../mcp/mcp-detail";
 import { Avatar } from "../../../avatar";
 import { Button } from "../../../button";
 import { ContextMenu, type ContextMenuState } from "../../../context-menu";
@@ -13,10 +14,15 @@ import { ListRow } from "../../../list-row";
 import { Modal } from "../../../modal";
 import { SearchInput } from "../../../search-input";
 import "../../module-common.css";
-import { McpAddModal } from "../mcp-add-modal";
-import { McpDetail } from "../mcp-detail";
+import "../settings-split.css";
 
-export function McpModule(): React.JSX.Element {
+/**
+ * Settings › MCP — the MCP server manager, embedded in the Settings detail
+ * pane as a nested master/detail split (server list + selected server's
+ * configuration). Moved out of the top-level nav so all configuration lives
+ * under Settings.
+ */
+export function SettingsMcp(): React.JSX.Element {
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -29,7 +35,7 @@ export function McpModule(): React.JSX.Element {
   const loading = data.mcp.loading;
   const listError = data.mcp.error;
 
-  // Centralized in appStore (loaded once at startup); filter client-side.
+  // Centralized in appStore (loaded on first visit); filter client-side.
   const servers = useMemo((): readonly McpServer[] => {
     const needle = query.trim().toLowerCase();
     if (!needle) return data.mcp.items;
@@ -61,7 +67,7 @@ export function McpModule(): React.JSX.Element {
     void appStore.reloadMcp();
   }, []);
 
-  // Auto-select the first server after page 1 loads (and recover when the
+  // Auto-select the first server after the list loads (and recover when the
   // selected server disappears, e.g. bulk delete). The resolved active item is
   // mirrored into `selectedKeys` so the active row is always selected.
   useEffect(() => {
@@ -142,7 +148,7 @@ export function McpModule(): React.JSX.Element {
     }
   }, [multi, servers.length]);
 
-  const listPane = (
+  const list = (
     <ListPane
       title={t("MCP")}
       search={
@@ -224,8 +230,9 @@ export function McpModule(): React.JSX.Element {
   ) : null;
 
   return (
-    <>
-      <ModuleView list={listPane} detail={detail} />
+    <div className="imb-settings-split">
+      <div className="imb-settings-split-list">{list}</div>
+      <div className="imb-settings-split-detail">{detail}</div>
       <ContextMenu state={ctxMenu} onClose={() => setCtxMenu(null)} />
       <Modal
         open={deleteOpen}
@@ -254,6 +261,6 @@ export function McpModule(): React.JSX.Element {
       {error !== null && (
         <p className="imb-error-text imb-module-error">{error}</p>
       )}
-    </>
+    </div>
   );
 }

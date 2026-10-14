@@ -1,6 +1,3 @@
-import { SPEND_STATS_ENABLED } from "@shared/constants/spend";
-import { SettingKeys } from "@shared/constants/settings";
-import { t } from "@shared/l10n";
 import {
   DndContext,
   PointerSensor,
@@ -16,6 +13,9 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { SettingKeys } from "@shared/constants/settings";
+import { SPEND_STATS_ENABLED } from "@shared/constants/spend";
+import { t } from "@shared/l10n";
 import { useState, type CSSProperties } from "react";
 import { cls } from "reactutils";
 import {
@@ -35,8 +35,6 @@ import {
   IconCollapse,
   IconEmployees,
   IconGear,
-  IconMcp,
-  IconSkills,
   IconSpend,
 } from "../icons";
 import { Tooltip } from "../tooltip";
@@ -60,13 +58,6 @@ const NAV_ITEMS: NavItem[] = [
     module: "employees",
     labelKey: "Employees",
     icon: IconEmployees,
-    section: "main",
-  },
-  { module: "mcp", labelKey: "MCP", icon: IconMcp, section: "main" },
-  {
-    module: "skills",
-    labelKey: "Skills",
-    icon: IconSkills,
     section: "main",
   },
   {

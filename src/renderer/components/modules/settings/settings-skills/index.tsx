@@ -3,7 +3,6 @@ import type { InstalledSkill } from "@shared/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appStore, useApp } from "../../../../app-store";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
-import { ModuleView } from "../../../app-shell";
 import { Avatar } from "../../../avatar";
 import { Button } from "../../../button";
 import { ContextMenu, type ContextMenuState } from "../../../context-menu";
@@ -15,9 +14,16 @@ import { ListRow } from "../../../list-row";
 import { Modal } from "../../../modal";
 import { SearchInput } from "../../../search-input";
 import "../../module-common.css";
+import "../settings-split.css";
 import "./index.css";
 
-export function SkillsModule(): React.JSX.Element {
+/**
+ * Settings › Skills — the installed-skills manager, embedded in the Settings
+ * detail pane as a nested master/detail split (skill list + selected skill's
+ * description). Moved out of the top-level nav so all configuration lives
+ * under Settings.
+ */
+export function SettingsSkills(): React.JSX.Element {
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
@@ -33,7 +39,7 @@ export function SkillsModule(): React.JSX.Element {
   const loading = data.skills.loading;
   const listError = data.skills.error;
 
-  // Centralized in appStore (loaded once at startup); filter client-side.
+  // Centralized in appStore (loaded on first visit); filter client-side.
   const skills = useMemo((): readonly InstalledSkill[] => {
     const needle = query.trim().toLowerCase();
     if (!needle) return data.skills.items;
@@ -66,7 +72,7 @@ export function SkillsModule(): React.JSX.Element {
     void appStore.reloadSkills();
   }, []);
 
-  // Auto-select the first skill after page 1 loads (and recover when the
+  // Auto-select the first skill after the list loads (and recover when the
   // selected skill disappears, e.g. uninstall). The resolved active item is
   // mirrored into `selectedKeys` so the active row is always selected.
   useEffect(() => {
@@ -143,7 +149,7 @@ export function SkillsModule(): React.JSX.Element {
 
   const selected = skills.find((skill) => skill.name === selectedName) ?? null;
 
-  const listPane = (
+  const list = (
     <ListPane
       title={t("Skills")}
       search={
@@ -237,8 +243,9 @@ export function SkillsModule(): React.JSX.Element {
   ) : null;
 
   return (
-    <>
-      <ModuleView list={listPane} detail={detail} />
+    <div className="imb-settings-split">
+      <div className="imb-settings-split-list">{list}</div>
+      <div className="imb-settings-split-detail">{detail}</div>
       <ContextMenu state={ctxMenu} onClose={() => setCtxMenu(null)} />
       <Modal
         open={uninstallTarget !== null}
@@ -294,7 +301,7 @@ export function SkillsModule(): React.JSX.Element {
       {error !== null && (
         <p className="imb-error-text imb-module-error">{error}</p>
       )}
-    </>
+    </div>
   );
 }
 
