@@ -52,8 +52,9 @@ import { listSkills } from "./skills";
  *
  * The tool set is role-based: the assistant (employee id 0) gets the
  * orchestration tools (`imb_set_employees`, `imb_create_chat`,
- * `imb_add_participant`, `imb_list_employees`, `imb_notify`, `imb_progress`,
- * `imb_ask`) plus `imb_send_message` and `imb_read_chat`; a participant gets
+ * `imb_add_participant`, `imb_list_employees`, `imb_toolset`, `imb_notify`,
+ * `imb_progress`, `imb_ask`) plus `imb_send_message` and `imb_read_chat`; a
+ * participant gets
  * `imb_send_message` and `imb_read_chat`, plus `imb_set_cronjob` and/or
  * `imb_remove_cronjob` when the employee opted in via their "Linked MCP" list.
  * The cron tools are deliberately NOT part of the assistant's tool set, and
@@ -217,7 +218,10 @@ function toolResult(value: unknown): AgentToolResult<unknown> {
 /**
  * Slim employee projection: keeps what the orchestrator uses (id for
  * @-mentions/notify, name/role for step cards, skills/mcp to judge fit) and
- * drops the rest — notably the full `systemPrompt` and the `avatar` path.
+ * drops the rest — notably the `avatar` path. The full `systemPrompt` is only
+ * attached when the caller explicitly opts in (`withSystemPrompt`), which the
+ * assistant uses solely to read an employee's current persona before editing it
+ * at the boss's request.
  */
 interface EmployeeBrief {
   id: number;
@@ -225,16 +229,23 @@ interface EmployeeBrief {
   role: string;
   skills: string[];
   mcp: string[];
+  /** Present only when the caller passed `withSystemPrompt: true`. */
+  systemPrompt?: string;
 }
 
-function toEmployeeBrief(employee: Employee): EmployeeBrief {
-  return {
+function toEmployeeBrief(
+  employee: Employee,
+  withSystemPrompt = false,
+): EmployeeBrief {
+  const brief: EmployeeBrief = {
     id: employee.id,
     name: employee.name,
     role: employee.role,
     skills: employee.skills,
     mcp: employee.mcp,
   };
+  if (withSystemPrompt) brief.systemPrompt = employee.systemPrompt;
+  return brief;
 }
 
 /**
@@ -433,7 +444,7 @@ function setEmployeesTool(): AnyPiTool {
     description:
       "Batch create or update employees (name, role, system prompt, linked MCP servers, skills, model, thinking level). " +
       "Each item omits `id` to create a new employee or passes `id` to update an existing one. " +
-      "`mcp` and `skills` entries must come from the `capabilities` catalog returned by `imb_list_employees`; " +
+      "`mcp` and `skills` entries must come from the catalog returned by `imb_toolset`; " +
       "any value outside it is rejected. Returns the array of employee ids created or updated.",
     promptSnippet: "batch create/edit employees",
     parameters: Type.Object({
@@ -447,14 +458,14 @@ function setEmployeesTool(): AnyPiTool {
             Type.Array(Type.String({ maxLength: 256 }), {
               maxItems: 256,
               description:
-                "Names of configured MCP servers and/or built-in tool option values to link (see `imb_list_employees.capabilities`).",
+                "Names of configured MCP servers combined with built-in tool option values, as one list (see `imb_toolset`: `mcp` server names + `builtinTools` values).",
             }),
           ),
           skills: Type.Optional(
             Type.Array(Type.String({ maxLength: 256 }), {
               maxItems: 256,
               description:
-                "Names of installed skills to assign (see `imb_list_employees.capabilities.skills`).",
+                "Names of installed skills to assign (see `imb_toolset`: `skills`).",
             }),
           ),
           modelId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
@@ -748,25 +759,66 @@ function readChatTool(employeeId: number): AnyPiTool {
   };
 }
 
-/** `imb_list_employees` — active employees + the assignable capabilities catalog. */
+/** `imb_list_employees` — active employees, optionally with their system prompts. */
 function listEmployeesTool(): AnyPiTool {
   return {
     name: "imb_list_employees",
     label: "List employees",
     description:
-      "List all active employees (excluding the built-in assistant), ordered by id, " +
-      "together with `capabilities`: the installed `skills`, the configured `mcpServers`, " +
-      "and the built-in `builtinToolOptions` that can be assigned to an employee. " +
-      "Use `capabilities` when choosing `mcp` / `skills` in `imb_set_employees`.",
-    promptSnippet: "team members + assignable skills/MCP",
-    parameters: Type.Object({}),
-    execute: async (_toolCallId, _params) => {
+      "List all active employees (excluding the built-in assistant), ordered by id. " +
+      "Pass `withSystemPrompt: true` to also include each employee's current `systemPrompt`; " +
+      "use this only before editing an employee's description at the boss's request. " +
+      "Call `imb_toolset` for the `mcp` / `skills` values assignable via `imb_set_employees`.",
+    promptSnippet: "team members",
+    parameters: Type.Object({
+      withSystemPrompt: Type.Optional(
+        Type.Boolean({
+          description:
+            "Include each employee's current `systemPrompt` in the result. Use only before editing an employee's description at the boss's explicit request.",
+        }),
+      ),
+    }),
+    execute: async (_toolCallId, params) => {
+      const input = params as { withSystemPrompt?: boolean };
+      const withSystemPrompt = input.withSystemPrompt ?? false;
       const employees = dbEmployees
         .listEmployees()
         .filter((employee) => employee.id !== ASSISTANT_ID)
-        .map(toEmployeeBrief);
-      const capabilities = await loadAssignmentCapabilities();
-      return toolResult({ employees, capabilities });
+        .map((employee) => toEmployeeBrief(employee, withSystemPrompt));
+      return toolResult({ employees });
+    },
+  };
+}
+
+/**
+ * `imb_toolset` — the assignable capability catalog for the assistant.
+ *
+ * Deliberately separate from `imb_list_employees`: deciding who should do a task
+ * only needs the employee roster, while choosing MCP servers / built-in tools /
+ * skills is only needed when recruiting or editing an employee. The catalog
+ * exposes MCP `name` + `description` only — never `config`, which holds
+ * `env`/`headers` secrets.
+ */
+function toolsetTool(): AnyPiTool {
+  return {
+    name: "imb_toolset",
+    label: "List toolset",
+    description:
+      "List the capabilities that can be assigned to an employee: the configured MCP " +
+      "servers (`mcp`), the built-in tool options (`builtinTools`), and the installed " +
+      "`skills`. An employee's `mcp` array combines the `mcp` server names with the " +
+      "`builtinTools` `value`s; `skills` fills the `skills` array. Call this before " +
+      "`imb_set_employees` to choose valid values for a new (or edited) employee.",
+    promptSnippet: "assignable MCP / built-in tools / skills",
+    parameters: Type.Object({}),
+    execute: async (_toolCallId, _params) => {
+      const { skills, mcpServers, builtinToolOptions } =
+        await loadAssignmentCapabilities();
+      return toolResult({
+        mcp: mcpServers,
+        builtinTools: builtinToolOptions,
+        skills,
+      });
     },
   };
 }
@@ -1027,8 +1079,8 @@ function askTool(env: AgentEnvironment): AnyPiTool {
  *
  * - Assistant (id 0): orchestration tools — `imb_set_employees`,
  *   `imb_create_chat`, `imb_add_participant`, `imb_read_chat`,
- *   `imb_list_employees`, `imb_notify`, `imb_progress`, `imb_ask`; plus
- *   `imb_send_message`. No cron tools.
+ *   `imb_list_employees`, `imb_toolset`, `imb_notify`, `imb_progress`,
+ *   `imb_ask`; plus `imb_send_message`. No cron tools.
  * - Participant employee: `imb_send_message`, `imb_read_chat`; plus
  *   `imb_set_cronjob` / `imb_remove_cronjob` when the corresponding opt-in
  *   marker is present in `mcp`. Employees have no structured ask/answer
@@ -1046,6 +1098,7 @@ export function createTeamToolDefinitions(
     tools.push(createChatTool(env, chatId));
     tools.push(addParticipantTool(env));
     tools.push(listEmployeesTool());
+    tools.push(toolsetTool());
     tools.push(notifyTool());
     // Progress cards are assistant-only: the tool hardcodes the sender to the
     // assistant and participants have no way to post one (they lack `steps`).
