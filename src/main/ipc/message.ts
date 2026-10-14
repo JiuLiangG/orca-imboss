@@ -57,8 +57,11 @@ export function registerMessageHandlers(): void {
       );
       if (ask.senderEmployeeId != null) {
         // `wakeAgent` redirects the assistant (id 0) from a task group chat to
-        // its root-chat session.
-        void wakeAgent(ask.senderEmployeeId, safeChatId, READ_CHAT_PROMPT);
+        // its root-chat session. The boss's answer is human-triggered: steer a
+        // mid-run session instead of queueing (idle sessions queue as before).
+        void wakeAgent(ask.senderEmployeeId, safeChatId, READ_CHAT_PROMPT, {
+          mode: "steer",
+        });
       }
       return message;
     },

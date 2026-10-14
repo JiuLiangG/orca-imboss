@@ -195,7 +195,11 @@ async function performSendMessage(
     if (!target || target.disabled) continue;
     // `wakeAgent` redirects the assistant (id 0) from a task group chat to its
     // root-chat session; participants run in their own (pid, chat) session.
-    await wakeAgent(pid, input.chatId, input.notifyPrompt ?? READ_CHAT_PROMPT);
+    // A mention is a human-directed wake: steer the target's live run instead
+    // of waiting for it to settle (falls back to the queue when idle).
+    await wakeAgent(pid, input.chatId, input.notifyPrompt ?? READ_CHAT_PROMPT, {
+      mode: "steer",
+    });
   }
   return message;
 }

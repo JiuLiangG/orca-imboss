@@ -58,8 +58,9 @@ export interface DeliverOptions {
    * instead of queueing it. Falls back to the queue when the session is not
    * streaming. Defaults to `"queue"` (the classic serialized behavior).
    *
-   * Only human-initiated messages (composer / inbound integrations) should
-   * steer; internal wakes (cron, `wakeAgent`, ask answers) stay queued.
+   * Used for human-triggered ingress: composer send, inbound integrations,
+   * @-mention notify wakes and ask answers. Non-human wakes (cron ticks,
+   * manual `runNow`) keep the default queue.
    */
   mode?: "steer" | "queue";
 }
@@ -107,11 +108,15 @@ export async function deliver(
  * Wake an employee's session for a chat. The assistant deliberately has no
  * session in task group chats: it is woken in its root-chat session instead,
  * with a prompt that names the group chat to read.
+ *
+ * `opts` is forwarded to `deliver` — human-triggered wakes (@-mention notify,
+ * ask answers) pass `{ mode: "steer" }`; cron wakes use the default queue.
  */
 export async function wakeAgent(
   employeeId: number,
   chatId: number,
   fallbackText: string,
+  opts?: DeliverOptions,
 ): Promise<void> {
   // Guard: a cron tick can race with chat deletion. If the chat is already
   // gone, drop the wake instead of materializing an orphan session for it.
@@ -126,7 +131,7 @@ export async function wakeAgent(
     }
   }
   await ensureSessionFile(employeeId, targetChatId);
-  await deliver(employeeId, targetChatId, text);
+  await deliver(employeeId, targetChatId, text, opts);
 }
 
 /**
