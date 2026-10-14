@@ -444,13 +444,21 @@ function setEmployeesTool(): AnyPiTool {
     description:
       "Batch create or update employees (name, role, system prompt, linked MCP servers, skills, model, thinking level). " +
       "Each item omits `id` to create a new employee or passes `id` to update an existing one. " +
+      "`id: 0` targets the built-in assistant itself (self-edit) and is only allowed when the boss explicitly asks; " +
+      "the assistant's `role` and `mcp` are immutable. " +
       "`mcp` and `skills` entries must come from the catalog returned by `imb_toolset`; " +
       "any value outside it is rejected. Returns the array of employee ids created or updated.",
     promptSnippet: "batch create/edit employees",
     parameters: Type.Object({
       employees: Type.Array(
         Type.Object({
-          id: Type.Optional(Type.Integer({ minimum: 1 })),
+          id: Type.Optional(
+            Type.Integer({
+              minimum: 0,
+              description:
+                "Omit to create a new employee; pass an existing employee's id to update it. `0` targets the built-in assistant itself (self-edit), only at the boss's explicit request; its `role`/`mcp` cannot be changed.",
+            }),
+          ),
           name: Type.Optional(Type.String({ maxLength: 200 })),
           role: Type.Optional(Type.String({ maxLength: 200 })),
           systemPrompt: Type.Optional(Type.String({ maxLength: 100000 })),
@@ -765,21 +773,42 @@ function listEmployeesTool(): AnyPiTool {
     name: "imb_list_employees",
     label: "List employees",
     description:
-      "List all active employees (excluding the built-in assistant), ordered by id. " +
-      "Pass `withSystemPrompt: true` to also include each employee's current `systemPrompt`; " +
+      "List all active employees (excluding the built-in assistant), ordered by id, " +
+      "or pass `employeeID` to fetch a single active employee — including `0`, the built-in assistant itself. " +
+      "A single-employee fetch always includes that employee's current `systemPrompt`. " +
+      "For the full list, pass `withSystemPrompt: true` to also include each employee's current `systemPrompt`; " +
       "use this only before editing an employee's description at the boss's request. " +
       "Call `imb_toolset` for the `mcp` / `skills` values assignable via `imb_set_employees`.",
     promptSnippet: "team members",
     parameters: Type.Object({
+      employeeID: Type.Optional(
+        Type.Integer({
+          minimum: 0,
+          description:
+            "Fetch only this employee (must be active). `0` fetches the built-in assistant's own record; the result always includes `systemPrompt`.",
+        }),
+      ),
       withSystemPrompt: Type.Optional(
         Type.Boolean({
           description:
-            "Include each employee's current `systemPrompt` in the result. Use only before editing an employee's description at the boss's explicit request.",
+            "Include each employee's current `systemPrompt` in the list result. Ignored when `employeeID` is set (that always includes it). Use only before editing an employee's description at the boss's explicit request.",
         }),
       ),
     }),
     execute: async (_toolCallId, params) => {
-      const input = params as { withSystemPrompt?: boolean };
+      const input = params as {
+        employeeID?: number;
+        withSystemPrompt?: boolean;
+      };
+      if (input.employeeID !== undefined) {
+        const employee = dbEmployees.getEmployee(input.employeeID);
+        if (!employee || employee.disabled) {
+          throw new Error(
+            `Employee ${input.employeeID} is not an active employee.`,
+          );
+        }
+        return toolResult({ employees: [toEmployeeBrief(employee, true)] });
+      }
       const withSystemPrompt = input.withSystemPrompt ?? false;
       const employees = dbEmployees
         .listEmployees()

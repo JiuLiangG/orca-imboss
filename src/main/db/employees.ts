@@ -199,8 +199,13 @@ export function updateEmployee(
  *
  * Each item: omit `id` to create, pass `id` to update. Returns the ordered
  * list of resulting employee ids (created or updated). A thrown error (bad
- * field, unknown id, or the built-in assistant id 0) rolls back the whole
- * batch — no partial writes. Reuses the single-item validators/helpers.
+ * field or unknown id) rolls back the whole batch — no partial writes. Reuses
+ * the single-item validators/helpers.
+ *
+ * The built-in assistant (id 0) is editable here too: an id-0 item routes to
+ * `updateEmployee`, which enforces the assistant whitelist (name, systemPrompt,
+ * skills, modelId, thinkingLevel; `role`/`mcp` immutable). This is how the
+ * assistant edits its own profile through `imb_set_employees`.
  */
 export function upsertEmployees(items: EmployeeUpsertInput[]): number[] {
   if (items.length === 0) throw new Error("At least one employee is required.");
@@ -211,10 +216,6 @@ export function upsertEmployees(items: EmployeeUpsertInput[]): number[] {
   const ids: number[] = [];
   db.transaction(() => {
     for (const item of items) {
-      // The built-in assistant (id 0) is not editable through the batch tool.
-      if (item.id !== undefined && item.id === ASSISTANT_ID) {
-        throw new Error("The built-in assistant cannot be edited via tools.");
-      }
       if (item.id !== undefined) {
         const updated = updateEmployee(item.id, item);
         if (!updated) throw new Error(`Employee ${item.id} not found.`);
@@ -380,7 +381,9 @@ function validateModelId(modelId: string | null | undefined): string | null {
   }
   const valid = /^[A-Za-z0-9._/@:-]+$/.test(trimmed);
   if (!valid) {
-    throw new Error('Model id must look like "provider/model" or a valid model identifier.');
+    throw new Error(
+      'Model id must look like "provider/model" or a valid model identifier.',
+    );
   }
   return trimmed;
 }
