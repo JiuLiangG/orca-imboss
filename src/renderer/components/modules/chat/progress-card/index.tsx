@@ -81,7 +81,7 @@ export function ProgressCard({
           <div key={`${step.name}-${index}`} className="imb-progress-row">
             <span className="imb-pname-wrap">
               {employeeId !== null && (
-                <EmployeeAvatar employeeId={employeeId} size={18} />
+                <EmployeeAvatar employeeId={employeeId} size={22} />
               )}
               <span className="imb-pname">
                 {employeeId !== null &&
