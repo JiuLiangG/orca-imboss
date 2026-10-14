@@ -271,13 +271,13 @@ export function IconHelp(props: IconProps): React.JSX.Element {
   );
 }
 
-/** Token/cost spend: a currency mark in a coin. */
-export function IconSpend(props: IconProps): React.JSX.Element {
+/** Statistics: three rounded bars of increasing height. */
+export function IconStats(props: IconProps): React.JSX.Element {
   return (
-    <svg {...base(props)}>
-      <circle cx="12" cy="12" r="8.5" />
-      <path d="M12 6.8v10.4" />
-      <path d="M14.9 9.4c-.5-1-1.6-1.6-2.9-1.6-1.5 0-2.7.8-2.7 2s1 1.7 2.7 2 2.7.9 2.7 2-1.2 2-2.7 2c-1.3 0-2.4-.6-2.9-1.6" />
+    <svg {...base(props)} strokeWidth={1.8}>
+      <rect x="4" y="13" width="4" height="7" rx="2" />
+      <rect x="10" y="8.5" width="4" height="11.5" rx="2" />
+      <rect x="16" y="4" width="4" height="16" rx="2" />
     </svg>
   );
 }

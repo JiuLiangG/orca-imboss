@@ -1,11 +1,17 @@
-import { SPEND_RANGES, SPEND_RANGE_LABELS } from "@shared/constants/spend";
+import {
+  SPEND_GROUPINGS,
+  SPEND_GROUPING_LABELS,
+  SPEND_RANGES,
+  SPEND_RANGE_LABELS,
+} from "@shared/constants/spend";
 import { t } from "@shared/l10n";
-import type { SpendReport } from "@shared/types";
+import type { SpendGrouping, SpendRange, SpendReport } from "@shared/types";
 import { useEffect, useState } from "react";
 import { appStore, useApp } from "../../../../app-store";
 import { ModuleView } from "../../../app-shell";
+import { Avatar } from "../../../avatar";
 import { EmployeeAvatar } from "../../../employee-avatar";
-import { IconSpend } from "../../../icons";
+import { IconStats } from "../../../icons";
 import { ItemList } from "../../../item-list";
 import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
@@ -15,31 +21,43 @@ import { formatCost, formatTokensCompact } from "../format";
 import { SpendDetail } from "../spend-detail";
 import "./index.css";
 
-/** One row of the list pane: the grand total, or one employee. */
+/** One row of the list pane: the grand total, one chat, or one employee. */
 interface SpendListEntry {
   key: string;
   /** `null` for the grand-total row. */
   employeeId: number | null;
+  /** `null` for the grand-total and employee rows. */
+  chatId: number | null;
   name: string;
-  sub: string;
+  sub?: string;
   tokens: number;
   cost: number;
 }
 
 export function SpendModule(): React.JSX.Element {
-  const { spendRange, activeSpendEmployeeId } = useApp();
+  const {
+    spendGrouping,
+    spendRange,
+    activeSpendEmployeeId,
+    activeSpendChatId,
+  } = useApp();
   const [report, setReport] = useState<SpendReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Bumped by the `employees:changed` subscription to re-fetch the report.
+  // Bumped by the employees/chats change subscriptions to re-fetch the report.
   const [refreshToken, setRefreshToken] = useState(0);
+
+  // The conversation grouping has no range picker: it always shows the
+  // all-time totals.
+  const effectiveRange: SpendRange =
+    spendGrouping === "chat" ? "all" : spendRange;
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
     setError(null);
     void imb.spend
-      .report(spendRange)
+      .report(effectiveRange)
       .then((next) => {
         if (alive) setReport(next);
       })
@@ -52,12 +70,18 @@ export function SpendModule(): React.JSX.Element {
     return () => {
       alive = false;
     };
-  }, [spendRange, refreshToken]);
+  }, [effectiveRange, refreshToken]);
 
   // Names/roles in the report come from the DB; a create/rename/delete pushed
   // by main (or the agent's `imb_set_employees`) invalidates them.
   useEffect(
     () => imb.employees.onChanged(() => setRefreshToken((token) => token + 1)),
+    [],
+  );
+
+  // Chat titles in the conversation grouping come from the DB too.
+  useEffect(
+    () => imb.chats.onChanged(() => setRefreshToken((token) => token + 1)),
     [],
   );
 
@@ -71,43 +95,96 @@ export function SpendModule(): React.JSX.Element {
     }
   }, [report, activeSpendEmployeeId]);
 
+  // Drop a selection whose chat vanished from the report (hard delete).
+  useEffect(() => {
+    if (report === null || activeSpendChatId === null) return;
+    if (!report.chats.some((row) => row.chatId === activeSpendChatId)) {
+      appStore.activeSpendChatId = null;
+    }
+  }, [report, activeSpendChatId]);
+
   const entries: SpendListEntry[] = [];
   if (report !== null) {
-    entries.push({
-      key: "total",
-      employeeId: null,
-      name: t("Total"),
-      sub: t("All employees"),
-      tokens: report.totals.totalTokens,
-      cost: report.totals.cost,
-    });
-    for (const employee of report.employees) {
+    if (spendGrouping === "chat") {
+      // "全部对话" is the default-selected first row (no subtitle).
       entries.push({
-        key: `e${employee.employeeId}`,
-        employeeId: employee.employeeId,
-        name: employee.name,
-        sub: employee.role || "—",
-        tokens: employee.totals.totalTokens,
-        cost: employee.totals.cost,
+        key: "total",
+        employeeId: null,
+        chatId: null,
+        name: t("All conversations"),
+        tokens: report.totals.totalTokens,
+        cost: report.totals.cost,
       });
+      for (const chat of report.chats) {
+        const title = chat.title || t("Untitled");
+        entries.push({
+          key: `c${chat.chatId}`,
+          employeeId: null,
+          chatId: chat.chatId,
+          name: title,
+          sub: `${formatTokensCompact(chat.totals.totalTokens)} · ${chat.employees.length} ${t("Employees")}`,
+          tokens: chat.totals.totalTokens,
+          cost: chat.totals.cost,
+        });
+      }
+    } else {
+      entries.push({
+        key: "total",
+        employeeId: null,
+        chatId: null,
+        name: t("All employees"),
+        tokens: report.totals.totalTokens,
+        cost: report.totals.cost,
+      });
+      for (const employee of report.employees) {
+        entries.push({
+          key: `e${employee.employeeId}`,
+          employeeId: employee.employeeId,
+          chatId: null,
+          name: employee.name,
+          sub: employee.role || "—",
+          tokens: employee.totals.totalTokens,
+          cost: employee.totals.cost,
+        });
+      }
     }
   }
 
+  const active = (entry: SpendListEntry): boolean =>
+    spendGrouping === "chat"
+      ? entry.chatId === activeSpendChatId
+      : entry.employeeId === activeSpendEmployeeId;
+
   const list = (
     <ListPane
-      title={t("Spend")}
+      title={t("Statistics")}
       search={
-        <SegmentedControl
-          options={SPEND_RANGES.map((value) => ({
-            value,
-            label: t(SPEND_RANGE_LABELS[value]),
-          }))}
-          value={spendRange}
-          onChange={(value) => {
-            appStore.spendRange = value;
-          }}
-          label={t("Time range")}
-        />
+        <div className="imb-spend-search">
+          <SegmentedControl
+            options={SPEND_GROUPINGS.map((value) => ({
+              value,
+              label: t(SPEND_GROUPING_LABELS[value]),
+            }))}
+            value={spendGrouping}
+            onChange={(value: SpendGrouping) => {
+              appStore.spendGrouping = value;
+            }}
+            label={t("Group by")}
+          />
+          {spendGrouping === "employee" && (
+            <SegmentedControl
+              options={SPEND_RANGES.map((value) => ({
+                value,
+                label: t(SPEND_RANGE_LABELS[value]),
+              }))}
+              value={spendRange}
+              onChange={(value) => {
+                appStore.spendRange = value;
+              }}
+              label={t("Time range")}
+            />
+          )}
+        </div>
       }
     >
       <ItemList
@@ -119,11 +196,18 @@ export function SpendModule(): React.JSX.Element {
         estimateSize={() => 56}
         renderItem={(entry) => (
           <ListRow
-            active={entry.employeeId === activeSpendEmployeeId}
+            active={active(entry)}
             avatar={
-              entry.employeeId === null ? (
+              entry.chatId !== null ? (
+                <Avatar
+                  letter={(entry.name.slice(0, 1) || "?").toUpperCase()}
+                  name={entry.name}
+                  size={30}
+                  alt
+                />
+              ) : entry.employeeId === null ? (
                 <span className="imb-spend-total-avatar">
-                  <IconSpend />
+                  <IconStats />
                 </span>
               ) : (
                 <EmployeeAvatar employeeId={entry.employeeId} size={30} />
@@ -131,9 +215,13 @@ export function SpendModule(): React.JSX.Element {
             }
             name={entry.name}
             meta={formatCost(entry.cost)}
-            sub={`${formatTokensCompact(entry.tokens)} · ${entry.sub}`}
+            sub={entry.sub}
             onClick={() => {
-              appStore.activeSpendEmployeeId = entry.employeeId;
+              if (spendGrouping === "chat") {
+                appStore.activeSpendChatId = entry.chatId;
+              } else {
+                appStore.activeSpendEmployeeId = entry.employeeId;
+              }
             }}
           />
         )}
@@ -144,7 +232,9 @@ export function SpendModule(): React.JSX.Element {
   const detail = (
     <SpendDetail
       report={report}
-      employeeId={activeSpendEmployeeId}
+      grouping={spendGrouping}
+      employeeId={spendGrouping === "employee" ? activeSpendEmployeeId : null}
+      chatId={spendGrouping === "chat" ? activeSpendChatId : null}
       loading={loading}
       error={error}
     />

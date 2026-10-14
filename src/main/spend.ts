@@ -1,17 +1,20 @@
-import { SPEND_TREND_MAX_DAYS } from "@shared/constants/spend";
 import type {
-  SpendDayBreakdown,
+  SpendChatEmployeeReport,
+  SpendChatReport,
+  SpendEmployeeChatReport,
   SpendEmployeeReport,
   SpendModelBreakdown,
   SpendRange,
   SpendReport,
   SpendTotals,
+  SpendTrendBucket,
 } from "@shared/types";
 import type { FileEntry } from "@earendil-works/pi-coding-agent";
 import { readFile, stat } from "fs/promises";
 import { loadPiSdk } from "./agent/pi-sdk";
 import { listEmployeeIdentities } from "./db/employees";
 import { getDB } from "./db/index";
+import { getResolvedLocale } from "./locale";
 
 /**
  * Usage statistics aggregated from the persisted Pi session JSONL files.
@@ -61,11 +64,20 @@ interface SessionRow {
   session: string;
 }
 
+interface ChatRow {
+  id: number;
+  title: string;
+  from_chat_id: number | null;
+  pinned: number;
+  last_message_at: number;
+}
+
 /** Accumulator used for both the grand total and each employee. */
 interface Accumulator {
   totals: SpendTotals;
   byModel: Map<string, SpendModelBreakdown>;
-  byDay: Map<string, SpendDayBreakdown>;
+  /** Trend buckets keyed by `HH` (today) or `YYYY-MM-DD` (week/month). */
+  trend: Map<string, SpendTotals>;
   chats: Set<number>;
 }
 
@@ -83,19 +95,58 @@ export async function buildSpendReport(
   );
 
   const perEmployee = new Map<number, Accumulator>();
+  const perChat = new Map<number, Accumulator>();
+  // Per-(chat, employee) totals for each conversation's employee mini-table.
+  const perChatEmployee = new Map<number, Map<number, SpendTotals>>();
   const grand = createAccumulator();
+
+  // Conversations are grouped by their root (user) chat: a task group chat
+  // spawned from a root chat rolls its spend up into that root chat and is
+  // never listed on its own.
+  const chatRows = getDB()
+    .prepare(
+      "SELECT id, title, from_chat_id, pinned, last_message_at FROM chats",
+    )
+    .all() as ChatRow[];
+  const rootOf = buildRootMap(chatRows);
+  const chatTitles = new Map(
+    chatRows.map((row) => [row.id, row.title] as const),
+  );
+  // Sort key mirroring the chat module's list order (pinned first, then most
+  // recent message), so a conversation sits in the same place in both modules.
+  const chatOrder = new Map(
+    chatRows.map(
+      (row) =>
+        [row.id, { pinned: row.pinned, lastAt: row.last_message_at }] as const,
+    ),
+  );
 
   const parsed = await mapLimit(rows, READ_CONCURRENCY, async (row) => ({
     row,
     records: await recordsForSession(row.session),
   }));
 
+  // "today" plots hourly buckets; week/month plot daily buckets.
+  const trendKey = range === "today" ? hourKey : localDay;
+
   for (const { row, records } of parsed) {
+    const rootChatId = rootOf.get(row.chat_id) ?? row.chat_id;
     for (const record of records) {
       // Records without a timestamp only count in "all time" (cutoff 0).
       if (cutoff > 0 && (record.ts === 0 || record.ts < cutoff)) continue;
-      addRecord(accumulatorFor(perEmployee, row.employee_id), record, row);
-      addRecord(grand, record, row);
+      addRecord(
+        accumulatorFor(perEmployee, row.employee_id),
+        record,
+        row,
+        trendKey,
+      );
+      const chatAccumulator = accumulatorFor(perChat, rootChatId);
+      addRecord(chatAccumulator, record, row, trendKey);
+      addCounters(
+        accumulatorForTotals(perChatEmployee, rootChatId, row.employee_id),
+        record,
+      );
+      addRecord(grand, record, row, trendKey);
     }
   }
 
@@ -109,19 +160,62 @@ export async function buildSpendReport(
         chats: accumulator.chats.size,
         totals: accumulator.totals,
         byModel: sortModels([...accumulator.byModel.values()]),
-        byDay: fillDays(accumulator.byDay, range, now),
+        byChat: employeeChatRows(employeeId, perChatEmployee, chatTitles),
+        trend: fillTrend(accumulator.trend, range, now),
       };
     })
     .filter((employee) => employee.totals.calls > 0)
     .sort(compareByCost);
+
+  // Per-conversation rows (keyed by root chat id).
+  const chats: SpendChatReport[] = [...perChat.entries()]
+    .map(([chatId, accumulator]) => {
+      const employeeRows: SpendChatEmployeeReport[] = [
+        ...(perChatEmployee.get(chatId)?.entries() ?? []),
+      ].map(([employeeId, totals]) => {
+        const identity = identities.get(employeeId);
+        return {
+          employeeId,
+          name: identity?.name ?? `Employee #${employeeId}`,
+          role: identity?.role ?? "",
+          totals,
+        };
+      });
+      employeeRows.sort(
+        (a, b) =>
+          b.totals.cost - a.totals.cost ||
+          b.totals.totalTokens - a.totals.totalTokens ||
+          a.employeeId - b.employeeId,
+      );
+      return {
+        chatId,
+        title: chatTitles.get(chatId) ?? "",
+        employees: employeeRows,
+        totals: accumulator.totals,
+        byModel: sortModels([...accumulator.byModel.values()]),
+      };
+    })
+    .filter((chat) => chat.totals.calls > 0)
+    .sort((a, b) => {
+      // Same ordering as the chat module: pinned chats first, then by the
+      // root chat's last-message time, with the id breaking ties.
+      const left = chatOrder.get(a.chatId);
+      const right = chatOrder.get(b.chatId);
+      return (
+        Number(right?.pinned ?? 0) - Number(left?.pinned ?? 0) ||
+        (right?.lastAt ?? 0) - (left?.lastAt ?? 0) ||
+        b.chatId - a.chatId
+      );
+    });
 
   return {
     range,
     generatedAt: now,
     totals: grand.totals,
     byModel: sortModels([...grand.byModel.values()]),
-    byDay: fillDays(grand.byDay, range, now),
+    trend: fillTrend(grand.trend, range, now),
     employees,
+    chats,
   };
 }
 
@@ -129,7 +223,7 @@ function createAccumulator(): Accumulator {
   return {
     totals: emptyTotals(),
     byModel: new Map(),
-    byDay: new Map(),
+    trend: new Map(),
     chats: new Set(),
   };
 }
@@ -146,10 +240,77 @@ function accumulatorFor(
   return accumulator;
 }
 
+/** Lazily create the totals bucket for one (chat, employee) pair. */
+function accumulatorForTotals(
+  map: Map<number, Map<number, SpendTotals>>,
+  chatId: number,
+  employeeId: number,
+): SpendTotals {
+  let byEmployee = map.get(chatId);
+  if (!byEmployee) {
+    byEmployee = new Map();
+    map.set(chatId, byEmployee);
+  }
+  let totals = byEmployee.get(employeeId);
+  if (!totals) {
+    totals = emptyTotals();
+    byEmployee.set(employeeId, totals);
+  }
+  return totals;
+}
+
+/**
+ * One employee's per-conversation rows, most expensive first. Derived from the
+ * per-(chat, employee) map so the hot aggregation loop stays single-pass.
+ */
+function employeeChatRows(
+  employeeId: number,
+  perChatEmployee: Map<number, Map<number, SpendTotals>>,
+  chatTitles: Map<number, string>,
+): SpendEmployeeChatReport[] {
+  const rows: SpendEmployeeChatReport[] = [];
+  for (const [chatId, byEmployee] of perChatEmployee) {
+    const totals = byEmployee.get(employeeId);
+    if (!totals) continue;
+    rows.push({ chatId, title: chatTitles.get(chatId) ?? "", totals });
+  }
+  return rows.sort(
+    (a, b) =>
+      b.totals.cost - a.totals.cost ||
+      b.totals.totalTokens - a.totals.totalTokens ||
+      a.chatId - b.chatId,
+  );
+}
+
+/**
+ * Resolve every chat to its root (user) chat id from one chat snapshot.
+ * Cycle-safe: a malformed self/circular `from_chat_id` chain resolves to the
+ * last id visited rather than looping. Unknown ids fall back to themselves.
+ */
+function buildRootMap(rows: readonly ChatRow[]): Map<number, number> {
+  const parents = new Map<number, number | null>();
+  for (const row of rows) parents.set(row.id, row.from_chat_id);
+
+  const roots = new Map<number, number>();
+  for (const row of rows) {
+    let current = row.id;
+    const seen = new Set<number>();
+    while (!seen.has(current)) {
+      seen.add(current);
+      const parent = parents.get(current);
+      if (parent === null || parent === undefined) break;
+      current = parent;
+    }
+    roots.set(row.id, current);
+  }
+  return roots;
+}
+
 function addRecord(
   accumulator: Accumulator,
   record: SpendRecord,
   row: SessionRow,
+  trendKey: (ts: number) => string,
 ): void {
   addCounters(accumulator.totals, record);
   accumulator.chats.add(row.chat_id);
@@ -167,13 +328,13 @@ function addRecord(
   addCounters(model.totals, record);
 
   if (record.ts > 0) {
-    const date = localDay(record.ts);
-    let day = accumulator.byDay.get(date);
-    if (!day) {
-      day = { date, totals: emptyTotals() };
-      accumulator.byDay.set(date, day);
+    const bucketKey = trendKey(record.ts);
+    let bucket = accumulator.trend.get(bucketKey);
+    if (!bucket) {
+      bucket = emptyTotals();
+      accumulator.trend.set(bucketKey, bucket);
     }
-    addCounters(day.totals, record);
+    addCounters(bucket, record);
   }
 }
 
@@ -347,6 +508,11 @@ function localDay(ms: number): string {
   return dayKey(new Date(ms));
 }
 
+/** Local zero-padded hour (`00`–`23`) for an epoch-ms value. */
+function hourKey(ms: number): string {
+  return String(new Date(ms).getHours()).padStart(2, "0");
+}
+
 function dayKey(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -359,10 +525,57 @@ function rangeCutoff(range: SpendRange, now: number): number {
   if (range === "all") return 0;
   const start = startOfToday(now);
   if (range === "today") return start;
-  const days = range === "7d" ? 7 : 30;
+  if (range === "month") {
+    const from = new Date(now);
+    from.setDate(1);
+    from.setHours(0, 0, 0, 0);
+    return from.getTime();
+  }
+  // "week": the current week, starting on the locale's first day of week.
   const from = new Date(start);
-  from.setDate(from.getDate() - (days - 1));
+  from.setDate(from.getDate() - daysSinceWeekStart(now));
   return from.getTime();
+}
+
+/**
+ * Days elapsed since the start of the current week, where the first day of
+ * week follows the resolved locale (e.g. Monday for zh-CN, Sunday for
+ * en-US). Falls back to Monday when the runtime cannot report week info.
+ */
+function daysSinceWeekStart(now: number): number {
+  // JS `getDay()`: 0 = Sunday … 6 = Saturday; weekInfo.firstDay: 1 = Monday
+  // … 7 = Sunday. Convert both to 0 = Sunday … 6 = Saturday for the delta.
+  const today = new Date(now).getDay();
+  const firstDay = localeFirstDay();
+  const first = firstDay === 7 ? 0 : firstDay;
+  return (today - first + 7) % 7;
+}
+
+/** Locale first day of week (1 = Monday … 7 = Sunday), defaulting to Monday. */
+function localeFirstDay(): number {
+  try {
+    const locale = new Intl.Locale(getResolvedLocale());
+    const weekInfo =
+      (
+        locale as Intl.Locale & {
+          getWeekInfo?: () => { firstDay?: unknown };
+          weekInfo?: { firstDay?: unknown };
+        }
+      ).getWeekInfo?.() ??
+      (locale as unknown as { weekInfo?: { firstDay?: unknown } }).weekInfo;
+    const firstDay = weekInfo?.firstDay;
+    if (
+      typeof firstDay === "number" &&
+      Number.isInteger(firstDay) &&
+      firstDay >= 1 &&
+      firstDay <= 7
+    ) {
+      return firstDay;
+    }
+  } catch {
+    // Malformed locale tag or unsupported Intl API — use the default below.
+  }
+  return 1;
 }
 
 function startOfToday(now: number): number {
@@ -372,44 +585,47 @@ function startOfToday(now: number): number {
 }
 
 /**
- * Dense day series for the trend chart: every day of the window up to today,
- * with empty days materialized as zeroes. "All time" starts at the first
- * recorded day but is capped to the most recent `SPEND_TREND_MAX_DAYS` days.
+ * Dense trend series for the chart, with empty buckets materialized as
+ * zeroes: 24 hourly buckets for "today", the full week (locale's first day
+ * → +6) for "week", and every day of the month for "month". "All time" has
+ * no trend, so it returns an empty series.
  */
-function fillDays(
-  byDay: Map<string, SpendDayBreakdown>,
+function fillTrend(
+  trend: Map<string, SpendTotals>,
   range: SpendRange,
   now: number,
-): SpendDayBreakdown[] {
-  const today = new Date(startOfToday(now));
-  const first = new Date(today);
-  if (range === "7d") {
-    first.setDate(first.getDate() - 6);
-  } else if (range === "30d") {
-    first.setDate(first.getDate() - 29);
-  } else if (range === "all") {
-    const earliest = [...byDay.keys()].sort()[0];
-    if (earliest !== undefined) first.setTime(parseDayKey(earliest));
+): SpendTrendBucket[] {
+  if (range === "all") return [];
+
+  const buckets: SpendTrendBucket[] = [];
+  if (range === "today") {
+    for (let hour = 0; hour < 24; hour++) {
+      const key = String(hour).padStart(2, "0");
+      buckets.push({ key, totals: trend.get(key) ?? emptyTotals() });
+    }
+    return buckets;
   }
 
-  const cap = new Date(today);
-  cap.setDate(cap.getDate() - (SPEND_TREND_MAX_DAYS - 1));
-  const start = first.getTime() > cap.getTime() ? first : cap;
+  const start = new Date(startOfToday(now));
+  const end = new Date(start);
+  if (range === "week") {
+    start.setDate(start.getDate() - daysSinceWeekStart(now));
+    end.setTime(start.getTime());
+    end.setDate(end.getDate() + 6);
+  } else {
+    start.setDate(1);
+    end.setTime(start.getTime());
+    // Day 0 of next month is the last day of this month.
+    end.setMonth(end.getMonth() + 1, 0);
+  }
 
-  const days: SpendDayBreakdown[] = [];
   const cursor = new Date(start.getTime());
-  while (cursor.getTime() <= today.getTime()) {
-    const date = dayKey(cursor);
-    days.push(byDay.get(date) ?? { date, totals: emptyTotals() });
+  while (cursor.getTime() <= end.getTime()) {
+    const key = dayKey(cursor);
+    buckets.push({ key, totals: trend.get(key) ?? emptyTotals() });
     cursor.setDate(cursor.getDate() + 1);
   }
-  return days;
-}
-
-/** Local midnight for a `YYYY-MM-DD` key. */
-function parseDayKey(key: string): number {
-  const [year, month, day] = key.split("-").map(Number);
-  return new Date(year, month - 1, day).getTime();
+  return buckets;
 }
 
 function sortModels(models: SpendModelBreakdown[]): SpendModelBreakdown[] {

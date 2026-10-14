@@ -16,12 +16,22 @@
   height: 16px;
 }
 
-/* The range selector fills the list header row it is mounted in. */
-.imb-pane-header .imb-segmented-group {
+/* The grouping + (employee-only) range selectors stack in the list header;
+   the grouping selector sits on top. Each fills the row it is mounted in. */
+.imb-spend-search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--imb-space-2);
   width: 100%;
 }
 
-.imb-pane-header .imb-segmented-btn {
+.imb-pane-header .imb-segmented-group,
+.imb-spend-search .imb-segmented-group {
+  width: 100%;
+}
+
+.imb-pane-header .imb-segmented-btn,
+.imb-spend-search .imb-segmented-btn {
   flex: 1;
   padding-inline: var(--imb-space-2);
 }

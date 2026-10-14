@@ -3,8 +3,7 @@
   flex-direction: column;
   background: var(--imb-bg);
   border-right: 1px solid var(--imb-border);
-  padding: calc(var(--imb-titlebar-h) + var(--imb-space-5)) var(--imb-space-4)
-    var(--imb-space-4);
+  padding: calc(var(--imb-titlebar-h) + var(--imb-space-5)) var(--imb-space-4) var(--imb-space-4);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -40,8 +39,9 @@
   align-items: center;
   gap: 11px;
   width: 100%;
+  height: 34px;
   text-align: left;
-  padding: 8px 12px;
+  padding: 6px 12px;
   border: 0;
   background: transparent;
   border-radius: var(--imb-radius-md);
@@ -67,7 +67,6 @@
 .imb-nav-item.imb-is-active {
   color: var(--imb-accent-active);
   font-weight: 600;
-  background: var(--imb-accent-soft);
 }
 
 .imb-nav-item .imb-icon {
@@ -98,7 +97,7 @@
   position: relative;
 }
 
-.imb-nav-sortable > .imb-nav-item {
+.imb-nav-sortable>.imb-nav-item {
   cursor: grab;
 }
 
@@ -106,13 +105,13 @@
   z-index: 1;
 }
 
-.imb-nav-sortable.imb-is-dragging > .imb-nav-item {
+.imb-nav-sortable.imb-is-dragging>.imb-nav-item {
   opacity: 0.5;
   cursor: grabbing;
 }
 
 /* Long chat titles truncate with an ellipsis instead of hard-clipping. */
-.imb-nav-item > .imb-nav-label {
+.imb-nav-item>.imb-nav-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -199,7 +198,7 @@
 
 .imb-nav.imb-is-collapsed .imb-nav-item {
   justify-content: center;
-  padding: var(--imb-space-2) 0;
+  padding: 6px 0;
 }
 
 .imb-nav.imb-is-collapsed .imb-nav-bottom .imb-nav-item {

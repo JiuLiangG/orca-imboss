@@ -36,7 +36,7 @@ import {
   IconCollapse,
   IconEmployees,
   IconGear,
-  IconSpend,
+  IconStats,
 } from "../icons";
 import { Tooltip } from "../tooltip";
 import "./index.css";
@@ -78,8 +78,8 @@ const NAV_ITEMS: NavItem[] = [
     ? [
         {
           module: "spend" as const,
-          labelKey: "Spend",
-          icon: IconSpend,
+          labelKey: "Statistics",
+          icon: IconStats,
           section: "main" as const,
         },
       ]

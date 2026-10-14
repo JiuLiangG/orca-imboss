@@ -11,6 +11,7 @@ import type {
   McpServer,
   MiniApp,
   ProviderInfo,
+  SpendGrouping,
   SpendRange,
   ThemeState,
   UpdaterState,
@@ -160,11 +161,14 @@ export const appStore = proxy({
   // notification click). Cleared once consumed.
   focusChatId: null as number | null,
 
-  // Spend module selection: the time window and the employee whose detail is
-  // shown. `null` employee = the grand total row. Session-only, so a module
-  // switch keeps the view the user left.
-  spendRange: "all" as SpendRange,
+  // Spend module selection: the grouping dimension (conversation list is the
+  // default), the time window (only shown for the employee grouping), and the
+  // active row per grouping. `null` employee/chat = the grand-total row.
+  // Session-only, so a module switch keeps the view the user left.
+  spendGrouping: "chat" as SpendGrouping,
+  spendRange: "today" as SpendRange,
   activeSpendEmployeeId: null as number | null,
+  activeSpendChatId: null as number | null,
 
   // Per-chat composer drafts (text + pending attachments). Kept here so the
   // chat module can be unmounted on a module switch without losing input.

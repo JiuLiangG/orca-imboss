@@ -9,7 +9,10 @@
  */
 
 /** Preset time window for a usage report. */
-export type SpendRange = "today" | "7d" | "30d" | "all";
+export type SpendRange = "today" | "week" | "month" | "all";
+
+/** Dimension the Spend list is grouped by (switchable in the list header). */
+export type SpendGrouping = "chat" | "employee";
 
 /** Token + cost counters shared by every aggregation level. */
 export interface SpendTotals {
@@ -30,9 +33,13 @@ export interface SpendModelBreakdown {
   totals: SpendTotals;
 }
 
-/** Usage for one local calendar day (`YYYY-MM-DD`). */
-export interface SpendDayBreakdown {
-  date: string;
+/**
+ * One bucket of the spend trend chart. For the "today" window each bucket is
+ * an hour of the local day (key `HH`, `00`–`23`); for "week"/"month" each
+ * bucket is a local calendar day (key `YYYY-MM-DD`).
+ */
+export interface SpendTrendBucket {
+  key: string;
   totals: SpendTotals;
 }
 
@@ -47,7 +54,39 @@ export interface SpendEmployeeReport {
   chats: number;
   totals: SpendTotals;
   byModel: SpendModelBreakdown[];
-  byDay: SpendDayBreakdown[];
+  /** Per-conversation breakdown, most expensive first. */
+  byChat: SpendEmployeeChatReport[];
+  /** Dense trend series for the requested window; empty for "all". */
+  trend: SpendTrendBucket[];
+}
+
+/** One employee's usage inside a single conversation. */
+export interface SpendChatEmployeeReport {
+  employeeId: number;
+  /** Employee name, or `Employee #<id>` for a row that no longer exists. */
+  name: string;
+  /** Employee role text; empty string when unknown. */
+  role: string;
+  totals: SpendTotals;
+}
+
+/** Usage one employee spent inside a single conversation. */
+export interface SpendEmployeeChatReport {
+  chatId: number;
+  /** Chat title from the DB; empty string when the chat is untitled. */
+  title: string;
+  totals: SpendTotals;
+}
+
+/** Usage for one conversation (chat), aggregating every employee in it. */
+export interface SpendChatReport {
+  chatId: number;
+  /** Chat title from the DB; empty string when the chat is untitled. */
+  title: string;
+  /** Distinct employees that spent tokens in this conversation. */
+  employees: SpendChatEmployeeReport[];
+  totals: SpendTotals;
+  byModel: SpendModelBreakdown[];
 }
 
 /** Payload of `spend:report`. */
@@ -58,7 +97,10 @@ export interface SpendReport {
   /** Grand total across every employee. */
   totals: SpendTotals;
   byModel: SpendModelBreakdown[];
-  byDay: SpendDayBreakdown[];
+  /** Dense trend series for the requested window; empty for "all". */
+  trend: SpendTrendBucket[];
   /** Per-employee rows, most expensive first. */
   employees: SpendEmployeeReport[];
+  /** Per-conversation rows (all chats, incl. task group chats), most expensive first. */
+  chats: SpendChatReport[];
 }

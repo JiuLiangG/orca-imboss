@@ -1,4 +1,4 @@
-import type { SpendRange } from "../types/spend";
+import type { SpendGrouping, SpendRange } from "../types/spend";
 
 /**
  * Master switch for the Spend module (per-employee token + cost statistics).
@@ -21,27 +21,37 @@ export const SPEND_STATS_ENABLED = true;
 /** Range presets shown in the Spend module, in display order. */
 export const SPEND_RANGES: readonly SpendRange[] = [
   "today",
-  "7d",
-  "30d",
+  "week",
+  "month",
   "all",
 ];
 
 /** Translation keys for each range preset. */
 export const SPEND_RANGE_LABELS: Record<SpendRange, string> = {
   today: "Today",
-  "7d": "7D",
-  "30d": "30D",
-  all: "All",
+  week: "This week",
+  month: "This month",
+  all: "Total",
 };
 
 export function isSpendRange(value: unknown): value is SpendRange {
   return (
-    value === "today" || value === "7d" || value === "30d" || value === "all"
+    value === "today" ||
+    value === "week" ||
+    value === "month" ||
+    value === "all"
   );
 }
 
-/**
- * Most recent calendar days the daily trend plots. A longer window still sums
- * into the totals; the chart only renders the tail so one bar stays legible.
- */
-export const SPEND_TREND_MAX_DAYS = 90;
+/** Grouping dimensions shown in the Spend module, in display order. */
+export const SPEND_GROUPINGS: readonly SpendGrouping[] = ["chat", "employee"];
+
+/** Translation keys for each grouping dimension. */
+export const SPEND_GROUPING_LABELS: Record<SpendGrouping, string> = {
+  chat: "By conversation",
+  employee: "By employee",
+};
+
+export function isSpendGrouping(value: unknown): value is SpendGrouping {
+  return value === "chat" || value === "employee";
+}

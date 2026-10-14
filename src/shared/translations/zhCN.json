@@ -331,6 +331,9 @@
   "You're up to date.": "已是最新版本。",
   "Zoom": "缩放",
   "All employees": "全部员工",
+  "All conversations": "全部对话",
+  "By conversation": "按对话",
+  "By employee": "按员工",
   "By model": "按模型",
   "Cache read": "缓存读取",
   "Cache write": "缓存写入",
@@ -338,12 +341,15 @@
   "Cost": "费用",
   "Daily trend": "每日趋势",
   "Failed to load spend statistics": "加载花费统计失败",
+  "Group by": "分组方式",
   "Input tokens": "输入 Token",
   "No spend recorded yet": "暂无花费记录",
   "Output tokens": "输出 Token",
-  "Spend": "花费",
+  "Statistics": "统计",
+  "This month": "本月",
+  "This week": "本周",
   "Time range": "时间范围",
+  "Today": "今天",
   "Tokens": "Token",
   "Total": "总计"
 }
-
