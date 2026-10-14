@@ -188,6 +188,26 @@ const api = {
       ipcRenderer.invoke("cron:listByEmployee", employeeId) as Promise<
         CronJobInfo[]
       >,
+    /** Every job across all employees (flat, creation order). */
+    listAll: () => ipcRenderer.invoke("cron:listAll") as Promise<CronJobInfo[]>,
+    /** Edit `schedule` + `content` only; throws on an invalid schedule. */
+    update: (id: string, schedule: string, content: string) =>
+      ipcRenderer.invoke(
+        "cron:update",
+        id,
+        schedule,
+        content,
+      ) as Promise<CronJobInfo | null>,
+    /** Persist the enabled flag and start/stop the live scheduler handle. */
+    setEnabled: (id: string, enabled: boolean) =>
+      ipcRenderer.invoke(
+        "cron:setEnabled",
+        id,
+        enabled,
+      ) as Promise<CronJobInfo | null>,
+    /** Fire a job immediately (does not touch its schedule timestamps). */
+    runNow: (id: string) =>
+      ipcRenderer.invoke("cron:runNow", id) as Promise<boolean>,
     /** Remove a job (stops the live scheduler handle + deletes the row). */
     remove: (id: string) =>
       ipcRenderer.invoke("cron:remove", id) as Promise<boolean>,
@@ -199,9 +219,7 @@ const api = {
       ipcRenderer.invoke("chats:summaries") as Promise<ChatSummary[]>,
     /** Pin or unpin one conversation (sorts above the rest). */
     setPinned: (id: number, pinned: boolean) =>
-      ipcRenderer.invoke("chats:setPinned", id, pinned) as Promise<
-        Chat | null
-      >,
+      ipcRenderer.invoke("chats:setPinned", id, pinned) as Promise<Chat | null>,
     summariesPage: (page: PageQuery) =>
       ipcRenderer.invoke("chats:summariesPage", page) as Promise<
         PageResult<ChatSummary>

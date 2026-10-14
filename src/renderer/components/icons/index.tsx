@@ -282,3 +282,31 @@ export function IconSpend(props: IconProps): React.JSX.Element {
   );
 }
 
+/** Clock face — scheduled tasks / cron jobs. */
+export function IconClock(props: IconProps): React.JSX.Element {
+  return (
+    <svg {...base(props)} strokeWidth={1.8}>
+      <circle cx="12" cy="12" r="9" />
+      <polyline points="12 7 12 12 15.5 14" />
+    </svg>
+  );
+}
+
+/** Pencil — edit. */
+export function IconEdit(props: IconProps): React.JSX.Element {
+  return (
+    <svg {...base(props)} strokeWidth={1.8}>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
+/** Solid play triangle — run now. */
+export function IconPlay(props: IconProps): React.JSX.Element {
+  return (
+    <svg {...base(props)} fill="currentColor" stroke="none">
+      <path d="M8 5.5v13l11-6.5Z" />
+    </svg>
+  );
+}

@@ -79,7 +79,14 @@ export function ProgressCard({
         const displayName = currentName?.trim() || step.name;
         return (
           <div key={`${step.name}-${index}`} className="imb-progress-row">
-            <span className="imb-pname-wrap">
+            <span
+              className="imb-pname-wrap"
+              onClick={() => {
+                if (employeeId != null && targetChatId != null) {
+                  void appStore.openAgentSession(employeeId, targetChatId);
+                }
+              }}
+            >
               {employeeId !== null && (
                 <EmployeeAvatar employeeId={employeeId} size={22} />
               )}
@@ -87,13 +94,7 @@ export function ProgressCard({
                 {employeeId !== null &&
                 targetChatId !== null &&
                 currentName !== undefined ? (
-                  <button
-                    type="button"
-                    className="imb-pname-link"
-                    onClick={() =>
-                      void appStore.openAgentSession(employeeId, targetChatId)
-                    }
-                  >
+                  <button type="button" className="imb-pname-link">
                     {displayName}
                   </button>
                 ) : (

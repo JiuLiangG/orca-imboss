@@ -37,7 +37,11 @@ export function Button({
       aria-busy={loading || undefined}
       {...rest}
     >
-      {loading ? <span className="imb-btn-spinner" aria-hidden="true" /> : icon}
+      {loading ? (
+        <span className="imb-btn-spinner" aria-hidden="true" />
+      ) : (
+        icon != null && <span className="imb-btn-leading-icon">{icon}</span>
+      )}
       {children}
     </button>
   );

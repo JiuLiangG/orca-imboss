@@ -88,7 +88,7 @@ button.imb-pname-link {
   transition: color var(--imb-motion-fast) var(--imb-ease-standard);
 }
 
-button.imb-pname-link:hover {
+.imb-pname-wrap:hover button.imb-pname-link {
   color: var(--imb-accent);
 }
 
@@ -147,5 +147,5 @@ button.imb-pname-link:focus-visible {
   align-items: center;
   gap: 6px;
   min-width: 0;
+  cursor: pointer;
 }
-

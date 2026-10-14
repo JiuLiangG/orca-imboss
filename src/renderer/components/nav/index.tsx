@@ -32,6 +32,7 @@ import { GroupAvatar } from "../group-avatar";
 import {
   IconApp,
   IconChat,
+  IconClock,
   IconCollapse,
   IconEmployees,
   IconGear,
@@ -58,6 +59,12 @@ const NAV_ITEMS: NavItem[] = [
     module: "employees",
     labelKey: "Employees",
     icon: IconEmployees,
+    section: "main",
+  },
+  {
+    module: "cron",
+    labelKey: "Scheduled tasks",
+    icon: IconClock,
     section: "main",
   },
   {

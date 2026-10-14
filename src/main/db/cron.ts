@@ -36,11 +36,79 @@ export function listByEmployee(employeeId: number): CronJobInfo[] {
   return rows.map((row) => ({ ...toCronJob(row), chatTitle: row.chat_title }));
 }
 
+/**
+ * Every job across all employees, with the owning chat's title resolved for
+ * display. Flat creation-order list (the unified Scheduled tasks module does
+ * not group). The chat FK cascades, so the JOIN always finds a chat.
+ */
+export function listAll(): CronJobInfo[] {
+  const rows = getDB()
+    .prepare(
+      `SELECT cj.*, c.title AS chat_title
+         FROM cron_jobs cj
+         JOIN chats c ON c.id = cj.chat_id
+        ORDER BY cj.created_at ASC, cj.id ASC`,
+    )
+    .all() as Array<CronJobRow & { chat_title: string }>;
+  return rows.map((row) => ({ ...toCronJob(row), chatTitle: row.chat_title }));
+}
+
 export function getJob(id: string): CronJob | null {
   const row = getDB()
     .prepare(`SELECT * FROM cron_jobs WHERE id = ?`)
     .get(id) as CronJobRow | undefined;
   return row ? toCronJob(row) : null;
+}
+
+/** A single job enriched with its chat's title (for mutation responses). */
+export function getJobInfo(id: string): CronJobInfo | null {
+  const row = getDB()
+    .prepare(
+      `SELECT cj.*, c.title AS chat_title
+         FROM cron_jobs cj
+         JOIN chats c ON c.id = cj.chat_id
+        WHERE cj.id = ?`,
+    )
+    .get(id) as (CronJobRow & { chat_title: string }) | undefined;
+  return row ? { ...toCronJob(row), chatTitle: row.chat_title } : null;
+}
+
+/**
+ * Persist the `enabled` flag. Returns the updated row, or `null` when the job
+ * was already gone. Deliberately does NOT touch live `Cron` handles — the
+ * scheduler (`src/main/cron.ts`) owns those and calls this after start/stop.
+ */
+export function setEnabled(id: string, enabled: boolean): CronJobInfo | null {
+  const changes = getDB()
+    .prepare("UPDATE cron_jobs SET enabled = ? WHERE id = ?")
+    .run(enabled ? 1 : 0, id).changes;
+  return changes > 0 ? getJobInfo(id) : null;
+}
+
+/**
+ * Update a job's editable fields (`schedule`, `content`). The composite `id`
+ * (and therefore chat/employee) is immutable, and `enabled` / `created_at` /
+ * `last_run_at` are preserved. Revalidates + normalizes the schedule and
+ * recomputes `next_run_at`; throws on an invalid schedule. Returns `null` when
+ * the job does not exist.
+ */
+export function updateJob(
+  id: string,
+  schedule: string,
+  content: string,
+): CronJobInfo | null {
+  const existing = getJob(id);
+  if (!existing) return null;
+  const normalized = normalizeSchedule(schedule);
+  // Validates the expression (throws on bad input) even when the job is
+  // disabled; a disabled job keeps a null next-run until it is re-enabled.
+  const nextRun = nextRunForSchedule(schedule);
+  getDB()
+    .prepare(
+      "UPDATE cron_jobs SET schedule = ?, content = ?, next_run_at = ? WHERE id = ?",
+    )
+    .run(normalized, content, existing.enabled ? nextRun : null, id);
+  return getJobInfo(id);
 }
 
 /** Parse + validate a composite cron job id `"chatId/employeeId/jobId"`. */
