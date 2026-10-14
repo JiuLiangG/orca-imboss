@@ -309,7 +309,9 @@ export class IntegrationManager {
         errorMessage(err),
       );
     }
-    void deliver(ASSISTANT_ID, chatId, content);
+    // An inbound human message steers a live run the same way a composer send
+    // does; internal wakes use the default serialized queue.
+    void deliver(ASSISTANT_ID, chatId, content, { mode: "steer" });
     // Same content-based title generation as a user-created chat.
     maybeGenerateChatTitle(chatId, content);
   }

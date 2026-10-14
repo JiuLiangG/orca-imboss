@@ -184,6 +184,30 @@ export class AgentSession {
     await this._piSession.prompt(message);
   }
 
+  /**
+   * Hand a message to the *currently running* Pi turn as a steering message.
+   * Pi delivers it after the current assistant turn and its tool calls
+   * complete, before the next LLM call — so a user who types mid-turn is seen
+   * at the next turn boundary instead of waiting for the whole run to settle.
+   *
+   * Only valid while the underlying session is streaming; callers must gate on
+   * `isStreaming` (the queue does).
+   */
+  async steer(message: string): Promise<void> {
+    if (this._disposed) {
+      throw new Error("AgentSession has been disposed.");
+    }
+    if (!this._piSession) {
+      throw new Error("Agent session was not prepared.");
+    }
+    await this._piSession.steer(message);
+  }
+
+  /** Whether the underlying Pi session is actively processing a run. */
+  get isStreaming(): boolean {
+    return this._piSession?.isStreaming ?? false;
+  }
+
   /** Dispose the Pi session and close MCP connections. Idempotent. */
   async dispose(): Promise<void> {
     this._disposed = true;

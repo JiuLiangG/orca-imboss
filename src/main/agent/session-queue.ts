@@ -22,6 +22,11 @@ import { ensureSessionFile } from "./session-files";
  * windows bound to the key as an `error` event and never loses the caller's
  * already-persisted message.
  *
+ * A human message that arrives while the key's run is streaming can be handed
+ * to that live run as a Pi **steering** message (`deliver(..., { mode:
+ * "steer" })`) so it is seen after the current assistant turn instead of
+ * waiting for the run to settle.
+ *
  * This module also owns the session bindings: a renderer window "binds" a
  * `(employee, chat)` key to receive that session's streamed events.
  */
@@ -45,20 +50,53 @@ interface QueueState {
 
 const states = new Map<string, QueueState>();
 
+/** Routing options for `deliver`. */
+export interface DeliverOptions {
+  /**
+   * `"steer"`: if the target session is mid-run, hand the text to the live run
+   * as a native Pi steering message (seen after the current assistant turn)
+   * instead of queueing it. Falls back to the queue when the session is not
+   * streaming. Defaults to `"queue"` (the classic serialized behavior).
+   *
+   * Only human-initiated messages (composer / inbound integrations) should
+   * steer; internal wakes (cron, `wakeAgent`, ask answers) stay queued.
+   */
+  mode?: "steer" | "queue";
+}
+
 /**
  * Schedule a message for an agent session, serialized per (employee, chat).
  *
  * Returns immediately (fire-and-forget): if a run for the key is already in
  * flight the message is queued, otherwise a run is started and the queue is
- * drained in order.
+ * drained in order. With `opts.mode === "steer"` a message that arrives while
+ * the run is actively streaming is injected into that run instead of queued.
  */
 export async function deliver(
   employeeId: number,
   chatId: number,
   text: string,
+  opts?: DeliverOptions,
 ): Promise<void> {
   const state = getOrCreateState(employeeId, chatId);
   clearIdleTimer(state);
+  // Mid-run user message: steer the live Pi run so it is seen at the next turn
+  // boundary rather than after the whole run settles. `isStreaming` (not just
+  // `busy`) gates this: `busy` also covers the between-turns gap inside one
+  // awaited `prompt()`, where a steer has no active run to be delivered into.
+  if (opts?.mode === "steer" && state.busy && state.session?.isStreaming) {
+    try {
+      await state.session.steer(text);
+      return;
+    } catch (err) {
+      // A rejected steer must never lose the already-persisted message: fall
+      // back to the serialized queue.
+      console.error(
+        `[session-queue] failed to steer ${employeeId} in chat ${chatId}; queueing instead:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
   state.queue.push(text);
   if (state.busy) return;
   state.busy = true;

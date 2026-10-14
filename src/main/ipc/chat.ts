@@ -157,10 +157,13 @@ export function registerChatHandlers(): void {
       // Serialized run; the agent posts its own reply via `imb_send_message`.
       // Deliver the text plus the attachment locations so the model can read
       // the files (a file-only send would otherwise be an empty prompt).
+      // A human send that lands mid-turn steers the live run instead of
+      // waiting for it to settle.
       void deliver(
         ASSISTANT_ID,
         safeChatId,
         agentPrompt(safeContent, safeAttachments),
+        { mode: "steer" },
       );
 
       // First message of an untitled chat → generate a title from it
