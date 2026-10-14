@@ -8,7 +8,7 @@ import { getSetting, setSetting } from "./db/settings";
 
 export const DEFAULT_WINDOW_WIDTH = 950;
 export const DEFAULT_WINDOW_HEIGHT = 670;
-export const MIN_WINDOW_WIDTH = 800;
+export const MIN_WINDOW_WIDTH = 900;
 export const MIN_WINDOW_HEIGHT = 600;
 
 interface WindowBounds {
