@@ -39,6 +39,10 @@
   cursor: pointer;
 }
 
+.imb-ask-card-submitted .imb-ask-option {
+  cursor: text;
+}
+
 /* Custom-drawn control: the native control ignores `accent-color` when
    disabled, which made an answered (disabled) choice look grey and unclear in
    dark mode. Drawing it ourselves keeps the selected option legible. */

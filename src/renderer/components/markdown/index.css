@@ -20,17 +20,18 @@
   --md-hl-title: #6f42c1;
   --md-hl-builtin: #e36209;
   --md-hl-meta: #6a737d;
+  user-select: text;
 }
 
 .imb-markdown-inline {
   display: inline;
 }
 
-.imb-markdown > :first-child {
+.imb-markdown> :first-child {
   margin-top: 0;
 }
 
-.imb-markdown > :last-child {
+.imb-markdown> :last-child {
   margin-bottom: 0;
 }
 
@@ -77,7 +78,7 @@
   margin: 2px 0;
 }
 
-.imb-markdown li > p {
+.imb-markdown li>p {
   margin: 0;
 }
 

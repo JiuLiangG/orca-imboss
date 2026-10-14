@@ -131,7 +131,9 @@ export function AskCard({
         size={34}
         onClick={onAvatarClick}
       />
-      <div className="imb-ask-card">
+      <div
+        className={cls("imb-ask-card", submitted && "imb-ask-card-submitted")}
+      >
         <div className="imb-ask-card-title">{t("Question")}</div>
         {payload.questions.map((q) => (
           <div className="imb-ask-question" key={q.id}>
