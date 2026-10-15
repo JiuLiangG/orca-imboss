@@ -226,6 +226,9 @@ const api = {
     /** Pin or unpin one conversation (sorts above the rest). */
     setPinned: (id: number, pinned: boolean) =>
       ipcRenderer.invoke("chats:setPinned", id, pinned) as Promise<Chat | null>,
+    /** Mute or unmute one conversation (silences its notifications). */
+    setMuted: (id: number, muted: boolean) =>
+      ipcRenderer.invoke("chats:setMuted", id, muted) as Promise<Chat | null>,
     summariesPage: (page: PageQuery) =>
       ipcRenderer.invoke("chats:summariesPage", page) as Promise<
         PageResult<ChatSummary>
@@ -320,6 +323,7 @@ const api = {
         senderEmployeeId: number | null;
         silent?: boolean;
         root: boolean;
+        muted: boolean;
       }) => void,
     ) =>
       on<{
@@ -327,6 +331,7 @@ const api = {
         senderEmployeeId: number | null;
         silent?: boolean;
         root: boolean;
+        muted: boolean;
       }>("messages:changed", cb),
   },
 
