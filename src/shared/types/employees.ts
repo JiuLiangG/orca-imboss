@@ -68,9 +68,9 @@ export interface PurgedEmployee {
 
 /**
  * One entry for the `[tools]` block's `Available tools` list. The base SDK
- * tools (read/bash/edit/write) use `BASE_TOOL_SNIPPETS`; custom tools
- * (MCP + team `imb_*`) use their `promptSnippet` (falling back to the
- * description).
+ * tools (read/bash/edit/write, plus powershell on Windows) use
+ * `BASE_TOOL_SNIPPETS`; custom tools (MCP + team `imb_*`) use their
+ * `promptSnippet` (falling back to the description).
  */
 export interface EmployeeToolEntry {
   name: string;
@@ -99,6 +99,13 @@ export interface BuildEmployeeSystemPromptArgs {
   fromChatId: number | null;
   /** Active tools for this employee-session (core + MCP + team `imb_*`). */
   toolEntries: EmployeeToolEntry[];
+  /**
+   * The `## Guidelines` bullets for this session. Resolved by the platform-
+   * aware caller (`session.ts`) — `TOOLS_GUIDELINES` on macOS/Linux,
+   * `WINDOWS_TOOLS_GUIDELINES` on Windows — so this formatter stays
+   * platform-agnostic.
+   */
+  toolsGuidelines: readonly string[];
   /** Current date in `yyyy-MM-dd`. */
   today: string;
 }

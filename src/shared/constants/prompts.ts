@@ -170,18 +170,29 @@ Always reply in the language the user (the boss) uses in their messages. Match
 the user's language naturally, even when the conversation, tools, or code are in
 another language.`;
 
-/** One-line snippets for the SDK core tools (used verbatim in `[tools]`). */
+/**
+ * One-line snippets for the SDK core tools (used verbatim in `[tools]`).
+ *
+ * `powershell` is listed here even though the tool is only ever *active* on
+ * Windows: the lookup is by active tool name (`session.ts`
+ * `buildEmployeeToolEntries`), so the entry is inert on macOS/Linux. Keeping it
+ * app-owned makes its wording match `bash`'s and independent of the SDK default.
+ */
 export const BASE_TOOL_SNIPPETS: Record<string, string> = {
   read: "Read file contents",
   bash: "Execute bash commands (ls, grep, find, etc.)",
+  powershell:
+    "Execute PowerShell commands (Get-ChildItem, Select-String, etc.)",
   edit: "Make precise file edits with exact text replacement, including multiple disjoint edits in one call",
   write: "Create or overwrite files",
 };
 
-/** Guidelines bullets for the `[tools]` block (rendered with a `- ` prefix). */
-export const TOOLS_GUIDELINES: readonly string[] = [
-  "Use bash for file operations like ls, grep, find",
-  "Use read to examine files instead of cat or sed.",
+/**
+ * Tool/OS-agnostic Guidelines bullets shared by every platform (rendered with a
+ * `- ` prefix). Kept separate so the POSIX and Windows lists can differ only in
+ * their leading shell/path bullets while this tail stays byte-identical.
+ */
+const COMMON_TOOLS_GUIDELINES: readonly string[] = [
   "You can inspect PI_* environment variables for current model and session details.",
   "Use edit for precise changes (edits[].oldText must match exactly)",
   "When changing multiple separate locations in one file, use one edit call with multiple entries in edits[] instead of multiple edit calls",
@@ -190,4 +201,37 @@ export const TOOLS_GUIDELINES: readonly string[] = [
   "Use write only for new files or complete rewrites.",
   "Be concise in your responses",
   "Show file paths clearly when working with files",
+];
+
+/** Shell/path Guidelines for POSIX hosts (macOS/Linux, bash is the primary shell). */
+const UNIX_SHELL_GUIDELINES: readonly string[] = [
+  "Use bash for file operations like ls, grep, find",
+  "Use read to examine files instead of cat or sed.",
+];
+
+/**
+ * Shell/path Guidelines for Windows hosts (PowerShell is the primary shell; the
+ * Git-Bash-backed `bash` tool is also active but not the default choice).
+ */
+const WINDOWS_SHELL_GUIDELINES: readonly string[] = [
+  "Use powershell for shell/file operations (Get-ChildItem, Select-String, Test-Path, etc.). `bash` is also active but only as Git Bash on Windows.",
+  "Use read to examine files instead of Get-Content (cat) or Select-String (grep).",
+  "On Windows use backslash paths with a drive letter (e.g. C:\\Users\\me\\file.ts); quote paths that contain spaces.",
+  "Windows paths and drive letters are case-insensitive; preserve the on-disk case and still match edits[].oldText exactly.",
+];
+
+/**
+ * The `[tools]` Guidelines for POSIX hosts. Content and order are frozen —
+ * macOS/Linux must stay byte-identical (the Windows variant lives in
+ * `WINDOWS_TOOLS_GUIDELINES`).
+ */
+export const TOOLS_GUIDELINES: readonly string[] = [
+  ...UNIX_SHELL_GUIDELINES,
+  ...COMMON_TOOLS_GUIDELINES,
+];
+
+/** The `[tools]` Guidelines for Windows hosts (selected in `session.ts`). */
+export const WINDOWS_TOOLS_GUIDELINES: readonly string[] = [
+  ...WINDOWS_SHELL_GUIDELINES,
+  ...COMMON_TOOLS_GUIDELINES,
 ];

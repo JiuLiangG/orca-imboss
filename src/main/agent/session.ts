@@ -8,6 +8,8 @@ import { ASSISTANT_ID } from "@shared/constants/employees";
 import {
   ASSISTANT_SYSTEM_PROMPT,
   BASE_TOOL_SNIPPETS,
+  TOOLS_GUIDELINES,
+  WINDOWS_TOOLS_GUIDELINES,
 } from "@shared/constants/prompts";
 import { SettingKeys } from "@shared/constants/settings";
 import {
@@ -438,6 +440,15 @@ export class AgentSession {
     // their `promptSnippet` (falling back to the description).
     const toolEntries = buildEmployeeToolEntries(activeToolNames, customTools);
 
+    // The `## Guidelines` bullets are platform-selected: Windows swaps the
+    // POSIX shell/path bullets for PowerShell-aware ones (see
+    // `prompts.ts`). Resolved here, like `toolEntries`, so the formatter stays
+    // platform-agnostic. `isWindows` is a process constant (mirroring `today`),
+    // so it never enters the session spec/hash.
+    const toolsGuidelines = isWindows
+      ? WINDOWS_TOOLS_GUIDELINES
+      : TOOLS_GUIDELINES;
+
     // Current local date (`yyyy-MM-dd`) for the `Today is ...` line. Kept out
     // of the composition signature so a warm session never rebuilds at
     // midnight (it may show a day-stale date until the next rebuild).
@@ -462,6 +473,7 @@ export class AgentSession {
         chatId: spec.chatId,
         fromChatId: spec.fromChatId,
         toolEntries,
+        toolsGuidelines,
         today,
       });
 
@@ -535,10 +547,11 @@ export class AgentSession {
 
 /**
  * Resolve the ordered entries for the `[tools]` block from a session's active
- * tool names. Core tools (read/bash/edit/write) map to `BASE_TOOL_SNIPPETS`;
- * custom tools (MCP + team `imb_*`) use their `promptSnippet` (falling back to
- * the description). Names that appear twice in `activeToolNames` (bash and
- * PowerShell are both base tools and shell definitions) are deduplicated.
+ * tool names. Core tools (read/bash/edit/write, plus powershell on Windows) map
+ * to `BASE_TOOL_SNIPPETS`; custom tools (MCP + team `imb_*`) use their
+ * `promptSnippet` (falling back to the description). Names that appear twice in
+ * `activeToolNames` (bash and PowerShell are both base tools and shell
+ * definitions) are deduplicated.
  */
 function buildEmployeeToolEntries(
   activeToolNames: string[],

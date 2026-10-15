@@ -5,7 +5,6 @@ import {
   MENTION_HANDLING_PROMPT,
   NEVER_BLOCK_WAITING_PROMPT,
   RESPONSE_LANGUAGE_PROMPT,
-  TOOLS_GUIDELINES,
 } from "@shared/constants/prompts";
 import { BuildEmployeeSystemPromptArgs } from "@shared/types";
 
@@ -42,6 +41,7 @@ export function buildEmployeeSystemPrompt({
   chatId,
   fromChatId,
   toolEntries,
+  toolsGuidelines,
   today,
 }: BuildEmployeeSystemPromptArgs): string {
   const persona = personaParts
@@ -58,7 +58,7 @@ export function buildEmployeeSystemPrompt({
     ...toolEntries.map((entry) => `- ${entry.name}: ${entry.snippet}`),
     "",
     "## Guidelines",
-    ...TOOLS_GUIDELINES.map((guideline) => `- ${guideline}`),
+    ...toolsGuidelines.map((guideline) => `- ${guideline}`),
   ].join("\n");
 
   // Leading identity block: which employee this session is and which chat it
