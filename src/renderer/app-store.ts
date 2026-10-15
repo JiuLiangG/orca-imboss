@@ -94,6 +94,7 @@ export function parseSessionKey(
 /** Sections of the Settings module. Lifted here so main can deep-link to one. */
 export type SettingsSection =
   | "general"
+  | "projects"
   | "theme"
   | "providers"
   | "mcp"

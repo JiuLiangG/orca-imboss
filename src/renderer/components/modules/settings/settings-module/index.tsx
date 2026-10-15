@@ -10,6 +10,7 @@ import { SettingsGeneral } from "../settings-general";
 import { SettingsIntegrations } from "../settings-integrations";
 import { SettingsMcp } from "../settings-mcp";
 import { SettingsNetwork } from "../settings-network";
+import { SettingsProjects } from "../settings-projects";
 import { SettingsProviders } from "../settings-providers";
 import { SettingsSkills } from "../settings-skills";
 import { SettingsTheme } from "../settings-theme";
@@ -23,6 +24,11 @@ const SECTIONS: Array<{
     id: "general",
     labelKey: "General",
     descKey: "App language and basic settings",
+  },
+  {
+    id: "projects",
+    labelKey: "Common projects",
+    descKey: "Folders and tags applied to a new conversation",
   },
   { id: "theme", labelKey: "Theme", descKey: "Accent color and theme mode" },
   {
@@ -74,7 +80,9 @@ export function SettingsModule(): React.JSX.Element {
   );
 
   const detail =
-    settingsSection === "theme" ? (
+    settingsSection === "projects" ? (
+      <SettingsProjects />
+    ) : settingsSection === "theme" ? (
       <SettingsTheme />
     ) : settingsSection === "providers" ? (
       <SettingsProviders />

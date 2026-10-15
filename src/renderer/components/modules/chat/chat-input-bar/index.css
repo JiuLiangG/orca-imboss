@@ -241,7 +241,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
+  /* Compact rows: this class is exclusive to the attach popup (see the
+     200px-min-width trigger), so the tighter height never touches other
+     menus. ~38px → ~30px. */
+  padding: 6px 16px;
   cursor: pointer;
   border: none;
   background: none;
@@ -262,4 +265,30 @@
   height: 18px;
   color: var(--imb-muted);
   flex-shrink: 0;
+}
+
+/* Divider between the built-in attach items and the common-project items. */
+.imb-attach-popup-sep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--imb-border);
+}
+
+/* Common-project rows (flat menu items): name fills the row, tags trail it. */
+.imb-attach-popup-item .imb-attach-project-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imb-attach-popup-item .imb-attach-project-tags {
+  flex-shrink: 0;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--imb-muted);
+  font-size: var(--imb-text-xs);
 }

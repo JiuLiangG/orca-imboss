@@ -1,0 +1,163 @@
+/* Settings › Common projects — reorderable editor rows (folder + tag set). */
+
+.imb-projects-help {
+  margin: 0 0 var(--imb-space-4);
+  font-size: var(--imb-text-sm);
+  color: var(--imb-muted);
+}
+
+.imb-projects-empty {
+  display: block;
+  margin-bottom: var(--imb-space-4);
+  color: var(--imb-muted);
+  font-size: var(--imb-text-sm);
+}
+
+.imb-project-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--imb-space-2);
+}
+
+.imb-project-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--imb-space-2);
+  padding: var(--imb-space-3);
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-md);
+  background: var(--imb-bg);
+}
+
+.imb-project-row.imb-is-dragging {
+  opacity: 0.85;
+  box-shadow: var(--imb-elev-raised);
+}
+
+.imb-project-row.imb-has-error {
+  border-color: var(--imb-danger);
+}
+
+.imb-project-head {
+  display: flex;
+  align-items: center;
+  gap: var(--imb-space-2);
+}
+
+.imb-project-drag {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--imb-muted);
+  border-radius: var(--imb-radius-sm);
+  cursor: grab;
+  touch-action: none;
+}
+
+.imb-project-drag:hover {
+  color: var(--imb-fg);
+  background: color-mix(in oklch, var(--imb-muted) 12%, transparent);
+}
+
+.imb-project-drag:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+}
+
+.imb-project-name-input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 6px 10px;
+}
+
+.imb-project-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--imb-space-2);
+  padding-left: calc(24px + var(--imb-space-2));
+}
+
+.imb-project-folder {
+  display: flex;
+  align-items: center;
+  gap: var(--imb-space-2);
+}
+
+.imb-project-folder-path {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 6px 10px;
+  font-size: var(--imb-text-sm);
+}
+
+.imb-project-folder-btn {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: var(--imb-radius-md);
+  font-size: var(--imb-text-sm);
+  color: var(--imb-accent);
+  background: transparent;
+  border: 1px dashed var(--imb-border);
+  cursor: pointer;
+  transition:
+    background var(--imb-motion-fast),
+    border-color var(--imb-motion-fast);
+}
+
+.imb-project-folder-btn:hover {
+  background: color-mix(in oklch, var(--imb-accent) 8%, transparent);
+  border-color: var(--imb-accent);
+}
+
+.imb-project-folder-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+}
+
+.imb-project-tags {
+  width: 100%;
+}
+
+.imb-project-row-error {
+  padding-left: calc(24px + var(--imb-space-2));
+  font-size: var(--imb-text-xs);
+  color: var(--imb-danger);
+}
+
+.imb-project-add-row {
+  margin-top: var(--imb-space-4);
+}
+
+.imb-project-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: var(--imb-radius-md);
+  font-size: var(--imb-text-sm);
+  color: var(--imb-accent);
+  background: transparent;
+  border: 1px dashed var(--imb-border);
+  cursor: pointer;
+  transition:
+    background var(--imb-motion-fast),
+    border-color var(--imb-motion-fast);
+}
+
+.imb-project-add-btn:hover {
+  background: color-mix(in oklch, var(--imb-accent) 8%, transparent);
+  border-color: var(--imb-accent);
+}
+
+.imb-project-add-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+}

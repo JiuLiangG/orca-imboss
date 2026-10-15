@@ -118,6 +118,30 @@ export function registerChatHandlers(): void {
     return dbChats.getChatSummary(safeId);
   });
 
+  // Merge tags into a conversation's existing ones (union, normalized, deduped,
+  // capped). Used by the composer's "Common projects" action so the renderer
+  // never has to read-modify-write `chats:setTags`. Root (user) conversations
+  // only, mirroring `chats:setTags`.
+  ipcMain.handle("chats:addTags", (_event, id: unknown, tags: unknown) => {
+    const safeId = assertInteger(id, "chat id");
+    if (!Array.isArray(tags)) throw new Error("tags must be an array.");
+    const chat = dbChats.getChat(safeId);
+    if (chat === null || chat.fromChatId !== null) return null;
+    const merged: string[] = [];
+    for (const entry of [...dbTags.tagsForChat(safeId), ...tags]) {
+      if (typeof entry !== "string") {
+        throw new Error("each tag must be a string.");
+      }
+      const tag = normalizeTag(entry);
+      if (tag.length === 0 || merged.includes(tag)) continue;
+      merged.push(tag);
+      if (merged.length >= MAX_TAGS_PER_CHAT) break;
+    }
+    dbTags.setChatTags(safeId, merged);
+    sendToRenderer("chats:changed", { chatId: safeId });
+    return dbChats.getChatSummary(safeId);
+  });
+
   ipcMain.handle("chats:delete", async (_event, id: unknown) => {
     const safeId = assertInteger(id, "chat id");
     // Chats spawned from this one (`from_chat_id`) go with it, and those may

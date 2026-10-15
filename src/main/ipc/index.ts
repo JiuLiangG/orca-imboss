@@ -9,6 +9,7 @@ import { registerMcpHandlers } from "./mcp";
 import { registerMessageHandlers } from "./message";
 import { registerMiniAppHandlers } from "./miniapps";
 import { registerNetworkHandlers } from "./network";
+import { registerProjectHandlers } from "./project";
 import { registerProviderHandlers } from "./provider";
 import { registerSessionHandlers } from "./session";
 import { registerSettingsHandlers } from "./settings";
@@ -31,6 +32,7 @@ export function registerIpcHandlers(): void {
   registerUpdaterHandlers();
   registerChatHandlers();
   registerTagHandlers();
+  registerProjectHandlers();
   registerCronHandlers();
   registerMessageHandlers();
   registerProviderHandlers();

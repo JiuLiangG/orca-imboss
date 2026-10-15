@@ -255,6 +255,25 @@ export function ChatModule(): React.JSX.Element {
     };
   }, []);
 
+  /**
+   * The composer wrote tags to the conversation (a common-project pick). The
+   * `chats:changed` broadcast updates the browse-cache row; a server-paged
+   * list is reloaded, and the candidate list is refetched so tags that only
+   * exist because of a project become selectable in the filter.
+   */
+  const handleTagsApplied = useCallback(
+    (_chatId: number): void => {
+      void imb.tags
+        .list()
+        .then(setTagOptions)
+        .catch((err: unknown) =>
+          setError(err instanceof Error ? err.message : String(err)),
+        );
+      if (serverMode) search.reset();
+    },
+    [serverMode, search],
+  );
+
   const loadMessages = useCallback(async (chatId: number): Promise<void> => {
     try {
       const data = await imb.messages.list(chatId);
@@ -805,6 +824,7 @@ export function ChatModule(): React.JSX.Element {
         chatId={selected.id}
         focusToken={focusToken}
         onSend={handleSend}
+        onTagsApplied={handleTagsApplied}
       />
     </>
   ) : null;

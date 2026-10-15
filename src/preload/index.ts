@@ -7,6 +7,7 @@ import type {
   Chat,
   ChatParticipantUpdate,
   ChatSummary,
+  CommonProject,
   CronJobInfo,
   Employee,
   EmployeeDeleteResult,
@@ -256,11 +257,27 @@ const api = {
     /** Replace one conversation's tags; returns the refreshed summary. */
     setTags: (id: number, tags: string[]) =>
       ipcRenderer.invoke("chats:setTags", id, tags) as Promise<ChatSummary | null>,
+    /** Merge tags into a conversation's existing ones; returns the summary. */
+    addTags: (id: number, tags: string[]) =>
+      ipcRenderer.invoke(
+        "chats:addTags",
+        id,
+        tags,
+      ) as Promise<ChatSummary | null>,
   },
 
   tags: {
     /** Candidate tags: every tag currently in use (distinct). */
     list: () => ipcRenderer.invoke("tags:list") as Promise<string[]>,
+  },
+
+  projects: {
+    /**
+     * Shortlisted projects (folder and/or tags) configured in Settings. Main
+     * re-normalizes the stored setting, so malformed entries are already
+     * dropped when they reach the renderer.
+     */
+    list: () => ipcRenderer.invoke("projects:list") as Promise<CommonProject[]>,
   },
 
   messages: {

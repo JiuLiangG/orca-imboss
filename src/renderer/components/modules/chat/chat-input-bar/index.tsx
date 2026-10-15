@@ -3,7 +3,7 @@ import {
   MAX_USER_ATTACHMENTS,
 } from "@shared/constants/attachments";
 import { t } from "@shared/l10n";
-import type { MessageAttachment } from "@shared/types";
+import type { CommonProject, MessageAttachment } from "@shared/types";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cls } from "reactutils";
@@ -40,6 +40,11 @@ export interface ChatInputBarProps {
    */
   focusToken?: number;
   onSend: (text: string, attachments: MessageAttachment[]) => void;
+  /**
+   * Called after the composer wrote tags to the conversation (a common-project
+   * pick). Lets the chat module refresh its tag candidates and paged list.
+   */
+  onTagsApplied?: (chatId: number) => void;
 }
 
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|bmp|svg|avif|ico|heic|heif)$/i;
@@ -102,6 +107,7 @@ export function ChatInputBar({
   chatId,
   focusToken = 0,
   onSend,
+  onTagsApplied,
 }: ChatInputBarProps): React.JSX.Element {
   // The draft is per chat and lives on appStore so it survives the chat module
   // being unmounted on a module switch. `sync: true` keeps the controlled
@@ -113,6 +119,9 @@ export function ChatInputBar({
   const [notice, setNotice] = useState<string | null>(null);
   const [popupOpen, setPopupOpen] = useState(false);
   const [dropActive, setDropActive] = useState(false);
+  // Common projects: loaded when the attach menu opens and rendered as flat
+  // menu items alongside Image / File / Folder.
+  const [projects, setProjects] = useState<CommonProject[]>([]);
 
   // Mention state
   const [mentionOpen, setMentionOpen] = useState(false);
@@ -137,7 +146,7 @@ export function ChatInputBar({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { panelStyle, positionPanel } = useDropdownPosition(popupRef);
+  const { panelStyle, positionPanel } = useDropdownPosition(popupRef, 200);
 
   // A new chat resets the composer (draft/attachments) and lands the caret in
   // the input. `focusToken` starts at `0`, so mounting with an existing chat
@@ -187,6 +196,25 @@ export function ChatInputBar({
   const popupOutsideRefs = useMemo(() => [popupRef, popupMenuRef], []);
   useClickOutside(popupOutsideRefs, () => setPopupOpen(false), popupOpen);
   useEscapeKey(() => setPopupOpen(false), popupOpen);
+
+  // Load the configured common projects whenever the attach menu opens, so a
+  // Settings edit is picked up without remounting the composer. No projects →
+  // no project items (and no leading separator) are rendered at all.
+  useEffect(() => {
+    if (!popupOpen) return;
+    let alive = true;
+    void imb.projects
+      .list()
+      .then((list) => {
+        if (alive) setProjects(list);
+      })
+      .catch(() => {
+        if (alive) setProjects([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [popupOpen]);
 
   // Reposition the portaled menu if the viewport scrolls/resizes while open.
   useEffect(() => {
@@ -265,6 +293,50 @@ export function ChatInputBar({
     if (accepted.length > 0) {
       appStore.addChatDraftAttachments(chatId, accepted);
     }
+  };
+
+  /**
+   * Apply a common project: attach its folder (deduped, capped like any other
+   * attachment) and merge its tags into the conversation. Tags are written
+   * immediately through the atomic `chats:addTags` (union), so the renderer
+   * never has to read-modify-write the tag set.
+   */
+  const applyProject = async (project: CommonProject): Promise<void> => {
+    setNotice(null);
+    const folder = project.folder;
+    if (folder !== null) {
+      const live = appStore.chatDrafts[chatId]?.attachments ?? [];
+      const alreadyAttached = live.some(
+        (item) =>
+          item.attachment.kind === "folder" &&
+          item.attachment.path === folder.path,
+      );
+      if (alreadyAttached) {
+        setNotice(t("Folder already attached."));
+      } else if (capCount(1) > 0) {
+        commitPending([
+          {
+            id: nextAttachmentId(),
+            attachment: {
+              name: folder.name,
+              size: 0,
+              type: "folder",
+              path: folder.path,
+              kind: "folder",
+            },
+          },
+        ]);
+      }
+    }
+    if (project.tags.length > 0) {
+      try {
+        await imb.chats.addTags(chatId, project.tags);
+        onTagsApplied?.(chatId);
+      } catch (err) {
+        setNotice(err instanceof Error ? err.message : String(err));
+      }
+    }
+    setPopupOpen(false);
   };
 
   const addFiles = (files: readonly File[] | null): void => {
@@ -729,6 +801,33 @@ export function ChatInputBar({
                     <IconFolder />
                     <span>{t("Folder")}</span>
                   </button>
+                  {/* Common projects: flat items at the same level as
+                      Image/File/Folder, behind the separator. Nothing (not
+                      even the separator) renders when none is configured. */}
+                  {projects.length > 0 && (
+                    <>
+                      <div className="imb-attach-popup-sep" role="separator" />
+                      {projects.map((project) => (
+                        <button
+                          key={project.id}
+                          type="button"
+                          role="menuitem"
+                          className="imb-attach-popup-item"
+                          onClick={() => void applyProject(project)}
+                        >
+                          <IconFolder />
+                          <span className="imb-attach-project-name">
+                            {project.name}
+                          </span>
+                          {project.tags.length > 0 && (
+                            <span className="imb-attach-project-tags">
+                              {project.tags.map((tag) => `#${tag}`).join(" ")}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </>
+                  )}
                 </div>,
                 document.body,
               )}

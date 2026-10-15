@@ -5,6 +5,8 @@ export const SettingKeys = {
   DefaultThinkingLevel: "agent.defaultThinkingLevel",
   UserEnv: "agent.userEnv",
   WorkDir: "agent.workdir",
+  /** Shortlisted projects (folder + tags) applied from the attach menu. */
+  CommonProjects: "app.commonProjects",
   /** Outbound HTTP(S) proxy URL for model/provider traffic (empty = direct). */
   HttpProxy: "network.httpProxy",
   ThemeMode: "ui.theme.mode",
