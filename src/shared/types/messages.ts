@@ -8,6 +8,9 @@
  */
 export type MessageKind = string;
 
+/** Lifecycle of an image-generation message (`kind === "image"`). */
+export type ImageGenStatus = "generating" | "done" | "error";
+
 export type StepStatus = "done" | "busy" | "pending";
 
 /** One row of a progress card payload (kind = `progress`). */
@@ -75,6 +78,16 @@ export interface Message {
    * when the message has no attachments.
    */
   attachmentsTotal: number | null;
+  /**
+   * Present for `kind === "image"` messages: whether the picture is still being
+   * generated, finished, or failed. `null` for every other kind.
+   */
+  imageStatus: ImageGenStatus | null;
+  /**
+   * `"<provider>/<modelId>"` that produced (or is producing) the picture, so a
+   * re-roll can report and reuse it. `null` for every other kind.
+   */
+  imageModel: string | null;
   /** UNIX timestamp in seconds. */
   createdAt: number;
 }
@@ -106,6 +119,13 @@ export interface AppendMessageOptions {
    * `attachments.length`.
    */
   attachmentTotal?: number;
+  /**
+   * Mark this message as an image generation (`kind: "image"`): `"generating"`
+   * while the model runs, then updated through `updateImageGeneration`.
+   */
+  imageStatus?: ImageGenStatus;
+  /** `"<provider>/<modelId>"` producing the picture (image messages only). */
+  imageModel?: string;
   /**
    * Suppress the unread bump and the renderer's notification beep for this
    * message (app-generated acks are silent receipts). The `messages:changed`

@@ -6,6 +6,7 @@ import { AckIndicator } from "../ack-indicator";
 import { AnswerCard } from "../answer-card";
 import { AskCard } from "../ask-card";
 import { ChatCard } from "../chat-card";
+import { ImageMessage } from "../image-gen";
 import { InterruptedNotice } from "../interrupted-notice";
 import { MessageBubble } from "../message-bubble";
 import { ProgressCard } from "../progress-card";
@@ -97,6 +98,15 @@ export function MessageItem({
       // App-generated notice (the boss halted the linked task group). Rendered
       // as a centered system hint, not a bubble; no sender/avatar row.
       return <InterruptedNotice groupChatId={message.groupChatId} />;
+    case "image":
+      // Image generation: one row carries the whole lifecycle (a placeholder
+      // while the model runs, then the picture) — see `../image-gen`.
+      return (
+        <ImageMessage
+          message={message}
+          self={message.senderEmployeeId === null}
+        />
+      );
     case "ack":
       // App-generated receipt: rendered as a transient "thinking" indicator
       // (never a bubble), hidden by CSS once a real message follows it. It

@@ -10,6 +10,7 @@ import {
   MAX_TOOL_ATTACHMENTS,
 } from "@shared/constants/attachments";
 import { ASSISTANT_ID } from "@shared/constants/employees";
+import { IMAGE_GENERATION_ENABLED } from "@shared/constants/image-gen";
 import { READ_CHAT_PROMPT } from "@shared/constants/prompts";
 import { t } from "@shared/l10n";
 import type {
@@ -35,6 +36,8 @@ import * as dbEmployees from "../db/employees";
 import * as dbMessages from "../db/messages";
 import * as dbReadCursors from "../db/read-cursors";
 import * as dbSessions from "../db/sessions";
+import { savePastedFile } from "../attachments";
+import { generateImage, getImageModelRef, imageModelRef } from "../image-gen";
 import { readMcpServers } from "../mcp-store";
 import { notifyUnread, sendToRenderer } from "../notifications";
 import { materializeSessionFile, sessionPathFor } from "./session-files";
@@ -1222,6 +1225,127 @@ function askTool(env: AgentEnvironment): AnyPiTool {
  *   marker is present in `mcp`. Employees have no structured ask/answer
  *   tools — they exchange questions and answers as plain text messages.
  */
+/** Default output size when the caller does not ask for one. */
+const DEFAULT_IMAGE_SIZE = "1024x1024";
+/** `"<width>x<height>"`, the shape every OpenAI-compatible endpoint takes. */
+const IMAGE_SIZE_RE = /^\d{2,5}x\d{2,5}$/;
+
+/**
+ * `imb_generate_image` — generate a picture and show it in the chat.
+ *
+ * The call is app-owned (see `../image-gen`), not an SDK call, so the message
+ * has a lifecycle: a `kind="image"` placeholder is appended first (the chat
+ * shows a placeholder immediately), then the same row is updated with the
+ * picture or with a failure. The tool returns the stored file path so the agent
+ * can also use the picture elsewhere.
+ *
+ * Registered for every agent (assistant and employees) while
+ * `IMAGE_GENERATION_ENABLED` is set: the boss asking for a picture can land in
+ * any conversation, and any participant may be the one who should draw it.
+ */
+function generateImageTool(employeeId: number): AnyPiTool {
+  return {
+    name: "imb_generate_image",
+    label: "Generate image",
+    description:
+      "Generate one picture from a text prompt and post it into a chat. Call this only when the boss " +
+      "actually asked for an image — it costs money and takes tens of seconds. The chat immediately " +
+      "shows a placeholder that is replaced by the picture once the model answers. It requires an " +
+      "image model to be configured in Settings › Providers; without one the call fails and you " +
+      "should tell the boss to configure it. `size` is an OpenAI-style size such as 1024x1024 " +
+      "(default), 1536x1024 or 1024x1536; the Google backend generates at its own default " +
+      "resolution. One picture per call.",
+    promptSnippet: "draw a picture",
+    parameters: Type.Object({
+      chatId: Type.Integer({ minimum: 1 }),
+      prompt: Type.String({ minLength: 1, maxLength: 8000 }),
+      size: Type.Optional(Type.String({ maxLength: 32 })),
+    }),
+    execute: async (_toolCallId, params) => {
+      const input = params as {
+        chatId: number;
+        prompt: string;
+        size?: string;
+      };
+      return performGenerateImage(employeeId, input);
+    },
+  };
+}
+
+async function performGenerateImage(
+  employeeId: number,
+  input: { chatId: number; prompt: string; size?: string },
+) {
+  const chat = dbChats.getChat(input.chatId);
+  if (!chat) throw new Error("Chat does not exist.");
+  if (!chat.participants.includes(employeeId)) {
+    throw new Error("You are not a participant of this chat.");
+  }
+  const sender = dbEmployees.getEmployee(employeeId);
+  if (!sender || sender.disabled) {
+    throw new Error("Sender is not an active employee.");
+  }
+
+  const ref = getImageModelRef();
+  if (ref === null) {
+    throw new Error(
+      "No image model is configured. Ask the boss to choose one under " +
+        "Settings › Providers › Image generation model.",
+    );
+  }
+
+  const size = normalizeImageSize(input.size);
+  // The placeholder goes first so the chat reacts immediately; the same row is
+  // finished below, which is what the thread's swap animation watches.
+  const placeholder = dbMessages.appendMessage(
+    input.chatId,
+    employeeId,
+    input.prompt,
+    {
+      kind: "image",
+      imageStatus: "generating",
+      imageModel: imageModelRef(ref),
+    },
+  );
+
+  try {
+    const image = await generateImage(ref, input.prompt, size);
+    const attachment = savePastedFile(
+      input.chatId,
+      imageFileName(image.mime),
+      image.mime,
+      image.bytes,
+    );
+    dbMessages.updateImageGeneration(placeholder.id, {
+      status: "done",
+      attachment,
+      imageModel: imageModelRef(ref),
+    });
+    return toolResult({
+      messageId: placeholder.id,
+      path: attachment.path ?? null,
+    });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    // Leave a visible failure instead of a placeholder that shimmers forever.
+    dbMessages.updateImageGeneration(placeholder.id, { status: "error" });
+    throw new Error(reason);
+  }
+}
+
+/** Keep the requested size sane; anything else falls back to the default. */
+function normalizeImageSize(value: string | undefined): string {
+  const trimmed = (value ?? "").trim();
+  return IMAGE_SIZE_RE.test(trimmed) ? trimmed : DEFAULT_IMAGE_SIZE;
+}
+
+/** Attachment file name for a generated picture (extension from its MIME). */
+function imageFileName(mime: string): string {
+  const ext =
+    mime === "image/jpeg" ? "jpg" : mime === "image/webp" ? "webp" : "png";
+  return `imboss-image-${Date.now()}.${ext}`;
+}
+
 export function createTeamToolDefinitions(
   options: TeamToolOptions,
 ): AnyPiTool[] {
@@ -1256,5 +1380,6 @@ export function createTeamToolDefinitions(
   }
   tools.push(sendMessageTool(env));
   tools.push(readChatTool(employeeId, chatId));
+  if (IMAGE_GENERATION_ENABLED) tools.push(generateImageTool(employeeId));
   return tools;
 }

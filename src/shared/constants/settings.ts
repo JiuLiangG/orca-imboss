@@ -2,6 +2,11 @@
 export const SettingKeys = {
   Locale: "app.locale",
   DefaultModel: "agent.defaultModel",
+  /**
+   * `"<provider>/<modelId>"` of the model that generates chat images (empty =
+   * not configured, and `imb_generate_image` then reports that clearly).
+   */
+  ImageModel: "agent.imageModel",
   DefaultThinkingLevel: "agent.defaultThinkingLevel",
   UserEnv: "agent.userEnv",
   WorkDir: "agent.workdir",

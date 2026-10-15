@@ -5,6 +5,7 @@ import {
 } from "@shared/constants/attachments";
 import type {
   AppendMessageOptions,
+  ImageGenStatus,
   Message,
   MessageAttachment,
   MessageKind,
@@ -26,6 +27,8 @@ interface MessageRow {
   content: string;
   steps: string | null;
   attachments: string | null;
+  image_status: string | null;
+  image_model: string | null;
   created_at: number;
 }
 
@@ -39,6 +42,8 @@ const MAX_ATTACH_NAME_LENGTH = 256;
 const MAX_ATTACH_TYPE_LENGTH = 128;
 const MAX_ATTACH_PATH_LENGTH = 4096;
 const MAX_ATTACH_SIZE = MAX_ATTACHMENT_BYTES; // metadata only
+/** Cap for the `image_model` reference (`"<provider>/<modelId>"`). */
+const MAX_IMAGE_MODEL_LENGTH = 256;
 
 /**
  * Synchronous observers notified after every successful `appendMessage`.
@@ -186,6 +191,24 @@ export function appendMessage(
   if (content.length > MAX_CONTENT_LENGTH) {
     throw new Error("Message is too long.");
   }
+  // Image messages carry a lifecycle status; nothing else may set one.
+  const imageStatus = options.imageStatus ?? null;
+  if (imageStatus !== null) {
+    if (kind !== "image") {
+      throw new Error("Image status is only valid for image messages.");
+    }
+    if (
+      imageStatus !== "generating" &&
+      imageStatus !== "done" &&
+      imageStatus !== "error"
+    ) {
+      throw new Error("Image status is invalid.");
+    }
+  }
+  const imageModel = imageStatus === null ? null : (options.imageModel ?? null);
+  if (imageModel !== null && imageModel.length > MAX_IMAGE_MODEL_LENGTH) {
+    throw new Error("Image model reference is too long.");
+  }
   // Resolve the owning chat's root/group nature and mute flag while validating
   // it: the renderer gates the notification beep on root, unmuted chats, and
   // this is the synchronous place that knows both (no extra IPC round-trip).
@@ -236,8 +259,8 @@ export function appendMessage(
       : null;
   const result = db
     .prepare(
-      "INSERT INTO messages (chat_id, sender_employee_id, kind, content, steps, attachments, created_at) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO messages (chat_id, sender_employee_id, kind, content, steps, attachments, image_status, image_model, created_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .run(
       chatId,
@@ -246,6 +269,8 @@ export function appendMessage(
       content,
       stepsJson,
       attachmentsJson,
+      imageStatus,
+      imageModel,
       createdAt,
     );
 
@@ -286,10 +311,66 @@ export function appendMessage(
     content,
     steps: stepsJson,
     attachments: attachmentsJson,
+    image_status: imageStatus,
+    image_model: imageModel,
     created_at: createdAt,
   });
   emitMessageAppended(message);
   return message;
+}
+
+/**
+ * Finish an image-generation message: record the outcome — and the picture,
+ * once it exists — without touching `content`, so the full-text index (whose
+ * trigger only fires on a content change) is left alone.
+ *
+ * The renderer is told through the same `messages:changed` event every append
+ * uses, so an open thread swaps its placeholder for the picture with no extra
+ * channel. `silent` keeps the completion quiet: the placeholder already
+ * announced the work, and one request should not beep twice.
+ *
+ * Returns the updated message, or `null` when the row no longer exists.
+ */
+export function updateImageGeneration(
+  messageId: number,
+  patch: {
+    status: ImageGenStatus;
+    /** The generated picture; omitted when the generation failed. */
+    attachment?: MessageAttachment;
+    /** Replaces the stored model ref (a re-roll may use a different one). */
+    imageModel?: string;
+  },
+): Message | null {
+  const db = getDB();
+  const row = db
+    .prepare("SELECT kind FROM messages WHERE id = ?")
+    .get(messageId) as { kind: string } | undefined;
+  if (!row) return null;
+  if (row.kind !== "image") {
+    throw new Error("Only image messages can be updated this way.");
+  }
+
+  const attachmentsJson = patch.attachment
+    ? serializeAttachments([patch.attachment], 1)
+    : null;
+  db.prepare(
+    "UPDATE messages SET image_status = ?, " +
+      "image_model = COALESCE(?, image_model), " +
+      "attachments = COALESCE(?, attachments) " +
+      "WHERE id = ?",
+  ).run(patch.status, patch.imageModel ?? null, attachmentsJson, messageId);
+
+  const updated = getMessageById(messageId);
+  if (updated !== null) {
+    const chat = getChat(updated.chatId);
+    sendToRenderer("messages:changed", {
+      chatId: updated.chatId,
+      senderEmployeeId: updated.senderEmployeeId,
+      silent: true,
+      root: chat === null || chat.fromChatId === null,
+    });
+  }
+  return updated;
 }
 
 /**
@@ -366,8 +447,17 @@ function toMessage(row: MessageRow): Message {
             parseAttachmentTotal(row.attachments) ?? attachments.length,
             attachments.length,
           ),
+    imageStatus: parseImageStatus(row.image_status),
+    imageModel: row.image_model ?? null,
     createdAt: row.created_at,
   };
+}
+
+/** Coerce a stored image status to a known value, else `null`. */
+function parseImageStatus(value: string | null): ImageGenStatus | null {
+  return value === "generating" || value === "done" || value === "error"
+    ? value
+    : null;
 }
 
 /**

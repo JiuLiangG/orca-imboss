@@ -174,6 +174,15 @@ const MIGRATIONS: Array<(db: Database) => void> = [
       ALTER TABLE chats ADD COLUMN muted INTEGER NOT NULL DEFAULT 0;
     `);
   },
+  // 5 — image-generation messages: the picture's lifecycle (`generating` until
+  // the model answers, then `done` or `error`) and the model that produced it.
+  // Both NULL for every other message kind.
+  (db) => {
+    db.exec(`
+      ALTER TABLE messages ADD COLUMN image_status TEXT;
+      ALTER TABLE messages ADD COLUMN image_model TEXT;
+    `);
+  },
 ];
 
 export function migrate(db: Database): void {
