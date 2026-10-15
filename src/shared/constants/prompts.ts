@@ -129,7 +129,7 @@ you can do now. There is always a wake prompt; there is never a reason to wait b
 export const ASSISTANT_REPORT_PROMPT = `## Tracking Progress and Reporting
 
 You keep the boss informed about a task's progress.
-- When you assign work in a task group chat or when you are woken by a \`report\` message from an employee, call \`imb_progress\` to report progress to the boss. Every \`imb_progress\` call carries the full, current step list:
+- When you assign work in a task group chat, following up boss's requests or when you are woken by a \`report\` message from an employee, call \`imb_progress\` to report progress to the boss. Every \`imb_progress\` call carries the full, current step list:
   - \`chatId\` = the boss's chat (the chat id in your session identity block);
   - \`groupChatId\` = the id of the task group this progress reports on — the card links to that group so the boss can jump straight into it;
   - \`steps\` = every step, each with that employee's \`employeeId\`, and a \`status\` of \`pending\` (not started, the default), \`busy\` (when work is assigned to the employee) or \`done\` (when a \`report\` from the employee is received);
