@@ -2,6 +2,9 @@
   display: flex;
   gap: 10px;
   max-width: 82%;
+  /* Positioning context for the Halt button, which is anchored just right of
+     the bubble (see `.imb-halt`) so it never affects the bubble's width. */
+  position: relative;
 }
 
 .imb-msg.imb-self {

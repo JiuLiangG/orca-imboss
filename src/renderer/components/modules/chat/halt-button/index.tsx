@@ -1,6 +1,5 @@
 import { t } from "@shared/l10n";
 import { useRef, useState } from "react";
-import { cls } from "reactutils";
 import { Button } from "../../../button";
 import { IconHalt } from "../../../icons";
 import { Popover } from "../../../popover";
@@ -10,14 +9,17 @@ import "./index.css";
 export interface HaltButtonProps {
   /** Task group whose sessions should be interrupted. */
   chatId: number;
-  /** Positioning modifier from the host card (corner placement differs). */
-  className?: string;
   /** Side the confirmation popup opens on (flips once when it would overflow). */
   placement?: Placement;
 }
 
 /**
  * Icon-only "Halt" affordance shared by the `chat` and `progress` cards.
+ *
+ * Rendered as the **last child of the message row**, outside the card bubble,
+ * and taken out of flow (see `.imb-halt`): absolutely positioned just right of
+ * the bubble and vertically centred, so the bubble's width/geometry is identical
+ * to when no button is present.
  *
  * Clicking it opens a small confirmation popup anchored to the button; on
  * confirm it interrupts every agent session belonging to the linked task group
@@ -28,7 +30,6 @@ export interface HaltButtonProps {
  */
 export function HaltButton({
   chatId,
-  className,
   placement = "left",
 }: HaltButtonProps): React.JSX.Element {
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -58,7 +59,7 @@ export function HaltButton({
       <button
         ref={triggerRef}
         type="button"
-        className={cls("imb-halt", className)}
+        className="imb-halt"
         aria-label={label}
         aria-haspopup="dialog"
         aria-expanded={open}

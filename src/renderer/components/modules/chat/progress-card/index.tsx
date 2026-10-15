@@ -63,71 +63,64 @@ export function ProgressCard({
     summary === undefined || summary === null ? null : groupChatId;
 
   return (
-    <div
-      className={cls(
-        "imb-progress-card",
-        targetChatId !== null && "imb-has-halt",
-      )}
-    >
-      <div className="imb-progress-card-title">{title}</div>
-      {summary !== undefined && summary !== null && (
-        <button
-          type="button"
-          className="imb-progress-open"
-          aria-label={t("Open group chat")}
-          onClick={() => appStore.openChat(summary)}
-        >
-          <IconOpen />
-        </button>
-      )}
-      {steps.map((step, index) => {
-        const employeeId = step.employeeId;
-        const currentName =
-          employeeId === null ? undefined : employeeNames.get(employeeId);
-        // Prefer the employee's current name; fall back to what the card was
-        // published with when the id no longer resolves.
-        const displayName = currentName?.trim() || step.name;
-        return (
-          <div key={`${step.name}-${index}`} className="imb-progress-row">
-            <span
-              className="imb-pname-wrap"
-              onClick={() => {
-                if (employeeId != null && targetChatId != null) {
-                  void appStore.openAgentSession(employeeId, targetChatId);
-                }
-              }}
-            >
-              {employeeId !== null && (
-                <EmployeeAvatar employeeId={employeeId} size={22} />
-              )}
-              <span className="imb-pname">
-                {employeeId !== null &&
-                targetChatId !== null &&
-                currentName !== undefined ? (
-                  <button type="button" className="imb-pname-link">
-                    {displayName}
-                  </button>
-                ) : (
-                  displayName
+    <>
+      <div className="imb-progress-card">
+        <div className="imb-progress-card-title">{title}</div>
+        {summary !== undefined && summary !== null && (
+          <button
+            type="button"
+            className="imb-progress-open"
+            aria-label={t("Open group chat")}
+            onClick={() => appStore.openChat(summary)}
+          >
+            <IconOpen />
+          </button>
+        )}
+        {steps.map((step, index) => {
+          const employeeId = step.employeeId;
+          const currentName =
+            employeeId === null ? undefined : employeeNames.get(employeeId);
+          // Prefer the employee's current name; fall back to what the card was
+          // published with when the id no longer resolves.
+          const displayName = currentName?.trim() || step.name;
+          return (
+            <div key={`${step.name}-${index}`} className="imb-progress-row">
+              <span
+                className="imb-pname-wrap"
+                onClick={() => {
+                  if (employeeId != null && targetChatId != null) {
+                    void appStore.openAgentSession(employeeId, targetChatId);
+                  }
+                }}
+              >
+                {employeeId !== null && (
+                  <EmployeeAvatar employeeId={employeeId} size={22} />
                 )}
-                <span className="imb-pname-role"> · {step.role}</span>
+                <span className="imb-pname">
+                  {employeeId !== null &&
+                  targetChatId !== null &&
+                  currentName !== undefined ? (
+                    <button type="button" className="imb-pname-link">
+                      {displayName}
+                    </button>
+                  ) : (
+                    displayName
+                  )}
+                  <span className="imb-pname-role"> · {step.role}</span>
+                </span>
               </span>
-            </span>
-            <span className={cls("imb-progress-tag", `imb-${step.status}`)}>
-              <span className="imb-status-dot" aria-hidden="true" />
-              {t(STEP_LABEL_KEYS[step.status] ?? step.status)}
-            </span>
-          </div>
-        );
-      })}
-      <MessageTime label={timeLabel} />
-      {targetChatId !== null && (
-        <HaltButton
-          chatId={targetChatId}
-          className="imb-progress-halt"
-          placement="top"
-        />
-      )}
-    </div>
+              <span className={cls("imb-progress-tag", `imb-${step.status}`)}>
+                <span className="imb-status-dot" aria-hidden="true" />
+                {t(STEP_LABEL_KEYS[step.status] ?? step.status)}
+              </span>
+            </div>
+          );
+        })}
+        <MessageTime label={timeLabel} />
+      </div>
+      {/* Row sibling of the bubble, gated on the link id so it is present from
+          the first render (no width jump while the summary loads). */}
+      {groupChatId !== null && <HaltButton chatId={groupChatId} />}
+    </>
   );
 }

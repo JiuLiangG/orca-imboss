@@ -1,9 +1,18 @@
 /*
- * Halt affordance on the `chat` / `progress` cards. The button itself only
- * carries the shared look; each host card positions it (its own modifier
- * class). Destructive intent is signalled by the danger tint on hover.
+ * Halt affordance on the `chat` / `progress` cards. It is the last child of the
+ * message row (the bubble's sibling, not inside it) but is **out of flow**:
+ * absolute positioning means the bubble's width/geometry is exactly the same as
+ * when there is no button (the bubble keeps the whole row). It is anchored just
+ * right of the bubble — `left: 100%` is the row's right edge, which the bubble
+ * fills — and centred on the bubble's height. `z-index` keeps it clickable
+ * above the thread; destructive intent is signalled by the danger hover tint.
  */
 .imb-halt {
+  position: absolute;
+  left: calc(100% + var(--imb-space-2));
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
   display: grid;
   place-items: center;
   width: 24px;

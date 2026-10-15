@@ -51,19 +51,6 @@
   box-shadow: var(--imb-focus-ring);
 }
 
-/* Halt affordance: bottom-right, diagonal to the top-right open-group arrow. */
-.imb-progress-halt {
-  position: absolute;
-  bottom: var(--imb-space-2);
-  right: var(--imb-space-2);
-}
-
-/* Reserve a footer strip for the Halt button so the last step row never runs
-   under it (the card has `position: relative`). */
-.imb-progress-card.imb-has-halt {
-  padding-bottom: calc(var(--imb-space-3) + 24px);
-}
-
 .imb-progress-row {
   display: flex;
   align-items: center;
