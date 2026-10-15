@@ -9,6 +9,7 @@ import type {
   SpendTotals,
   SpendTrendBucket,
 } from "@shared/types";
+import { SPEND_EMPLOYEE_RECENT_CHATS } from "@shared/constants/spend";
 import type { FileEntry } from "@earendil-works/pi-coding-agent";
 import { readFile, stat } from "fs/promises";
 import { loadPiSdk } from "./agent/pi-sdk";
@@ -153,6 +154,15 @@ export async function buildSpendReport(
   const employees: SpendEmployeeReport[] = [...perEmployee.entries()]
     .map(([employeeId, accumulator]) => {
       const identity = identities.get(employeeId);
+      // Full per-conversation list, most recent first; the payload keeps only
+      // the newest SPEND_EMPLOYEE_RECENT_CHATS rows and reports the rest in
+      // `byChatTotal` for the "showing N of M" hint.
+      const byChat = employeeChatRows(
+        employeeId,
+        perChatEmployee,
+        chatTitles,
+        chatOrder,
+      );
       return {
         employeeId,
         name: identity?.name ?? `Employee #${employeeId}`,
@@ -160,7 +170,8 @@ export async function buildSpendReport(
         chats: accumulator.chats.size,
         totals: accumulator.totals,
         byModel: sortModels([...accumulator.byModel.values()]),
-        byChat: employeeChatRows(employeeId, perChatEmployee, chatTitles),
+        byChat: byChat.slice(0, SPEND_EMPLOYEE_RECENT_CHATS),
+        byChatTotal: byChat.length,
         trend: fillTrend(accumulator.trend, range, now),
       };
     })
@@ -260,13 +271,18 @@ function accumulatorForTotals(
 }
 
 /**
- * One employee's per-conversation rows, most expensive first. Derived from the
- * per-(chat, employee) map so the hot aggregation loop stays single-pass.
+ * One employee's per-conversation rows, most recent first: the root chat's
+ * last-message time (descending, id breaking ties) — the same ordering the
+ * chat module's list uses, so "recent conversations" mean the same thing in
+ * both modules. The caller caps the payload; this returns the full list.
+ * Derived from the per-(chat, employee) map so the hot aggregation loop
+ * stays single-pass.
  */
 function employeeChatRows(
   employeeId: number,
   perChatEmployee: Map<number, Map<number, SpendTotals>>,
   chatTitles: Map<number, string>,
+  chatOrder: Map<number, { pinned: number; lastAt: number }>,
 ): SpendEmployeeChatReport[] {
   const rows: SpendEmployeeChatReport[] = [];
   for (const [chatId, byEmployee] of perChatEmployee) {
@@ -276,9 +292,8 @@ function employeeChatRows(
   }
   return rows.sort(
     (a, b) =>
-      b.totals.cost - a.totals.cost ||
-      b.totals.totalTokens - a.totals.totalTokens ||
-      a.chatId - b.chatId,
+      (chatOrder.get(b.chatId)?.lastAt ?? 0) -
+        (chatOrder.get(a.chatId)?.lastAt ?? 0) || b.chatId - a.chatId,
   );
 }
 

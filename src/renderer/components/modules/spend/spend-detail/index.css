@@ -41,6 +41,16 @@
   margin: 0 0 var(--imb-space-3);
 }
 
+/* "Showing N of M" hint beside a section label (truncated mini-tables). */
+.imb-spend-section-note {
+  margin-left: var(--imb-space-2);
+  font-size: var(--imb-text-xs);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--imb-muted);
+}
+
 /* --- Daily trend ---------------------------------------------------------- */
 
 .imb-spend-trend-block {

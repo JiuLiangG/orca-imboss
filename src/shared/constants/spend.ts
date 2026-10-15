@@ -29,8 +29,8 @@ export const SPEND_RANGES: readonly SpendRange[] = [
 /** Translation keys for each range preset. */
 export const SPEND_RANGE_LABELS: Record<SpendRange, string> = {
   today: "Today",
-  week: "This week",
-  month: "This month",
+  week: "Week",
+  month: "Month",
   all: "Total",
 };
 
@@ -42,6 +42,14 @@ export function isSpendRange(value: unknown): value is SpendRange {
     value === "all"
   );
 }
+
+/**
+ * Number of conversations an employee's detail lists in its "By conversation"
+ * mini-table. The table is capped server-side (in `buildSpendReport`) so an
+ * employee with a long chat history cannot bloat the IPC payload or the
+ * detail pane; the header shows how many conversations were left out.
+ */
+export const SPEND_EMPLOYEE_RECENT_CHATS = 10;
 
 /** Grouping dimensions shown in the Spend module, in display order. */
 export const SPEND_GROUPINGS: readonly SpendGrouping[] = ["chat", "employee"];

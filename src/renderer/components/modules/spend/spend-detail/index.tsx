@@ -10,11 +10,11 @@ import type {
   SpendTotals,
   SpendTrendBucket,
 } from "@shared/types";
+import { appStore } from "../../../../app-store";
 import { DetailBody } from "../../../detail-pane/detail-body";
 import { DetailHead } from "../../../detail-pane/detail-head";
 import { EmployeeAvatar } from "../../../employee-avatar";
 import { Tooltip } from "../../../tooltip";
-import { appStore } from "../../../../app-store";
 import { formatCost, formatDayShort, formatTokens } from "../format";
 import "./index.css";
 
@@ -45,6 +45,8 @@ interface SpendView {
   employees: SpendChatReport["employees"] | null;
   /** Per-conversation rows for one employee (only in the employee view). */
   byChat: SpendEmployeeChatReport[] | null;
+  /** Total conversations before the byChat cap; drives the "showing" hint. */
+  byChatTotal: number | null;
 }
 
 export function SpendDetail({
@@ -182,7 +184,21 @@ export function SpendDetail({
         )}
         {view.byChat !== null && view.byChat.length > 0 && (
           <section className="imb-spend-section">
-            <h3>{t("By conversation")}</h3>
+            <h3>
+              {t("By conversation")}
+              {view.byChatTotal !== null &&
+                view.byChatTotal > view.byChat.length && (
+                  <span className="imb-spend-section-note">
+                    {t(
+                      "Showing the ${count} most recent conversations (${total} in total)",
+                      {
+                        count: String(view.byChat.length),
+                        total: String(view.byChatTotal),
+                      },
+                    )}
+                  </span>
+                )}
+            </h3>
             <div className="imb-spend-table imb-spend-chats-table">
               <div className="imb-spend-table-head">
                 <span>{t("Conversation")}</span>
@@ -229,6 +245,7 @@ function employeeView(employee: SpendEmployeeReport): SpendView {
     chats: employee.chats,
     employees: null,
     byChat: employee.byChat,
+    byChatTotal: employee.byChatTotal,
   };
 }
 
@@ -244,6 +261,7 @@ function chatView(chat: SpendChatReport): SpendView {
     chats: null,
     employees: chat.employees,
     byChat: null,
+    byChatTotal: null,
   };
 }
 
@@ -259,6 +277,7 @@ function totalView(report: SpendReport, grouping: SpendGrouping): SpendView {
     chats: null,
     employees: null,
     byChat: null,
+    byChatTotal: null,
   };
 }
 

@@ -54,8 +54,14 @@ export interface SpendEmployeeReport {
   chats: number;
   totals: SpendTotals;
   byModel: SpendModelBreakdown[];
-  /** Per-conversation breakdown, most expensive first. */
+  /**
+   * Per-conversation breakdown, most recent first (the root chat's last
+   * message time, matching the chat module's list order), capped to the last
+   * `SPEND_EMPLOYEE_RECENT_CHATS` entries server-side.
+   */
   byChat: SpendEmployeeChatReport[];
+  /** Total conversations before the `byChat` cap (for the "showing N of M" hint). */
+  byChatTotal: number;
   /** Dense trend series for the requested window; empty for "all". */
   trend: SpendTrendBucket[];
 }
