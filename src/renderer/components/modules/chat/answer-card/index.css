@@ -1,4 +1,6 @@
 .imb-answer-card {
+  /* Anchors the hover time tag (`MessageTime`) at the bottom-right corner. */
+  position: relative;
   background: var(--imb-surface);
   border: 1px solid var(--imb-border);
   border-radius: var(--imb-radius-lg);

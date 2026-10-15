@@ -1,4 +1,5 @@
 .imb-ask-card {
+  position: relative;
   background: var(--imb-surface);
   border: 1px solid var(--imb-border);
   border-radius: var(--imb-radius-lg);

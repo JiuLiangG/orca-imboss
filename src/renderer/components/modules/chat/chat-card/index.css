@@ -1,4 +1,6 @@
 .imb-chat-card {
+  /* Anchors the hover time tag (`MessageTime`) at the bottom-right corner. */
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--imb-space-3);

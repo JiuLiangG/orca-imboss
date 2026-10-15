@@ -5,6 +5,7 @@ import { cls } from "reactutils";
 import { appStore, useApp } from "../../../../app-store";
 import { EmployeeAvatar } from "../../../employee-avatar";
 import { IconOpen } from "../../../icons";
+import { MessageTime } from "../message-time";
 import { useChatSummary } from "../use-chat-summary";
 import "./index.css";
 
@@ -24,12 +25,15 @@ export interface ProgressCardProps {
    * into links to that employee's agent session in the group.
    */
   groupChatId: number | null;
+  /** Exact send time, revealed on hover at the card's bottom-right corner. */
+  timeLabel?: string | null;
 }
 
 export function ProgressCard({
   title,
   steps,
   groupChatId,
+  timeLabel,
 }: ProgressCardProps): React.JSX.Element {
   // Summary resolution (shared cache + delete invalidation) is the same as the
   // `chat` card's: `undefined` loading, `null` missing/deleted.
@@ -110,6 +114,7 @@ export function ProgressCard({
           </div>
         );
       })}
+      <MessageTime label={timeLabel} />
     </div>
   );
 }

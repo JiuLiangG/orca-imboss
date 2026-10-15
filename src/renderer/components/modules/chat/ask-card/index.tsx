@@ -6,6 +6,7 @@ import { EmployeeAvatar } from "../../../employee-avatar";
 import { Markdown } from "../../../markdown";
 import { type AnswerItem, parseAnswer } from "../ask-answer";
 import { MessageBubble } from "../message-bubble";
+import { MessageTime } from "../message-time";
 import "./index.css";
 
 export interface AskCardProps {
@@ -23,6 +24,8 @@ export interface AskCardProps {
   onAvatarClick?: () => void;
   /** Resolve `@<id>` mentions in question/option text (non-interactive here). */
   resolveMention?: (id: number) => string | null;
+  /** Exact send time, revealed on hover at the card's bottom-right corner. */
+  timeLabel?: string | null;
 }
 
 interface AskQuestion {
@@ -55,6 +58,7 @@ export function AskCard({
   answer,
   onAvatarClick,
   resolveMention,
+  timeLabel,
 }: AskCardProps): React.JSX.Element {
   const self = message.senderEmployeeId === null;
   const payload = parseAsk(message.content);
@@ -247,6 +251,7 @@ export function AskCard({
         {!readonly && error !== null && (
           <div className="imb-ask-error">{error}</div>
         )}
+        <MessageTime label={timeLabel} />
       </div>
     </div>
   );

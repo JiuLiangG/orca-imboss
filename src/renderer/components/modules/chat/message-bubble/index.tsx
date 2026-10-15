@@ -12,6 +12,7 @@ import {
   ImageStack,
   type ImageStackImage,
 } from "../image-stack";
+import { MessageTime } from "../message-time";
 import "./index.css";
 
 /** Shared empty set for a message with no failed image loads. */
@@ -213,9 +214,7 @@ export function MessageBubble({
           ) : (
             <span className="imb-bubble-text">{content}</span>
           ))}
-        {timeLabel != null && timeLabel.length > 0 && (
-          <span className="imb-bubble-time">{timeLabel}</span>
-        )}
+        <MessageTime label={timeLabel} />
       </div>
     </div>
   );

@@ -44,6 +44,8 @@ export function MessageItem({
     sender === null
       ? undefined
       : () => void appStore.openAgentSession(sender, message.chatId);
+  // Exact send time, revealed on hover by every kind except the transient ack.
+  const timeLabel = formatMessageTime(message.createdAt, locale);
 
   switch (message.kind) {
     case "ask":
@@ -55,10 +57,17 @@ export function MessageItem({
           answer={askAnswer}
           onAvatarClick={openSession}
           resolveMention={mentions.resolveMention}
+          timeLabel={timeLabel}
         />
       );
     case "answer":
-      return <AnswerCard message={message} onAvatarClick={openSession} />;
+      return (
+        <AnswerCard
+          message={message}
+          onAvatarClick={openSession}
+          timeLabel={timeLabel}
+        />
+      );
     case "progress":
       return (
         <div className="imb-msg imb-other">
@@ -71,11 +80,18 @@ export function MessageItem({
             title={message.content}
             steps={message.steps ?? []}
             groupChatId={message.groupChatId}
+            timeLabel={timeLabel}
           />
         </div>
       );
     case "chat":
-      return <ChatCard message={message} onAvatarClick={openSession} />;
+      return (
+        <ChatCard
+          message={message}
+          onAvatarClick={openSession}
+          timeLabel={timeLabel}
+        />
+      );
     case "ack":
       // App-generated receipt: rendered as a transient "thinking" indicator
       // (never a bubble), hidden by CSS once a real message follows it. It
@@ -102,7 +118,7 @@ export function MessageItem({
           markdown={message.kind === "text" || message.kind === "report"}
           resolveMention={mentions.resolveMention}
           onMentionClick={mentions.onMentionClick}
-          timeLabel={formatMessageTime(message.createdAt, locale)}
+          timeLabel={timeLabel}
           avatar={
             <EmployeeAvatar
               employeeId={message.senderEmployeeId}

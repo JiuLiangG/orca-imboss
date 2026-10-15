@@ -4,12 +4,15 @@ import { cls } from "reactutils";
 import { EmployeeAvatar } from "../../../employee-avatar";
 import { parseAnswer } from "../ask-answer";
 import { MessageBubble } from "../message-bubble";
+import { MessageTime } from "../message-time";
 import "./index.css";
 
 export interface AnswerCardProps {
   message: Message;
   /** Click handler for the sender avatar (opens the agent session). */
   onAvatarClick?: () => void;
+  /** Exact send time, revealed on hover at the card's bottom-right corner. */
+  timeLabel?: string | null;
 }
 
 /**
@@ -20,6 +23,7 @@ export interface AnswerCardProps {
 export function AnswerCard({
   message,
   onAvatarClick,
+  timeLabel,
 }: AnswerCardProps): React.JSX.Element {
   const self = message.senderEmployeeId === null;
   const payload = parseAnswer(message.content);
@@ -63,6 +67,7 @@ export function AnswerCard({
             )}
           </div>
         ))}
+        <MessageTime label={timeLabel} />
       </div>
     </div>
   );
