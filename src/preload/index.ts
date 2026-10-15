@@ -330,6 +330,16 @@ const api = {
         employeeId,
         chatId,
       ) as Promise<void>,
+    /**
+     * Interrupt every agent session belonging to a chat (task group): its
+     * non-assistant employee participants plus the assistant's root-chat
+     * orchestration session. Returns the number of session states acted on.
+     */
+    interruptChat: (chatId: number) =>
+      ipcRenderer.invoke(
+        "agentSession:interruptChat",
+        chatId,
+      ) as Promise<number>,
     onEvent: (cb: (payload: AgentStreamPayload) => void) =>
       on<AgentStreamPayload>("agentSession:event", cb),
   },

@@ -1,0 +1,55 @@
+/*
+ * Centered system notice for `interrupted` messages (thread layout: a muted,
+ * self-centered pill, like the time separator but with a subtle surface).
+ * The surrounding thread gap supplies the breathing room.
+ */
+.imb-interrupted {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  max-width: 82%;
+  padding: 4px 12px;
+  border-radius: var(--imb-radius-lg);
+  background: var(--imb-fg-soft);
+  color: var(--imb-muted);
+  font-size: var(--imb-text-xs);
+  line-height: var(--imb-leading-tight);
+  text-align: center;
+  user-select: none;
+}
+
+.imb-interrupted-icon {
+  display: inline-flex;
+  flex: none;
+}
+
+.imb-interrupted-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.imb-interrupted-link {
+  font: inherit;
+  color: var(--imb-text-2);
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  border-radius: var(--imb-radius-sm);
+  transition: color var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-interrupted-link:hover {
+  color: var(--imb-accent);
+}
+
+.imb-interrupted-link:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+}

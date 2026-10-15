@@ -3,6 +3,7 @@ import { ASSISTANT_ID } from "@shared/constants/employees";
 import { readChatPrompt } from "@shared/constants/prompts";
 import type { WebContents } from "electron";
 import * as dbChats from "../db/chats";
+import * as dbMessages from "../db/messages";
 import { errorEvent, sendEventTo, toStreamEvent } from "./agent-events";
 import { getAgentEnvironment } from "./environment";
 import type { AgentSession as AppAgentSession } from "./session";
@@ -32,6 +33,14 @@ import { ensureSessionFile } from "./session-files";
  */
 
 const IDLE_MS = 5 * 60 * 1000;
+
+/**
+ * Stored `content` of the app-generated `interrupted` notice. Fixed English so
+ * the model and IM bridges can read it; the renderer shows a localized label
+ * instead, and the task group rides in the message's `groupChatId`.
+ */
+const INTERRUPTED_NOTICE_CONTENT =
+  "Boss interrupted all employee sessions in this task group chat.";
 
 interface QueueState {
   employeeId: number;
@@ -180,6 +189,106 @@ export function unbind(
 /** Dispose every session for one chat (chat deleted). */
 export async function disposeForChat(chatId: number): Promise<void> {
   await disposeMatching((state) => state.chatId === chatId);
+}
+
+/**
+ * Interrupt every agent session that belongs to a chat (the Halt button on a
+ * `chat` / `progress` card).
+ *
+ * Targets:
+ * - every non-assistant employee session keyed by `chatId` (the task group's
+ *   participants); and
+ * - the assistant's orchestration session for the chat's **root** chat. The
+ *   assistant is deliberately never keyed by a task group (it reads groups
+ *   from its root-chat session — see `wakeAgent`), so it must be resolved via
+ *   `getRootChatId`. Aborting that root session also stops whatever else the
+ *   assistant is orchestrating from the same root chat; that is intended.
+ *
+ * For each target the pending app-level queue is dropped first (so `drain()`
+ * cannot immediately start the next turn once the abort resolves) and, while
+ * the session is streaming, Pi's internal steering / follow-up queue is cleared
+ * before the in-flight turn is aborted (clear_queue precedes abort). All
+ * messages are already persisted in the DB; only their pending processing is
+ * dropped.
+ *
+ * Best-effort: a per-session failure is logged and never aborts the sweep.
+ * Returns the number of sessions actually interrupted (a live run aborted or a
+ * pending queue dropped); 0 when nothing was running.
+ */
+export async function interruptChat(chatId: number): Promise<number> {
+  // Dedupe by key so a root chat (whose id equals its own root) never signals
+  // the assistant's root session twice.
+  const targets = new Map<string, QueueState>();
+  for (const state of states.values()) {
+    if (!state.disposed && state.chatId === chatId) {
+      targets.set(keyFor(state.employeeId, state.chatId), state);
+    }
+  }
+  const rootId = dbChats.getRootChatId(chatId);
+  const assistantState = states.get(keyFor(ASSISTANT_ID, rootId));
+  if (assistantState && !assistantState.disposed) {
+    targets.set(keyFor(ASSISTANT_ID, rootId), assistantState);
+  }
+
+  const results = await Promise.all(
+    [...targets.values()].map((state) => interruptState(state)),
+  );
+  const interrupted = results.filter(Boolean).length;
+  if (interrupted > 0) recordInterruption(chatId);
+  return interrupted;
+}
+
+/**
+ * Append an `interrupted` notice into the task group's root chat after a Halt,
+ * so the assistant can later know the boss halted the group. System message
+ * (no unread bump, no beep) and **never wakes any agent** — the boss stopped
+ * these sessions on purpose; the assistant sees it on its next root-chat read.
+ * Best-effort: a failure only logs and never affects the interrupt itself.
+ */
+function recordInterruption(groupChatId: number): void {
+  try {
+    const rootId = dbChats.getRootChatId(groupChatId);
+    // Only a task group has a distinct root chat to record into; a root chat
+    // (or an unknown id, which resolves to itself) has nothing to record.
+    if (rootId === groupChatId) return;
+    dbMessages.appendMessage(rootId, null, INTERRUPTED_NOTICE_CONTENT, {
+      kind: "interrupted",
+      groupChatId,
+      silent: true,
+    });
+  } catch (err) {
+    console.error(
+      `[session-queue] failed to record interruption for chat ${groupChatId}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+/**
+ * Drop one state's pending queue and abort its in-flight run. Never throws.
+ * Returns whether anything was actually interrupted (a run or a pending queue).
+ */
+async function interruptState(state: QueueState): Promise<boolean> {
+  const hadPending = state.queue.length > 0;
+  // Clear before awaiting the abort so the drain loop, unblocked by the abort,
+  // cannot pick up the next queued message.
+  state.queue.length = 0;
+  const session = state.session;
+  if (!session?.isStreaming) return hadPending;
+  try {
+    // RPC semantics: clear Pi's internal queues before aborting, otherwise the
+    // interrupted turn would immediately continue with queued steer/follow-up
+    // messages.
+    session.clearQueue();
+    await session.abort();
+    return true;
+  } catch (err) {
+    console.error(
+      `[session-queue] failed to interrupt ${state.employeeId} in chat ${state.chatId}:`,
+      err instanceof Error ? err.message : err,
+    );
+    return false;
+  }
 }
 
 /** Dispose every session for one employee (employee deleted). */

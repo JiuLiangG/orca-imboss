@@ -68,10 +68,10 @@ export function listChatSummaries(): ChatSummary[] {
       `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
               c.pinned, c.source, c.last_message_at,
               (SELECT m.content FROM messages m
-               WHERE m.chat_id = c.id AND m.kind <> 'ack'
+               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted')
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
               (SELECT m.created_at FROM messages m
-               WHERE m.chat_id = c.id AND m.kind <> 'ack'
+               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted')
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_at
        FROM chats c
        WHERE c.from_chat_id IS NULL
@@ -91,10 +91,10 @@ export function getChatSummary(id: number): ChatSummary | null {
       `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
               c.pinned, c.source, c.last_message_at,
               (SELECT m.content FROM messages m
-               WHERE m.chat_id = c.id AND m.kind <> 'ack'
+               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted')
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
               (SELECT m.created_at FROM messages m
-               WHERE m.chat_id = c.id AND m.kind <> 'ack'
+               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted')
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_at
        FROM chats c
        WHERE c.id = ?`,
@@ -161,10 +161,10 @@ export function listChatSummariesPage(
       `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
               c.pinned, c.source, c.last_message_at,
               (SELECT m.content FROM messages m
-               WHERE m.chat_id = c.id AND m.kind <> 'ack'
+               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted')
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
               (SELECT m.created_at FROM messages m
-               WHERE m.chat_id = c.id AND m.kind <> 'ack'
+               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted')
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_at
        FROM chats c
        WHERE ${conditions.join(" AND ")}

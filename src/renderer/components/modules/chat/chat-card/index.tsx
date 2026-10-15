@@ -3,6 +3,7 @@ import type { Message } from "@shared/types";
 import { appStore } from "../../../../app-store";
 import { EmployeeAvatar } from "../../../employee-avatar";
 import { GroupAvatar } from "../../../group-avatar";
+import { HaltButton } from "../halt-button";
 import { MessageTime } from "../message-time";
 import { useChatSummary } from "../use-chat-summary";
 import "./index.css";
@@ -38,33 +39,38 @@ export function ChatCard({
         size={34}
         onClick={onAvatarClick}
       />
-      {summary ? (
-        <button
-          type="button"
-          className="imb-chat-card"
-          onClick={() => appStore.openChat(summary)}
-        >
-          <GroupAvatar
-            participants={summary.participants}
-            size={40}
-            title={summary.title}
-          />
-          <span className="imb-chat-card-title">{summary.title}</span>
-          <MessageTime label={timeLabel} />
-        </button>
-      ) : (
-        <div className="imb-chat-card imb-is-disabled" aria-disabled="true">
-          <span className="imb-chat-card-placeholder" aria-hidden="true">
-            ?
-          </span>
-          <span className="imb-chat-card-title">
-            {summary === undefined
-              ? t("Loading…")
-              : t("Conversation unavailable")}
-          </span>
-          <MessageTime label={timeLabel} />
-        </div>
-      )}
+      <div className="imb-chat-card-wrap">
+        {summary ? (
+          <button
+            type="button"
+            className="imb-chat-card"
+            onClick={() => appStore.openChat(summary)}
+          >
+            <GroupAvatar
+              participants={summary.participants}
+              size={40}
+              title={summary.title}
+            />
+            <span className="imb-chat-card-title">{summary.title}</span>
+            <MessageTime label={timeLabel} />
+          </button>
+        ) : (
+          <div className="imb-chat-card imb-is-disabled" aria-disabled="true">
+            <span className="imb-chat-card-placeholder" aria-hidden="true">
+              ?
+            </span>
+            <span className="imb-chat-card-title">
+              {summary === undefined
+                ? t("Loading…")
+                : t("Conversation unavailable")}
+            </span>
+            <MessageTime label={timeLabel} />
+          </div>
+        )}
+        {summary && chatId !== null && (
+          <HaltButton chatId={chatId} className="imb-chat-halt" />
+        )}
+      </div>
     </div>
   );
 }

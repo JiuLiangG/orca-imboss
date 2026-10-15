@@ -1049,9 +1049,12 @@ function askTool(env: AgentEnvironment): AnyPiTool {
     label: "Ask the boss",
     description:
       "Post a question set for the boss into a chat. Each question offers candidate options " +
-      "(single or multiple) and/or a free-form answer; the message body is the JSON serialization " +
-      "of the question set. The boss answers through the question card, delivered back as an " +
-      "`answer` message; call `imb_notify` afterwards so the boss is alerted. " +
+      "and/or a free-form answer; the message body is the JSON serialization of the question set. " +
+      "Each question's `type` picks the answer mode: `single` renders radio buttons (one choice), " +
+      "`multiple` renders checkboxes (several choices), and `free` renders a free-text field (also " +
+      "used when a question has no `options`). When `options` are given but `type` is omitted, the " +
+      "question defaults to `multiple` (checkboxes). The boss answers through the question card, " +
+      "delivered back as an `answer` message; call `imb_notify` afterwards so the boss is alerted. " +
       "Attachments are capped at 5; pass `attachmentTotal` when more files were produced.",
     promptSnippet: "ask the boss a question set",
     parameters: Type.Object({

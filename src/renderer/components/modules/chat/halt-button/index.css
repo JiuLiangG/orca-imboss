@@ -1,0 +1,47 @@
+/*
+ * Halt affordance on the `chat` / `progress` cards. The button itself only
+ * carries the shared look; each host card positions it (its own modifier
+ * class). Destructive intent is signalled by the danger tint on hover.
+ */
+.imb-halt {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--imb-radius-sm);
+  background: transparent;
+  color: var(--imb-muted);
+  cursor: pointer;
+  transition:
+    background var(--imb-motion-fast) var(--imb-ease-standard),
+    color var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-halt svg {
+  width: 15px;
+  height: 15px;
+}
+
+.imb-halt:hover {
+  background: color-mix(in oklch, var(--imb-danger) 14%, transparent);
+  color: var(--imb-danger);
+}
+
+.imb-halt:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+}
+
+/* Confirmation popup content (anchored by `Popover`). */
+.imb-halt-confirm-text {
+  margin: 0 0 var(--imb-space-3);
+  color: var(--imb-fg);
+}
+
+.imb-halt-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--imb-space-2);
+}

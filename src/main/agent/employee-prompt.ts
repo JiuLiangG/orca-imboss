@@ -54,10 +54,10 @@ export function buildEmployeeSystemPrompt({
   const roleBlock = isAssistant ? "" : buildEmployeeRolePrompt(name, role);
 
   const toolsBlock = [
-    "Available tools:",
+    "## Available tools",
     ...toolEntries.map((entry) => `- ${entry.name}: ${entry.snippet}`),
     "",
-    "Guidelines:",
+    "## Guidelines",
     ...TOOLS_GUIDELINES.map((guideline) => `- ${guideline}`),
   ].join("\n");
 

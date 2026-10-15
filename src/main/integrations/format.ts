@@ -26,9 +26,23 @@ function formatBody(message: Message): string {
       return formatProgress(message.content, message.steps ?? []);
     case "chat":
       return formatChatLink(message.content);
+    case "interrupted":
+      return formatInterrupted(message.groupChatId);
     default:
       return message.content;
   }
+}
+
+/** `interrupted` carries the halted task group id in `groupChatId`. */
+function formatInterrupted(groupChatId: number | null): string {
+  if (groupChatId === null) {
+    return t("The boss interrupted all sessions in this task group chat.");
+  }
+  const title = getChat(groupChatId)?.title.trim();
+  return t(
+    'The boss interrupted all sessions in the task group chat "${title}".',
+    { title: title && title.length > 0 ? title : `#${groupChatId}` },
+  );
 }
 
 /** `ask` content is a JSON question set. */

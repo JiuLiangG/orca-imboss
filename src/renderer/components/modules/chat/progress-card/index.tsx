@@ -5,6 +5,7 @@ import { cls } from "reactutils";
 import { appStore, useApp } from "../../../../app-store";
 import { EmployeeAvatar } from "../../../employee-avatar";
 import { IconOpen } from "../../../icons";
+import { HaltButton } from "../halt-button";
 import { MessageTime } from "../message-time";
 import { useChatSummary } from "../use-chat-summary";
 import "./index.css";
@@ -62,7 +63,12 @@ export function ProgressCard({
     summary === undefined || summary === null ? null : groupChatId;
 
   return (
-    <div className="imb-progress-card">
+    <div
+      className={cls(
+        "imb-progress-card",
+        targetChatId !== null && "imb-has-halt",
+      )}
+    >
       <div className="imb-progress-card-title">{title}</div>
       {summary !== undefined && summary !== null && (
         <button
@@ -115,6 +121,13 @@ export function ProgressCard({
         );
       })}
       <MessageTime label={timeLabel} />
+      {targetChatId !== null && (
+        <HaltButton
+          chatId={targetChatId}
+          className="imb-progress-halt"
+          placement="top"
+        />
+      )}
     </div>
   );
 }

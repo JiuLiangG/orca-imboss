@@ -1,5 +1,5 @@
 import { ipcMain } from "electron";
-import { bind, unbind } from "../agent/session-queue";
+import { bind, interruptChat, unbind } from "../agent/session-queue";
 import { assertInteger } from "./helpers";
 
 /**
@@ -32,5 +32,14 @@ export function registerAgentSessionHandlers(): void {
         event.sender,
       );
     },
+  );
+
+  // Halt: interrupt every agent session belonging to a chat — its non-assistant
+  // employee participants plus the assistant's root-chat orchestration session.
+  // Returns the number of session states acted on.
+  ipcMain.handle(
+    "agentSession:interruptChat",
+    (_event, chatId: unknown): Promise<number> =>
+      interruptChat(assertInteger(chatId, "chat id")),
   );
 }

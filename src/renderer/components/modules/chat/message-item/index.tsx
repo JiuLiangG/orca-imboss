@@ -6,6 +6,7 @@ import { AckIndicator } from "../ack-indicator";
 import { AnswerCard } from "../answer-card";
 import { AskCard } from "../ask-card";
 import { ChatCard } from "../chat-card";
+import { InterruptedNotice } from "../interrupted-notice";
 import { MessageBubble } from "../message-bubble";
 import { ProgressCard } from "../progress-card";
 import { formatMessageTime } from "../relative-time";
@@ -92,6 +93,10 @@ export function MessageItem({
           timeLabel={timeLabel}
         />
       );
+    case "interrupted":
+      // App-generated notice (the boss halted the linked task group). Rendered
+      // as a centered system hint, not a bubble; no sender/avatar row.
+      return <InterruptedNotice groupChatId={message.groupChatId} />;
     case "ack":
       // App-generated receipt: rendered as a transient "thinking" indicator
       // (never a bubble), hidden by CSS once a real message follows it. It

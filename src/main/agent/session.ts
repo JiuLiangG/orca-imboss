@@ -203,6 +203,33 @@ export class AgentSession {
     await this._piSession.steer(message);
   }
 
+  /**
+   * Abort the in-flight Pi turn and wait for the agent to become idle
+   * (interrupt). Only meaningful while streaming; callers gate on
+   * `isStreaming`. Messages already persisted elsewhere are never touched —
+   * abort only stops the current run.
+   */
+  async abort(): Promise<void> {
+    if (this._disposed) {
+      throw new Error("AgentSession has been disposed.");
+    }
+    if (!this._piSession) {
+      throw new Error("Agent session was not prepared.");
+    }
+    await this._piSession.abort();
+  }
+
+  /**
+   * Drop Pi's internal queued steering / follow-up messages and return their
+   * text. The RPC contract is to clear the queue *before* aborting, otherwise
+   * the aborted turn immediately continues with the still-queued messages.
+   * Tolerant when no session is prepared (returns empty lists).
+   */
+  clearQueue(): { steering: string[]; followUp: string[] } {
+    if (!this._piSession) return { steering: [], followUp: [] };
+    return this._piSession.clearQueue();
+  }
+
   /** Whether the underlying Pi session is actively processing a run. */
   get isStreaming(): boolean {
     return this._piSession?.isStreaming ?? false;

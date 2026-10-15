@@ -74,6 +74,13 @@ function emitMessageAppended(message: Message): void {
 
 const STEP_STATUSES: StepStatus[] = ["done", "busy", "pending"];
 
+/**
+ * Kinds whose payload may carry the `steps` blob's `chatId` link to a task
+ * group: the progress card (reports on a group) and the app-generated
+ * `interrupted` notice (records that the boss halted a group).
+ */
+const GROUP_LINK_KINDS = new Set<string>(["progress", "interrupted"]);
+
 const MAX_SEARCH_QUERY_LENGTH = 200;
 const MAX_SEARCH_RESULTS = 50;
 
@@ -174,10 +181,10 @@ export function appendMessage(
   if (kind === "progress" && groupChatId === undefined) {
     throw new Error("Progress messages need a linked group chat.");
   }
-  if (kind !== "progress" && groupChatId !== undefined) {
-    // Only a progress card links to a task group; reject rather than silently
-    // drop a link the caller explicitly supplied.
-    throw new Error("Only progress messages carry a linked group chat.");
+  if (!GROUP_LINK_KINDS.has(kind) && groupChatId !== undefined) {
+    // Only kinds whose payload links to a task group may carry one; reject
+    // rather than silently drop a link the caller explicitly supplied.
+    throw new Error("This message kind cannot carry a linked group chat.");
   }
   if (groupChatId !== undefined) {
     const linked = db
@@ -193,6 +200,12 @@ export function appendMessage(
 
   const createdAt = Math.floor(Date.now() / 1000);
   const attachmentsJson = serializeAttachments(attachments, attachmentTotal);
+  // The `steps` column also carries the task-group link; write the blob when
+  // either is present (an `interrupted` notice has the link but no steps).
+  const stepsJson =
+    steps !== undefined || groupChatId !== undefined
+      ? serializeSteps(steps, groupChatId)
+      : null;
   const result = db
     .prepare(
       "INSERT INTO messages (chat_id, sender_employee_id, kind, content, steps, attachments, created_at) " +
@@ -203,7 +216,7 @@ export function appendMessage(
       senderEmployeeId,
       kind,
       content,
-      steps !== undefined ? serializeSteps(steps, groupChatId) : null,
+      stepsJson,
       attachmentsJson,
       createdAt,
     );
@@ -241,7 +254,7 @@ export function appendMessage(
     sender_employee_id: senderEmployeeId,
     kind,
     content,
-    steps: steps !== undefined ? serializeSteps(steps, groupChatId) : null,
+    steps: stepsJson,
     attachments: attachmentsJson,
     created_at: createdAt,
   });
@@ -328,15 +341,17 @@ function toMessage(row: MessageRow): Message {
 }
 
 /**
- * Serialize a progress payload: the step list plus the task group the card
- * links to. Stored as one object so the link rides along without a schema
- * change — the same shape the `attachments` column uses for its `total`.
+ * Serialize a linked payload: an optional step list (progress cards) plus the
+ * task group it links to. Stored as one object so the link rides along without
+ * a schema change — the same shape the `attachments` column uses for its
+ * `total`. An `interrupted` notice carries only the `chatId` link (no steps).
  */
 function serializeSteps(
-  steps: MessageStep[],
+  steps: MessageStep[] | undefined,
   groupChatId: number | undefined,
 ): string {
-  const payload: { steps: MessageStep[]; chatId?: number } = { steps };
+  const payload: { steps?: MessageStep[]; chatId?: number } = {};
+  if (steps !== undefined) payload.steps = steps;
   if (groupChatId !== undefined) payload.chatId = groupChatId;
   return JSON.stringify(payload);
 }
