@@ -15,6 +15,7 @@ import { registerSettingsHandlers } from "./settings";
 import { registerSkillHandlers } from "./skill";
 import { SPEND_STATS_ENABLED } from "@shared/constants/spend";
 import { registerSpendHandlers } from "./spend";
+import { registerTagHandlers } from "./tag";
 import { registerThemeHandlers } from "./theme";
 import { registerUpdaterHandlers } from "./updater";
 import { registerWindowHandlers } from "./window";
@@ -29,6 +30,7 @@ export function registerIpcHandlers(): void {
   registerWindowHandlers();
   registerUpdaterHandlers();
   registerChatHandlers();
+  registerTagHandlers();
   registerCronHandlers();
   registerMessageHandlers();
   registerProviderHandlers();

@@ -33,6 +33,7 @@ import { ListRow } from "../../../list-row";
 import { useMentionResolver } from "../../../markdown/use-mention";
 import { Modal } from "../../../modal";
 import { SearchInput } from "../../../search-input";
+import { TagSelect } from "../../../tag-select";
 import { Tooltip } from "../../../tooltip";
 import { pairAskAnswers } from "../ask-answer";
 import { ChatInputBar } from "../chat-input-bar";
@@ -87,6 +88,12 @@ export function ChatModule(): React.JSX.Element {
   );
   const [messages, setMessages] = useState<Message[]>([]);
   const [query, setQuery] = useState("");
+  // Tag filter of the list below the search box (AND). Candidate tags + a
+  // per-chat optimistic override of the row chips are kept here too. Session-
+  // only component state, so a module switch / restart clears it (like the
+  // search box).
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
+  const [tagOptions, setTagOptions] = useState<string[]>([]);
   // Bumped on chat creation so the composer resets and focuses (see
   // `ChatInputBar`). Starts at 0 so ordinary selections never steal focus.
   const [focusToken, setFocusToken] = useState(0);
@@ -141,31 +148,90 @@ export function ChatModule(): React.JSX.Element {
 
   // Hybrid search: an empty query reads the appStore chat cache (root-only,
   // recency-ordered); a non-empty query switches to a server-paged FTS/LIKE
-  // search. `useInfiniteList` is always mounted but short-circuits to an empty
-  // page when there is no query so it never shadows the cache.
+  // search. An active tag filter also forces the server-paged path (via
+  // `params`) so the result set and pagination stay exact even with an empty
+  // query. `useInfiniteList` is always mounted but short-circuits to an empty
+  // page when neither is active.
+  const tagFilterKey = [...tagFilter].sort().join("\u0000");
   const isSearching = query.trim().length > 0;
+  const serverMode = isSearching || tagFilter.length > 0;
   const fetchPage = useCallback(
     (page: PageQuery): Promise<PageResult<ChatSummary>> => {
-      if (!isSearching) {
+      if (!serverMode) {
         return Promise.resolve({ items: [], nextCursor: null, hasMore: false });
       }
       return imb.chats.summariesPage(page);
     },
-    [isSearching],
+    [serverMode],
   );
-  const search = useInfiniteList(fetchPage, { query, pageSize: PAGE_SIZE });
+  const search = useInfiniteList(fetchPage, {
+    query,
+    pageSize: PAGE_SIZE,
+    params: tagFilter.length > 0 ? { tags: tagFilter } : undefined,
+    paramsKey: tagFilterKey,
+  });
 
-  const chats = isSearching
-    ? search.items
-    : (data.chats.items as ChatSummary[]);
-  const listLoading = isSearching ? search.loading : data.chats.loading;
-  const listError = isSearching ? search.error : data.chats.error;
-  const listHasMore = isSearching ? search.hasMore : false;
-  const listLoadingMore = isSearching ? search.loadingMore : false;
+  const chats = serverMode ? search.items : (data.chats.items as ChatSummary[]);
+
+  const listLoading = serverMode ? search.loading : data.chats.loading;
+  const listError = serverMode ? search.error : data.chats.error;
+  const listHasMore = serverMode ? search.hasMore : false;
+  const listLoadingMore = serverMode ? search.loadingMore : false;
 
   // Lazy-load the chat cache on first visit.
   useEffect(() => {
     appStore.ensureChats();
+  }, []);
+
+  // Latest tag filter, read from `saveTags` without re-creating it.
+  const tagFilterRef = useRef(tagFilter);
+  tagFilterRef.current = tagFilter;
+
+  /**
+   * Persist one conversation's tags (saved on every toggle/create). The
+   * authoritative summary patches the browse cache; a server-paged list is
+   * patched in place, and reloaded when a tag filter is active (the edit may
+   * change the row's membership in the filtered result).
+   */
+  const saveTags = useCallback(
+    async (chatId: number, tags: string[]): Promise<void> => {
+      try {
+        const updated = await imb.chats.setTags(chatId, tags);
+        if (updated === null) return;
+        appStore.replaceChat(updated);
+        if (tagFilterRef.current.length > 0) {
+          search.reset();
+        } else {
+          search.mutate((items) =>
+            items.map((chat) =>
+              chat.id === chatId ? { ...chat, tags: updated.tags } : chat,
+            ),
+          );
+        }
+        // Refresh the candidate list so a newly created tag is selectable
+        // elsewhere without a remount.
+        setTagOptions(await imb.tags.list());
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [search],
+  );
+
+  // Candidate tags (distinct, currently in use) for the row editor + filter.
+  useEffect(() => {
+    let alive = true;
+    void imb.tags
+      .list()
+      .then((tags) => {
+        if (alive) setTagOptions(tags);
+      })
+      .catch((err: unknown) => {
+        if (alive) setError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const loadMessages = useCallback(async (chatId: number): Promise<void> => {
@@ -242,10 +308,10 @@ export function ChatModule(): React.JSX.Element {
   const clearSelection = multi.clear;
   const selectSelection = multi.select;
 
-  // Switching between browse/search (query change) clears the selection.
+  // Switching between browse/search (query/tag change) clears the selection.
   useEffect(() => {
     clearSelection();
-  }, [clearSelection, query]);
+  }, [clearSelection, query, tagFilterKey]);
 
   // Open thread + clear unread whenever the selection changes.
   useEffect(() => {
@@ -524,12 +590,21 @@ export function ChatModule(): React.JSX.Element {
     <ListPane
       title={t("Chats")}
       search={
-        <SearchInput
-          value={query}
-          onValueChange={setQuery}
-          placeholder={t("Search chats")}
-          hint={IS_MAC ? "⌘K" : "Ctrl+K"}
-        />
+        <div className="imb-chat-search-stack">
+          <SearchInput
+            value={query}
+            onValueChange={setQuery}
+            placeholder={t("Search chats")}
+            hint={IS_MAC ? "⌘K" : "Ctrl+K"}
+          />
+          <TagSelect
+            className="imb-chat-tag-filter"
+            value={tagFilter}
+            options={tagOptions}
+            placeholder={t("Filter by tags")}
+            onChange={setTagFilter}
+          />
+        </div>
       }
       footer={
         <Button block onClick={() => void newChat()}>
@@ -555,6 +630,16 @@ export function ChatModule(): React.JSX.Element {
             className={cls(chat.pinned && "imb-chat-pinned")}
             active={chat.id === selectedId}
             selected={isSelectedRow}
+            footer={
+              <TagSelect
+                className="imb-chat-tag-select"
+                value={chat.tags}
+                options={tagOptions}
+                allowCreate
+                placeholder={`# ${t("Tags")}`}
+                onChange={(next) => void saveTags(chat.id, next)}
+              />
+            }
             avatar={
               <Avatar
                 letter={displayTitle(chat.title).slice(0, 1)}

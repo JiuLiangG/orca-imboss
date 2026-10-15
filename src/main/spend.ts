@@ -15,6 +15,7 @@ import { readFile, stat } from "fs/promises";
 import { loadPiSdk } from "./agent/pi-sdk";
 import { listEmployeeIdentities } from "./db/employees";
 import { getDB } from "./db/index";
+import { tagsForChats } from "./db/tags";
 import { getResolvedLocale } from "./locale";
 
 /**
@@ -179,6 +180,7 @@ export async function buildSpendReport(
     .sort(compareByCost);
 
   // Per-conversation rows (keyed by root chat id).
+  const tagsByChat = tagsForChats([...perChat.keys()]);
   const chats: SpendChatReport[] = [...perChat.entries()]
     .map(([chatId, accumulator]) => {
       const employeeRows: SpendChatEmployeeReport[] = [
@@ -204,6 +206,7 @@ export async function buildSpendReport(
         employees: employeeRows,
         totals: accumulator.totals,
         byModel: sortModels([...accumulator.byModel.values()]),
+        tags: tagsByChat.get(chatId) ?? [],
       };
     })
     .filter((chat) => chat.totals.calls > 0)

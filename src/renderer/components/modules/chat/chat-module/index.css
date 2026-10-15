@@ -73,3 +73,67 @@
 .imb-chat-pinned {
   background: var(--imb-bg-2);
 }
+
+/* Search box + tag filter stacked in the pane header (filter directly under
+   the search box, above the list). */
+.imb-chat-search-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--imb-space-1);
+}
+
+/* The tag filter mirrors the search box's box + height so the two read as a
+   matching pair. */
+.imb-chat-tag-filter {
+  width: 100%;
+}
+
+.imb-chat-tag-filter .imb-ms-trigger {
+  min-height: 34px;
+  padding: 2px 12px;
+  background: var(--imb-bg);
+}
+
+/* Per-row tag editor: its own full-width line under the row, so several tags
+   have the row's full horizontal space. Low-emphasis until hovered / open. */
+.imb-chat-tag-select {
+  width: 100%;
+  max-width: none;
+}
+
+.imb-chat-tag-select .imb-ms-trigger {
+  width: 100%;
+  min-height: 26px;
+  padding: 2px 8px;
+  gap: 6px;
+  justify-content: flex-start;
+  border-color: transparent;
+  background: transparent;
+  color: var(--imb-muted);
+  font-size: var(--imb-text-xs);
+}
+
+.imb-chat-tag-select .imb-ms-trigger:hover:not(:disabled) {
+  border-color: var(--imb-border);
+  background: var(--imb-surface);
+  color: var(--imb-fg);
+}
+
+.imb-chat-tag-select .imb-ms-trigger[aria-expanded="true"] {
+  border-color: var(--imb-accent);
+  background: var(--imb-surface);
+  color: var(--imb-fg);
+}
+
+.imb-chat-tag-select .imb-ms-value {
+  flex-wrap: wrap;
+}
+
+.imb-chat-tag-select .imb-ms-chip {
+  padding: 1px 6px;
+  font-size: var(--imb-text-xs);
+}
+
+.imb-chat-tag-select .imb-ms-caret {
+  display: none;
+}

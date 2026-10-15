@@ -16,6 +16,7 @@ import { ItemList } from "../../../item-list";
 import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
 import { SegmentedControl } from "../../../segmented-control";
+import { TagSelect } from "../../../tag-select";
 import "../../module-common.css";
 import { formatCost, formatTokensCompact } from "../format";
 import { SpendDetail } from "../spend-detail";
@@ -46,6 +47,10 @@ export function SpendModule(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   // Bumped by the employees/chats change subscriptions to re-fetch the report.
   const [refreshToken, setRefreshToken] = useState(0);
+  // Conversation-grouping tag filter (AND) + its candidate tags. Local
+  // component state, so a module switch / restart clears it.
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
+  const [tagOptions, setTagOptions] = useState<string[]>([]);
 
   // The conversation grouping has no range picker: it always shows the
   // all-time totals.
@@ -85,6 +90,22 @@ export function SpendModule(): React.JSX.Element {
     [],
   );
 
+  // Candidate tags for the conversation-grouping filter.
+  useEffect(() => {
+    let alive = true;
+    void imb.tags
+      .list()
+      .then((tags) => {
+        if (alive) setTagOptions(tags);
+      })
+      .catch((err: unknown) => {
+        if (alive) setError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   // Drop a selection whose employee vanished from the report (hard delete).
   useEffect(() => {
     if (report === null || activeSpendEmployeeId === null) return;
@@ -106,6 +127,14 @@ export function SpendModule(): React.JSX.Element {
   const entries: SpendListEntry[] = [];
   if (report !== null) {
     if (spendGrouping === "chat") {
+      // The total row keeps the grand total; only the conversation rows below
+      // it are narrowed by the (AND) tag filter.
+      const visibleChats =
+        tagFilter.length === 0
+          ? report.chats
+          : report.chats.filter((chat) =>
+              tagFilter.every((tag) => chat.tags.includes(tag)),
+            );
       // "全部对话" is the default-selected first row (no subtitle).
       entries.push({
         key: "total",
@@ -115,7 +144,7 @@ export function SpendModule(): React.JSX.Element {
         tokens: report.totals.totalTokens,
         cost: report.totals.cost,
       });
-      for (const chat of report.chats) {
+      for (const chat of visibleChats) {
         const title = chat.title || t("Untitled");
         entries.push({
           key: `c${chat.chatId}`,
@@ -182,6 +211,15 @@ export function SpendModule(): React.JSX.Element {
                 appStore.spendRange = value;
               }}
               label={t("Time range")}
+            />
+          )}
+          {spendGrouping === "chat" && (
+            <TagSelect
+              className="imb-spend-tag-filter"
+              value={tagFilter}
+              options={tagOptions}
+              placeholder={t("Filter by tags")}
+              onChange={setTagFilter}
             />
           )}
         </div>

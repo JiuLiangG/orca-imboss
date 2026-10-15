@@ -30,6 +30,8 @@ export interface ChatSummary extends Chat {
    * key). For a chat with no messages this falls back to its creation time.
    */
   lastMessageAt: number;
+  /** User-assigned tags, normalized; empty when the chat has none. */
+  tags: string[];
 }
 
 /** Participant edits applied in one call (additive/removal merge). */

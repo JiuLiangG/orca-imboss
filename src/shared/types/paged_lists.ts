@@ -14,4 +14,9 @@ export interface PageQuery {
   limit?: number;
   /** Server-side filter/search term (semantics per module). */
   query?: string;
+  /**
+   * Server-side tag filter (currently honored by `chats:summariesPage`): the
+   * result must carry **every** listed tag (AND). Empty/absent = no tag filter.
+   */
+  tags?: string[];
 }

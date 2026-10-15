@@ -6,6 +6,13 @@ export interface UseInfiniteListOptions {
   query?: string;
   /** Page size forwarded to the endpoint (default 50). */
   pageSize?: number;
+  /**
+   * Extra `PageQuery` fields forwarded with every page fetch (e.g. a tag
+   * filter). Pair with `paramsKey` so a change resets to page 1.
+   */
+  params?: Omit<PageQuery, "cursor" | "limit" | "query">;
+  /** Reset key for `params`; changing it re-fetches from page 1. */
+  paramsKey?: string;
 }
 
 export interface InfiniteList<T> {
@@ -40,7 +47,7 @@ export function useInfiniteList<T>(
   fetchPage: (page: PageQuery) => Promise<PageResult<T>>,
   options?: UseInfiniteListOptions,
 ): InfiniteList<T> {
-  const { query = "", pageSize = 50 } = options ?? {};
+  const { query = "", pageSize = 50, params, paramsKey = "" } = options ?? {};
   const [items, setItems] = useState<T[]>([]);
   const [hasMore, setHasMoreState] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -57,6 +64,8 @@ export function useInfiniteList<T>(
 
   const fetchRef = useRef(fetchPage);
   fetchRef.current = fetchPage;
+  const paramsRef = useRef(params);
+  paramsRef.current = params;
 
   const reset = useCallback((): void => {
     requestSeqRef.current += 1;
@@ -97,6 +106,7 @@ export function useInfiniteList<T>(
         const page = await fetchRef.current({
           limit: pageSize,
           query: needle.length > 0 ? needle : undefined,
+          ...paramsRef.current,
         });
         if (!alive || seq !== requestSeqRef.current) return;
         cursorRef.current = page.nextCursor;
@@ -117,7 +127,7 @@ export function useInfiniteList<T>(
     return () => {
       alive = false;
     };
-  }, [query, pageSize, resetToken, setHasMore]);
+  }, [query, pageSize, resetToken, paramsKey, setHasMore]);
 
   const loadMore = useCallback(async (): Promise<void> => {
     if (inFlightRef.current || loadingRef.current || !hasMoreRef.current) {
@@ -132,6 +142,7 @@ export function useInfiniteList<T>(
         limit: pageSize,
         cursor: cursorRef.current,
         query: needle.length > 0 ? needle : undefined,
+        ...paramsRef.current,
       });
       if (seq !== requestSeqRef.current) return;
       cursorRef.current = page.nextCursor;

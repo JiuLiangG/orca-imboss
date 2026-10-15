@@ -14,3 +14,7 @@
   outline: none;
   box-shadow: var(--imb-focus-ring);
 }
+
+.imb-msg .imb-avatar-button {
+  align-self: start;
+}

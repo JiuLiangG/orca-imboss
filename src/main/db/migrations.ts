@@ -152,6 +152,21 @@ const MIGRATIONS: Array<(db: Database) => void> = [
       ALTER TABLE chats ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
     `);
   },
+  // 3 — conversation tags. One row per (chat, tag); cascades with the chat.
+  // The candidate list is derived from the distinct tags in use, so there is
+  // no separate tag dictionary table.
+  (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS chat_tags (
+        chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+        tag     TEXT    NOT NULL,
+        PRIMARY KEY (chat_id, tag)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_chat_tags_tag
+        ON chat_tags(tag);
+    `);
+  },
 ];
 
 export function migrate(db: Database): void {

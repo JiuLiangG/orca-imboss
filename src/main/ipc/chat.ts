@@ -1,4 +1,5 @@
 import { ASSISTANT_ID } from "@shared/constants/employees";
+import { MAX_TAGS_PER_CHAT, normalizeTag } from "@shared/constants/tags";
 import type { ChatParticipantUpdate, MessageAttachment } from "@shared/types";
 import { ipcMain } from "electron";
 import { isAbsolute } from "path";
@@ -9,6 +10,7 @@ import { maybeGenerateChatTitle } from "../agent/title-gen";
 import * as cron from "../cron";
 import * as dbChats from "../db/chats";
 import * as dbMessages from "../db/messages";
+import * as dbTags from "../db/tags";
 import { listByChat, unlinkSessionFile } from "../db/sessions";
 import { sendToRenderer } from "../notifications";
 import { assertInteger, assertString, parsePageQuery } from "./helpers";
@@ -89,6 +91,32 @@ export function registerChatHandlers(): void {
       return dbChats.updateChatParticipants(safeId, changes);
     },
   );
+
+  // Replace one conversation's tags (normalized, deduped, capped). Broadcasts
+  // `chats:changed` so every window's cached summary picks the new tags up.
+  ipcMain.handle("chats:setTags", (_event, id: unknown, tags: unknown) => {
+    const safeId = assertInteger(id, "chat id");
+    if (!Array.isArray(tags)) throw new Error("tags must be an array.");
+    // Tags live on root (user) conversations only; task group chats roll up to
+    // their root everywhere (chat list, statistics).
+    const chat = dbChats.getChat(safeId);
+    if (chat === null || chat.fromChatId !== null) return null;
+    const normalized: string[] = [];
+    for (const entry of tags) {
+      if (typeof entry !== "string") {
+        throw new Error("each tag must be a string.");
+      }
+      const tag = normalizeTag(entry);
+      if (tag.length === 0 || normalized.includes(tag)) continue;
+      normalized.push(tag);
+    }
+    if (normalized.length > MAX_TAGS_PER_CHAT) {
+      throw new Error(`at most ${MAX_TAGS_PER_CHAT} tags per conversation.`);
+    }
+    dbTags.setChatTags(safeId, normalized);
+    sendToRenderer("chats:changed", { chatId: safeId });
+    return dbChats.getChatSummary(safeId);
+  });
 
   ipcMain.handle("chats:delete", async (_event, id: unknown) => {
     const safeId = assertInteger(id, "chat id");

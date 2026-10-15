@@ -93,6 +93,8 @@ export interface SpendChatReport {
   employees: SpendChatEmployeeReport[];
   totals: SpendTotals;
   byModel: SpendModelBreakdown[];
+  /** User-assigned tags of the root conversation (empty when none). */
+  tags: string[];
 }
 
 /** Payload of `spend:report`. */

@@ -119,3 +119,101 @@
   text-align: center;
   font-size: var(--imb-text-sm);
 }
+
+/* Panel-top filter input (searchable mode); sticks while the list scrolls. */
+.imb-ms-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  margin: -6px -6px 4px;
+  background: var(--imb-surface);
+  border-bottom: 1px solid var(--imb-border);
+  color: var(--imb-muted);
+}
+
+.imb-ms-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--imb-fg);
+  font: inherit;
+  font-size: var(--imb-text-base);
+  outline: none;
+}
+
+.imb-ms-option.imb-is-active {
+  background: var(--imb-fg-soft);
+}
+
+.imb-ms-option.imb-is-checked.imb-is-active {
+  background: var(--imb-fg-soft);
+}
+
+.imb-ms-option.imb-is-locked {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* "Create …" row offered for text that matches no existing option. */
+.imb-ms-create {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  margin-top: 2px;
+  border: 0;
+  border-radius: var(--imb-radius-sm);
+  background: transparent;
+  color: var(--imb-accent-active);
+  font: inherit;
+  font-size: var(--imb-text-base);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.imb-ms-create:hover,
+.imb-ms-create.imb-is-active {
+  background: var(--imb-fg-soft);
+}
+
+/* "Clear all" control, a sibling of the trigger so it never toggles the panel.
+   The higher-specificity padding rule keeps the chips clear of it in every
+   variant (the module-level trigger overrides have lower specificity). */
+.imb-ms.imb-ms-has-clear > .imb-ms-trigger {
+  padding-right: 38px;
+}
+
+.imb-ms-clear {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--imb-radius-pill);
+  background: transparent;
+  color: var(--imb-muted);
+  cursor: pointer;
+}
+
+.imb-ms-clear:hover {
+  background: var(--imb-fg-soft);
+  color: var(--imb-fg);
+}
+
+.imb-ms-clear:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+}

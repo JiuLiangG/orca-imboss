@@ -24,8 +24,15 @@ const VIEWPORT_MARGIN = 8;
  * its far edge grows away from the trigger; this needs no content measurement
  * and therefore no first-frame reposition. The portaled panel must be styled
  * `position: fixed` with the returned offsets.
+ *
+ * `minWidth` keeps the panel readable when the trigger is a small inline
+ * control (e.g. the compact tag button in a list row).
  */
-export function useDropdownPosition(rootRef: RefObject<HTMLElement | null>): {
+export function useDropdownPosition(
+  rootRef: RefObject<HTMLElement | null>,
+  minWidth = 0,
+  panelMaxHeight = PANEL_MAX_HEIGHT,
+): {
   panelStyle: DropdownPanelStyle | null;
   positionPanel: () => void;
 } {
@@ -41,13 +48,16 @@ export function useDropdownPosition(rootRef: RefObject<HTMLElement | null>): {
     const below = viewportH - rect.bottom - PANEL_GAP - VIEWPORT_MARGIN;
     const above = rect.top - PANEL_GAP - VIEWPORT_MARGIN;
     // Flip upward when the space below is tight and above is roomier.
-    const openUp = below < PANEL_MAX_HEIGHT && above > below;
+    const openUp = below < panelMaxHeight && above > below;
     const maxHeight = Math.max(
       0,
-      Math.min(PANEL_MAX_HEIGHT, openUp ? above : below),
+      Math.min(panelMaxHeight, openUp ? above : below),
     );
 
-    const width = Math.min(rect.width, viewportW - 2 * VIEWPORT_MARGIN);
+    const width = Math.min(
+      Math.max(rect.width, minWidth),
+      viewportW - 2 * VIEWPORT_MARGIN,
+    );
     let left = rect.left;
     if (left + width > viewportW - VIEWPORT_MARGIN) {
       left = viewportW - VIEWPORT_MARGIN - width;
@@ -73,7 +83,7 @@ export function useDropdownPosition(rootRef: RefObject<HTMLElement | null>): {
             openUp,
           },
     );
-  }, [rootRef]);
+  }, [rootRef, minWidth, panelMaxHeight]);
 
   return { panelStyle, positionPanel };
 }

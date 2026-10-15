@@ -1,3 +1,4 @@
+import { MAX_TAGS_PER_CHAT, normalizeTag } from "@shared/constants/tags";
 import type { PageQuery } from "@shared/types";
 
 export function assertString(value: unknown, field: string): string {
@@ -43,6 +44,22 @@ export function parsePageQuery(value: unknown): PageQuery {
       throw new Error("limit must be between 1 and 200.");
     }
     page.limit = limit;
+  }
+  if (record["tags"] !== undefined && record["tags"] !== null) {
+    const raw = record["tags"];
+    if (!Array.isArray(raw)) throw new Error("tags must be an array.");
+    if (raw.length > MAX_TAGS_PER_CHAT) {
+      throw new Error(`at most ${MAX_TAGS_PER_CHAT} tags may be filtered on.`);
+    }
+    const tags: string[] = [];
+    for (const entry of raw) {
+      if (typeof entry !== "string") {
+        throw new Error("each tag must be a string.");
+      }
+      const tag = normalizeTag(entry);
+      if (tag.length > 0 && !tags.includes(tag)) tags.push(tag);
+    }
+    if (tags.length > 0) page.tags = tags;
   }
   return page;
 }

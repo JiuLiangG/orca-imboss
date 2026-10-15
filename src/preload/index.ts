@@ -253,6 +253,14 @@ const api = {
       ) as Promise<Chat | null>,
     remove: (id: number) =>
       ipcRenderer.invoke("chats:delete", id) as Promise<boolean>,
+    /** Replace one conversation's tags; returns the refreshed summary. */
+    setTags: (id: number, tags: string[]) =>
+      ipcRenderer.invoke("chats:setTags", id, tags) as Promise<ChatSummary | null>,
+  },
+
+  tags: {
+    /** Candidate tags: every tag currently in use (distinct). */
+    list: () => ipcRenderer.invoke("tags:list") as Promise<string[]>,
   },
 
   messages: {

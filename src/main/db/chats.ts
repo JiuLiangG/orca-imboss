@@ -10,6 +10,7 @@ import type {
 } from "@shared/types";
 import { getDB } from "./index";
 import { parseNumberArray, stringifyArray } from "./json";
+import { tagsForChat, tagsForChats } from "./tags";
 import { escapeLike, toFtsPhrase } from "./text-search";
 
 const MAX_QUERY_LENGTH = 200;
@@ -78,7 +79,8 @@ export function listChatSummaries(): ChatSummary[] {
        ORDER BY c.pinned DESC, c.last_message_at DESC, c.id DESC`,
     )
     .all() as ChatSummaryRow[];
-  return rows.map(toChatSummary);
+  const tags = tagsForChats(rows.map((row) => row.id));
+  return rows.map((row) => toChatSummary(row, tags.get(row.id) ?? []));
 }
 
 /**
@@ -100,7 +102,7 @@ export function getChatSummary(id: number): ChatSummary | null {
        WHERE c.id = ?`,
     )
     .get(id) as ChatSummaryRow | undefined;
-  return row ? toChatSummary(row) : null;
+  return row ? toChatSummary(row, tagsForChat(row.id)) : null;
 }
 
 /**
@@ -156,6 +158,18 @@ export function listChatSummariesPage(
     }
   }
 
+  // Tag filter (AND): the chat must carry every requested tag. Appended after
+  // the cursor/query predicates; the keyset seek stays first.
+  const tagFilter = page.tags ?? [];
+  if (tagFilter.length > 0) {
+    const placeholders = tagFilter.map(() => "?").join(", ");
+    conditions.push(
+      `c.id IN (SELECT chat_id FROM chat_tags WHERE tag IN (${placeholders}) ` +
+        "GROUP BY chat_id HAVING COUNT(DISTINCT tag) = ?)",
+    );
+    params.push(...tagFilter, tagFilter.length);
+  }
+
   const rows = db
     .prepare(
       `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
@@ -174,7 +188,10 @@ export function listChatSummariesPage(
     .all(...params, limit + 1) as ChatSummaryRow[];
 
   const hasMore = rows.length > limit;
-  const items = rows.slice(0, limit).map(toChatSummary);
+  const tags = tagsForChats(rows.map((row) => row.id));
+  const items = rows
+    .slice(0, limit)
+    .map((row) => toChatSummary(row, tags.get(row.id) ?? []));
   const last = items[items.length - 1];
   return {
     items,
@@ -399,12 +416,13 @@ function normalizeSource(value: string | null): Chat["source"] {
     : null;
 }
 
-function toChatSummary(row: ChatSummaryRow): ChatSummary {
+function toChatSummary(row: ChatSummaryRow, tags: string[]): ChatSummary {
   return {
     ...toChat(row),
     preview: row.preview,
     lastAt: row.last_at,
     lastMessageAt: row.last_message_at,
+    tags,
   };
 }
 
