@@ -43,8 +43,8 @@ import {
   previewText,
   shouldShowTimeSeparator,
 } from "../relative-time";
-import { TimeSeparator } from "../time-separator";
 import "../thread.css";
+import { TimeSeparator } from "../time-separator";
 import "./index.css";
 
 const PAGE_SIZE = 50;
@@ -636,6 +636,7 @@ export function ChatModule(): React.JSX.Element {
                 value={chat.tags}
                 options={tagOptions}
                 allowCreate
+                noClear
                 placeholder={`# ${t("Tags")}`}
                 onChange={(next) => void saveTags(chat.id, next)}
               />

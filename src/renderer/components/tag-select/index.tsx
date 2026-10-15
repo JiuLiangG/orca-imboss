@@ -12,6 +12,7 @@ export interface TagSelectProps {
   allowCreate?: boolean;
   placeholder?: string;
   disabled?: boolean;
+  noClear?: boolean;
   /** Extra class on the root (e.g. a compact trigger inside a list row). */
   className?: string;
   id?: string;
@@ -30,6 +31,7 @@ export function TagSelect({
   allowCreate = false,
   placeholder = "",
   disabled = false,
+  noClear = false,
   className,
   id,
 }: TagSelectProps): React.JSX.Element {
@@ -59,7 +61,7 @@ export function TagSelect({
       options={multiOptions}
       onChange={onChange}
       searchable
-      clearable
+      clearable={!noClear}
       searchPlaceholder={t("Search tags")}
       onSearchCreate={allowCreate ? handleCreate : undefined}
       maxSelected={MAX_TAGS_PER_CHAT}

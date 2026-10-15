@@ -22,11 +22,17 @@
   padding: 0 2px var(--imb-space-4);
 }
 
+/* Scrollable list body. Most modules fill it with `ItemList` (whose
+   `VirtualList` owns `overflow-y`), but a few render rows directly (e.g. the
+   Settings section list), so the container scrolls on its own. When a
+   virtualized child is present it is height-bounded by this container, so no
+   second scrollbar appears. */
 .imb-list {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
 }
 
 .imb-pane-footer {
