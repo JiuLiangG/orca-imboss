@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useCallback, useEffect, type ReactNode } from "react";
 import { cls } from "reactutils";
 import "./index.css";
 import { useVirtualList } from "./use-virtual-list";
@@ -47,11 +47,23 @@ export function VirtualList<T>({
   onNearEnd,
   className,
 }: VirtualListProps<T>): React.JSX.Element {
+  // Forward a stable per-item key to the virtualizer (keyed by the item's own
+  // id, not its position) so its measurement cache stays correct when the list
+  // is reordered or swapped. The footer row (index === items.length) uses a
+  // constant key. `items` / `getItemKey` are deps so the mapping follows the
+  // current list; the returned keys are stable per item, which is what matters.
+  const virtualGetItemKey = useCallback(
+    (index: number): React.Key =>
+      index >= items.length ? FOOTER_KEY : getItemKey(items[index], index),
+    [items, getItemKey],
+  );
+
   const { scrollRef, virtualizer } = useVirtualList({
     count: items.length + (footer !== undefined ? 1 : 0),
     estimateSize,
     overscan,
     gap,
+    getItemKey: virtualGetItemKey,
   });
 
   const virtualItems = virtualizer.getVirtualItems();

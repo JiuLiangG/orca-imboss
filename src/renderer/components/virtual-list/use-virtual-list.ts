@@ -1,5 +1,19 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useRef } from "react";
+import { useRef, type Key } from "react";
+
+/**
+ * Initial row height guess when no caller-supplied `estimateSize` is given.
+ * Hoisted to a module constant so the option keeps a stable identity across
+ * renders (a fresh `() => 56` every render would churn the virtualizer).
+ */
+const defaultEstimateSize = (): number => 56;
+
+/**
+ * Default item key: the row index, matching `@tanstack/react-virtual`'s own
+ * `defaultKeyExtractor`. Callers that can supply a stable per-item key should
+ * (see `getItemKey` below) so measurements survive reordering / list swaps.
+ */
+const defaultIndexKey = (index: number): Key => index;
 
 export interface UseVirtualListOptions {
   /** Total number of rows (real items + optional footer row). */
@@ -10,6 +24,15 @@ export interface UseVirtualListOptions {
   overscan?: number;
   /** Fixed gap (px) between rows, applied in the virtualizer's layout math. */
   gap?: number;
+  /**
+   * Stable key for the row at `index` (e.g. the item's id). Forwarded to the
+   * virtualizer so its size/measurement caches are keyed by item identity
+   * rather than by position — otherwise a reordered or swapped list keeps
+   * stale per-index heights and rows overlap. When omitted, rows are keyed by
+   * index (the previous behaviour). The callback must be stable (memoize it)
+   * to avoid needless recomputation.
+   */
+  getItemKey?: (index: number) => Key;
 }
 
 /**
@@ -24,6 +47,7 @@ export function useVirtualList({
   estimateSize,
   overscan = 5,
   gap = 0,
+  getItemKey,
 }: UseVirtualListOptions): {
   scrollRef: React.RefObject<HTMLDivElement | null>;
   virtualizer: ReturnType<
@@ -34,9 +58,10 @@ export function useVirtualList({
   const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
     count,
     getScrollElement: () => scrollRef.current,
-    estimateSize: estimateSize ?? (() => 56),
+    estimateSize: estimateSize ?? defaultEstimateSize,
     overscan,
     gap,
+    getItemKey: getItemKey ?? defaultIndexKey,
   });
   return { scrollRef, virtualizer };
 }

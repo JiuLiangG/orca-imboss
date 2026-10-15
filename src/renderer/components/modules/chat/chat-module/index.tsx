@@ -50,6 +50,18 @@ import "./index.css";
 const PAGE_SIZE = 50;
 
 /**
+ * Initial row-height guess for the chat list. A chat row is ~91px (avatar +
+ * title/preview lines + the tag-editor footer); the virtualizer re-measures
+ * every row after paint, but a close estimate keeps any not-yet-measured row
+ * from overlapping its neighbour.
+ */
+const CHAT_ROW_ESTIMATE = 90;
+
+/** Stable props for the virtualized chat list (see `VirtualList`). */
+const chatItemKey = (chat: ChatSummary): number => chat.id;
+const chatRowEstimate = (): number => CHAT_ROW_ESTIMATE;
+
+/**
  * Chat title for display: untitled chats fall back to the localized default
  * at render time (the DB stores `""` for a new chat, so the fallback follows
  * locale switches — unlike a title baked in at creation time).
@@ -155,6 +167,15 @@ export function ChatModule(): React.JSX.Element {
   const tagFilterKey = [...tagFilter].sort().join("\u0000");
   const isSearching = query.trim().length > 0;
   const serverMode = isSearching || tagFilter.length > 0;
+  // Force the virtualized list to remount (fresh measurement cache) whenever
+  // its data source changes — the browse cache vs a server-paged search/tag
+  // filter. Without this, clearing a filter swaps the item list in place while
+  // the virtualizer keeps the heights measured for the previous list, and rows
+  // get positioned by stale sizes (overlap). Restarting from the top on a
+  // source change matches the search box's existing reset behaviour.
+  const listSourceKey = serverMode
+    ? `search:${query}\u0000${tagFilterKey}`
+    : "browse";
   const fetchPage = useCallback(
     (page: PageQuery): Promise<PageResult<ChatSummary>> => {
       if (!serverMode) {
@@ -613,8 +634,10 @@ export function ChatModule(): React.JSX.Element {
       }
     >
       <ItemList
+        key={listSourceKey}
         items={chats}
-        getItemKey={(chat) => chat.id}
+        getItemKey={chatItemKey}
+        estimateSize={chatRowEstimate}
         loading={listLoading}
         loadingMore={listLoadingMore}
         hasMore={listHasMore}
