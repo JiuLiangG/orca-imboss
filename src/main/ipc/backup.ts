@@ -21,10 +21,7 @@ import { assertString } from "./helpers";
 export function registerBackupHandlers(): void {
   ipcMain.handle("backup:status", () => getBackupStatus());
 
-  ipcMain.handle("backup:export", async (_event, options: unknown) => {
-    const includeCredentials =
-      (options as { includeCredentials?: unknown } | null)
-        ?.includeCredentials === true;
+  ipcMain.handle("backup:export", async () => {
     const destination = await showSaveDialog({
       title: t("Export a backup"),
       defaultPath: join(app.getPath("downloads"), defaultBackupFileName()),
@@ -34,7 +31,7 @@ export function registerBackupHandlers(): void {
       ],
     });
     if (destination === null) return null;
-    return createBackup({ includeCredentials, destination });
+    return createBackup({ destination });
   });
 
   ipcMain.handle("backup:inspect", async () => {

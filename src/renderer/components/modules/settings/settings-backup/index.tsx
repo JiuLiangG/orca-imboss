@@ -1,9 +1,5 @@
 import { t } from "@shared/l10n";
-import type {
-  BackupInfo,
-  BackupStatus,
-  PendingRestore,
-} from "@shared/types";
+import type { BackupInfo, BackupStatus, PendingRestore } from "@shared/types";
 import { useCallback, useEffect, useState } from "react";
 import { cls } from "reactutils";
 import { useApp } from "../../../../app-store";
@@ -11,7 +7,6 @@ import { Button } from "../../../button";
 import { DetailBody } from "../../../detail-pane/detail-body";
 import { DetailHead } from "../../../detail-pane/detail-head";
 import { Modal } from "../../../modal";
-import { Toggle } from "../../../toggle";
 import "./index.css";
 
 /**
@@ -23,7 +18,6 @@ import "./index.css";
 export function SettingsBackup(): React.JSX.Element {
   const { locale } = useApp();
   const [status, setStatus] = useState<BackupStatus | null>(null);
-  const [includeCredentials, setIncludeCredentials] = useState(false);
   const [busy, setBusy] = useState<"export" | "restore" | "cancel" | null>(
     null,
   );
@@ -48,7 +42,7 @@ export function SettingsBackup(): React.JSX.Element {
     setError(null);
     setBusy("export");
     try {
-      const info = await imb.backup.export({ includeCredentials });
+      const info = await imb.backup.export();
       if (info !== null) setExported(info);
     } catch (err) {
       setError(errorText(err));
@@ -112,7 +106,7 @@ export function SettingsBackup(): React.JSX.Element {
       <DetailBody>
         <p className="imb-backup-intro">
           {t(
-            "A backup carries your conversations, employees, skills, avatars, attachments and Mini Apps in one file, so you can move the app to another machine or roll back to an earlier state.",
+            "A backup carries your conversations, employees, skills, avatars, attachments, mini apps, MCP servers and credentials in one file, so you can move the app to another machine or roll back to an earlier state.",
           )}
         </p>
 
@@ -132,22 +126,11 @@ export function SettingsBackup(): React.JSX.Element {
               "Everything is written to a single file you choose. The database is copied live, so the app keeps working while it is exported.",
             )}
           </p>
-          <div className="imb-backup-credential-row">
-            <Toggle
-              checked={includeCredentials}
-              onChange={setIncludeCredentials}
-              disabled={busy !== null}
-              label={t("Include API keys and integration credentials")}
-            />
-            <div className="imb-backup-credential-copy">
-              <span>{t("Include API keys and integration credentials")}</span>
-              <span className="imb-backup-hint">
-                {t(
-                  "Adds agent/auth.json, agent/models.json and integrations.json. The file then contains secrets in plain text — only keep it somewhere you trust.",
-                )}
-              </span>
-            </div>
-          </div>
+          <p className="imb-backup-warning">
+            {t(
+              "The backup contains your API keys and integration credentials in plain text — only keep it somewhere you trust.",
+            )}
+          </p>
           <div className="imb-backup-actions">
             <Button
               onClick={() => void runExport()}
@@ -224,10 +207,7 @@ export function SettingsBackup(): React.JSX.Element {
         }
       >
         {candidate !== null && (
-          <ManifestSummary
-            info={candidate}
-            locale={locale}
-          />
+          <ManifestSummary info={candidate} locale={locale} />
         )}
       </Modal>
     </>
@@ -265,12 +245,7 @@ function PendingCard({
         <Button size="sm" onClick={onRestart} disabled={busy}>
           {t("Restart now")}
         </Button>
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={onCancel}
-          loading={busy}
-        >
+        <Button size="sm" variant="secondary" onClick={onCancel} loading={busy}>
           {t("Discard restore")}
         </Button>
       </div>
@@ -301,20 +276,12 @@ function ManifestSummary({
           t("${count} messages", { count: String(counts.messages) }),
           t("${count} employees", { count: String(counts.employees) }),
           t("${count} skills", { count: String(counts.skills) }),
-          t("${count} Mini Apps", { count: String(counts.miniApps) }),
+          t("${count} mini apps", { count: String(counts.miniApps) }),
         ].join(" · ")}
       />
       <SummaryRow
         label={t("Files")}
         value={`${manifest.files} (${formatBytes(info.sizeBytes)})`}
-      />
-      <SummaryRow
-        label={t("Credentials")}
-        value={
-          manifest.includeCredentials
-            ? t("Included — this file contains secrets")
-            : t("Not included")
-        }
       />
       <SummaryRow label={t("Source")} value={info.path} mono />
     </div>

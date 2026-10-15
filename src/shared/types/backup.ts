@@ -22,8 +22,6 @@ export interface BackupManifest {
   appVersion: string;
   createdAt: number;
   platform: string;
-  /** True when provider/integration credentials are inside the archive. */
-  includeCredentials: boolean;
   counts: BackupCounts;
   /** Number of files stored in the archive (including the database). */
   files: number;

@@ -20,13 +20,16 @@ const DIRECTORIES = [
 ] as const;
 
 /**
- * Files holding credentials. They are only included when the user explicitly
- * opts in: `agent/auth.json` holds provider API keys, `agent/models.json` may
- * carry a key for a custom provider, `integrations.json` holds IM bot tokens.
+ * Single files carried in addition to the directories above. All of them can
+ * hold secrets — `agent/auth.json` provider API keys, `agent/models.json` keys
+ * for custom providers, `agent/mcp.json` MCP server env/headers,
+ * `integrations.json` IM bot tokens — so a backup always contains credentials
+ * in plain text by design (the UI warns about this on export).
  */
-const CREDENTIAL_FILES = [
+const FILES = [
   "agent/auth.json",
   "agent/models.json",
+  "agent/mcp.json",
   "integrations.json",
 ] as const;
 
@@ -37,31 +40,22 @@ export const DB_ARCHIVE_PATH = "db/imboss.db";
 export interface BackupEntry {
   rel: string;
   abs: string;
-  /** True when the file is a credential file (see `CREDENTIAL_FILES`). */
-  credentials: boolean;
 }
 
-/**
- * Enumerate the files a backup should carry, in a stable order. Credential
- * files are only listed when `includeCredentials` is set.
- */
-export function collectBackupEntries(
-  includeCredentials: boolean,
-): BackupEntry[] {
+/** Enumerate the files a backup should carry, in a stable order. */
+export function collectBackupEntries(): BackupEntry[] {
   const root = getDataRoot();
   const entries: BackupEntry[] = [];
 
   for (const rel of DIRECTORIES) {
     const abs = join(root, rel);
     if (!existsSync(abs)) continue;
-    walk(abs, rel, entries, false);
+    walk(abs, rel, entries);
   }
 
-  if (includeCredentials) {
-    for (const rel of CREDENTIAL_FILES) {
-      const abs = join(root, rel);
-      if (existsSync(abs)) entries.push({ rel, abs, credentials: true });
-    }
+  for (const rel of FILES) {
+    const abs = join(root, rel);
+    if (existsSync(abs)) entries.push({ rel, abs });
   }
 
   return entries;
@@ -98,12 +92,7 @@ export function countMiniApps(): number {
  * a link pointing outside the data folder (or back into it) would otherwise
  * duplicate data or loop.
  */
-function walk(
-  absDir: string,
-  relDir: string,
-  out: BackupEntry[],
-  credentials: boolean,
-): void {
+function walk(absDir: string, relDir: string, out: BackupEntry[]): void {
   let names: string[];
   try {
     names = readdirSync(absDir);
@@ -121,9 +110,9 @@ function walk(
     }
     if (stat.isSymbolicLink()) continue;
     if (stat.isDirectory()) {
-      walk(abs, rel, out, credentials);
+      walk(abs, rel, out);
     } else if (stat.isFile()) {
-      out.push({ rel, abs, credentials });
+      out.push({ rel, abs });
     }
   }
 }

@@ -470,8 +470,8 @@ const api = {
     /** Staged-restore state and the folders earlier restores kept aside. */
     status: () => ipcRenderer.invoke("backup:status") as Promise<BackupStatus>,
     /** Pick a destination and write a full backup; `null` when cancelled. */
-    export: (options: { includeCredentials: boolean }) =>
-      ipcRenderer.invoke("backup:export", options) as Promise<BackupInfo | null>,
+    export: () =>
+      ipcRenderer.invoke("backup:export") as Promise<BackupInfo | null>,
     /** Pick an archive and read its manifest; `null` when cancelled. */
     inspect: () =>
       ipcRenderer.invoke("backup:inspect") as Promise<BackupInfo | null>,

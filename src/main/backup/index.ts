@@ -72,7 +72,6 @@ export interface RestoreOutcome {
  * export never leaves a half-written file behind under the chosen name.
  */
 export async function createBackup(options: {
-  includeCredentials: boolean;
   destination: string;
 }): Promise<BackupInfo> {
   const { destination } = options;
@@ -95,7 +94,6 @@ export async function createBackup(options: {
     appVersion: app.getVersion(),
     createdAt: Date.now(),
     platform: process.platform,
-    includeCredentials: options.includeCredentials,
     counts: {
       chats: countRows(live, "chats"),
       messages: countRows(live, "messages"),
@@ -113,7 +111,7 @@ export async function createBackup(options: {
     let bytes = 0;
     bytes += writeArchiveFile(archive, DB_ARCHIVE_PATH, snapshotPath);
     files += 1;
-    for (const entry of collectBackupEntries(options.includeCredentials)) {
+    for (const entry of collectBackupEntries()) {
       bytes += writeArchiveFile(archive, entry.rel, entry.abs);
       files += 1;
     }

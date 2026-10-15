@@ -33,28 +33,10 @@
   line-height: 1.5;
 }
 
-.imb-backup-credential-row {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--imb-space-2);
-  margin-top: var(--imb-space-4);
-}
-
-.imb-backup-credential-row .imb-toggle {
-  flex: none;
-  margin-top: 1px;
-}
-
-.imb-backup-credential-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
+.imb-backup-warning {
+  margin: var(--imb-space-3) 0 0;
+  color: var(--imb-warn);
   font-size: var(--imb-text-sm);
-}
-
-.imb-backup-hint {
-  color: var(--imb-muted);
   line-height: 1.5;
 }
 
