@@ -40,7 +40,7 @@
 }
 
 .imb-modal-body {
-  padding: 0 var(--imb-space-6) var(--imb-space-2);
+  padding: var(--imb-space-1) var(--imb-space-6) var(--imb-space-2);
   max-height: 60vh;
   overflow-y: auto;
   flex: 1;
