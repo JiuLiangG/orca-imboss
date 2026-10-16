@@ -73,6 +73,23 @@ export function setChatSource(
 }
 
 /**
+ * Remove a chat's platform binding entirely (`source`, `source_session` and
+ * `source_context`). Used when an inbound `/new` switches a conversation to a
+ * new chat: the old chat keeps its history but becomes a plain local
+ * conversation that is no longer labelled or forwarded to the platform.
+ *
+ * The caller detaches the old chat **before** binding the new one so the
+ * partial unique index on `(source, source_session)` is never violated.
+ */
+export function detachChatSource(chatId: number): void {
+  getDB()
+    .prepare(
+      "UPDATE chats SET source = NULL, source_session = NULL, source_context = NULL WHERE id = ?",
+    )
+    .run(chatId);
+}
+
+/**
  * Refresh the stored per-conversation reply credential. `context === null`
  * clears it; an empty string is ignored (never overwrite a good token with a
  * missing one).

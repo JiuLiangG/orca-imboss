@@ -17,6 +17,7 @@ import * as dbIntegrations from "../db/integrations";
 import { deliver } from "../agent/session-queue";
 import { maybeGenerateChatTitle } from "../agent/title-gen";
 import { sendToRenderer } from "../notifications";
+import { handleCommand, parseCommand } from "./commands";
 import { formatOutbound } from "./format";
 import { deleteMediaForChat, saveInboundMedia } from "./media";
 import { QqAdapter } from "./adapters/qq";
@@ -286,6 +287,15 @@ export class IntegrationManager {
       console.warn(
         `[integrations:${platform}] ignored message from unauthorized sender ${message.senderId}`,
       );
+      return;
+    }
+    // Slash commands are owner-only control instructions: consume them instead
+    // of storing/delivering them as ordinary messages. A message carrying media
+    // is never treated as a command (the media must not be dropped).
+    const command =
+      message.media.length === 0 ? parseCommand(message.text) : null;
+    if (command !== null) {
+      handleCommand(platform, message, command);
       return;
     }
     const chatId = this.resolveChat(platform, message);
