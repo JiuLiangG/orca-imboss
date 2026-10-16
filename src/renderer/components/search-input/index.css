@@ -34,7 +34,6 @@
 .imb-searchbox:focus-within,
 .imb-searchbox.imb-is-focused {
   border-color: var(--imb-accent);
-  box-shadow: var(--imb-focus-ring);
 }
 
 .imb-searchbox-clear {

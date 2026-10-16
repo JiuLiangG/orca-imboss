@@ -13,7 +13,7 @@ import type {
   StepStatus,
 } from "@shared/types";
 import { sendToRenderer } from "../notifications";
-import { bumpUnread } from "./chats";
+import { bumpUnread, getChat } from "./chats";
 import { getDB } from "./index";
 import { parseJsonObject } from "./json";
 import { escapeLike, toFtsPhrase } from "./text-search";
@@ -120,6 +120,34 @@ export function getMessageById(id: number): Message | null {
   const row = getDB().prepare("SELECT * FROM messages WHERE id = ?").get(id) as
     MessageRow | undefined;
   return row ? toMessage(row) : null;
+}
+
+/**
+ * Distinct conversation ids referenced by a `chat` attachment on any
+ * null-sender (user) message of a chat. Used by `imb_read_chat` to authorize a
+ * `full` read: it is only allowed for a conversation the user attached to this
+ * chat at some point in its history.
+ */
+export function listAttachedChatIds(chatId: number): number[] {
+  const rows = getDB()
+    .prepare(
+      "SELECT attachments FROM messages WHERE chat_id = ? AND sender_employee_id IS NULL " +
+        "AND attachments IS NOT NULL",
+    )
+    .all(chatId) as { attachments: string | null }[];
+  const ids = new Set<number>();
+  for (const row of rows) {
+    for (const attachment of parseAttachments(row.attachments) ?? []) {
+      if (
+        attachment.kind === "chat" &&
+        typeof attachment.chatId === "number" &&
+        attachment.chatId > 0
+      ) {
+        ids.add(attachment.chatId);
+      }
+    }
+  }
+  return [...ids];
 }
 
 /**
@@ -422,6 +450,11 @@ function parseAttachments(raw: string | null): MessageAttachment[] | null {
     }
     const path = record["path"];
     const kind = record["kind"];
+    const chatId = record["chatId"];
+    const parsedKind =
+      kind === "file" || kind === "folder" || kind === "chat"
+        ? kind
+        : undefined;
     result.push({
       name: record["name"],
       size: typeof record["size"] === "number" ? record["size"] : 0,
@@ -431,7 +464,13 @@ function parseAttachments(raw: string | null): MessageAttachment[] | null {
       path.length <= MAX_ATTACH_PATH_LENGTH
         ? { path }
         : {}),
-      ...(kind === "file" || kind === "folder" ? { kind } : {}),
+      ...(parsedKind ? { kind: parsedKind } : {}),
+      ...(parsedKind === "chat" &&
+      typeof chatId === "number" &&
+      Number.isSafeInteger(chatId) &&
+      chatId > 0
+        ? { chatId }
+        : {}),
     });
   }
   return result;
@@ -556,12 +595,19 @@ function validateAttachments(
     }
     const attachment: MessageAttachment = { name, size: item.size, type };
     if (item.kind !== undefined) {
-      if (item.kind !== "file" && item.kind !== "folder") {
+      if (
+        item.kind !== "file" &&
+        item.kind !== "folder" &&
+        item.kind !== "chat"
+      ) {
         throw new Error("Attachment kind is invalid.");
       }
       attachment.kind = item.kind;
     }
     if (item.path !== undefined) {
+      if (attachment.kind === "chat") {
+        throw new Error("A conversation attachment cannot have a path.");
+      }
       if (
         typeof item.path !== "string" ||
         item.path.length === 0 ||
@@ -570,6 +616,25 @@ function validateAttachments(
         throw new Error("Attachment path has invalid length.");
       }
       attachment.path = item.path;
+    }
+    if (attachment.kind === "chat") {
+      // A conversation attachment is a reference, not a file: it must carry a
+      // valid chat id that still exists at write time (deleting the referenced
+      // chat later only degrades the chip; there is no cascade).
+      const chatId = item.chatId;
+      if (
+        typeof chatId !== "number" ||
+        !Number.isSafeInteger(chatId) ||
+        chatId <= 0
+      ) {
+        throw new Error("Conversation attachment needs a valid chat id.");
+      }
+      if (!getChat(chatId)) {
+        throw new Error("Conversation attachment references a missing chat.");
+      }
+      attachment.chatId = chatId;
+    } else if (item.chatId !== undefined) {
+      throw new Error("Only a conversation attachment may carry a chat id.");
     }
     result.push(attachment);
   }

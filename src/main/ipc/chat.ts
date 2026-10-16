@@ -286,6 +286,15 @@ function formatAttachmentBlock(
     const name =
       sanitizePromptField(attachment.name, MAX_PROMPT_ATTACH_NAME_LENGTH) ||
       "file";
+    // A conversation attachment is a reference, not a file: give the model the
+    // chat id and tell it how to read the whole thing (uncursored).
+    if (
+      attachment.kind === "chat" &&
+      typeof attachment.chatId === "number" &&
+      attachment.chatId > 0
+    ) {
+      return `- [conversation] ${name} — chat #${attachment.chatId}: read it in full with imb_read_chat (chatId: ${attachment.chatId}, full: true)`;
+    }
     const type =
       sanitizePromptField(attachment.type, MAX_PROMPT_ATTACH_TYPE_LENGTH) ||
       "unknown type";

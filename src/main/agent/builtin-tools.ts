@@ -364,6 +364,11 @@ function toMessageBrief(message: Message): MessageBrief {
       size: attachment.size,
       type: attachment.type,
       ...(attachment.path ? { path: attachment.path } : {}),
+      // A conversation attachment is a reference: forward its id so the reader
+      // can `imb_read_chat` it in full (`full: true`).
+      ...(attachment.kind === "chat" && typeof attachment.chatId === "number"
+        ? { kind: "chat" as const, chatId: attachment.chatId }
+        : {}),
     }));
     if (
       message.attachmentsTotal !== null &&
@@ -733,21 +738,82 @@ function progressTool(env: AgentEnvironment): AnyPiTool {
   };
 }
 
-/** `imb_read_chat` — advance the calling agent's cursor and return new messages. */
-function readChatTool(employeeId: number): AnyPiTool {
+/**
+ * Safety cap for a `full` (whole-conversation) `imb_read_chat` read. A real
+ * conversation read is uncursored, so the cap only guards against a
+ * pathologically long chat; when it is hit the model is told via `hasMore`.
+ */
+const MAX_FULL_CHAT_MESSAGES = 1000;
+
+/**
+ * `imb_read_chat` — advance the calling agent's cursor and return new messages,
+ * or (`full: true`) read one whole attached conversation without touching it.
+ */
+function readChatTool(employeeId: number, callingChatId: number): AnyPiTool {
   return {
     name: "imb_read_chat",
     label: "Read chat",
     description:
-      "Read the latest messages in a chat (after your read cursor) and advance that cursor.",
+      "Read the latest messages in a chat (after your read cursor) and advance that cursor. " +
+      "For a conversation attached to this chat, pass `full: true` to read its entire history; a " +
+      "`full` read ignores and does not advance your read cursor. When a `full` read returns " +
+      "`hasMore: true`, repeat the call with `after: <nextAfter>` to continue where it stopped.",
     promptSnippet: "consume new messages",
     parameters: Type.Object({
       chatId: Type.Integer({ minimum: 1 }),
+      full: Type.Optional(
+        Type.Boolean({
+          description:
+            "Read the chat's entire history, ignoring your read cursor. Only allowed for a conversation attached to this chat; the cursor is not advanced.",
+        }),
+      ),
+      after: Type.Optional(
+        Type.Integer({
+          minimum: 0,
+          description:
+            "Only with `full: true`: read messages after this id (pass the previous page's `nextAfter`). Omit to start from the beginning.",
+        }),
+      ),
     }),
     execute: async (_toolCallId, params) => {
-      const input = params as { chatId: number };
+      const input = params as {
+        chatId: number;
+        full?: boolean;
+        after?: number;
+      };
       const chat = dbChats.getChat(input.chatId);
       if (!chat) throw new Error("Chat does not exist.");
+
+      if (input.after !== undefined && input.full !== true) {
+        throw new Error("`after` is only valid together with `full: true`.");
+      }
+
+      if (input.full === true) {
+        // `full` is a convenience for a conversation the boss attached to this
+        // chat at some point — never a way to slurp any chat's whole history.
+        // Authorize against the chat attachments of the chat's user messages.
+        const attachedIds = dbMessages.listAttachedChatIds(callingChatId);
+        if (!attachedIds.includes(input.chatId)) {
+          throw new Error(
+            "full reads are only allowed for a conversation attached to this chat.",
+          );
+        }
+        const { messages, hasMore, nextAfter } = listWholeChat(
+          input.chatId,
+          input.after ?? 0,
+        );
+        return toolResult({
+          from: chat.fromChatId,
+          full: true,
+          hasMore,
+          ...(nextAfter !== null ? { nextAfter } : {}),
+          // App-generated receipt acks are noise for the model.
+          messages: messages
+            .filter((message) => message.kind !== "ack")
+            .map(toMessageBrief),
+        });
+      }
+
       // Cursors live in their own table: the assistant reads task group chats
       // from its root-chat session and has no `sessions` row there.
       const cursor = dbReadCursors.getReadCursor(employeeId, input.chatId);
@@ -768,6 +834,40 @@ function readChatTool(employeeId: number): AnyPiTool {
           .map(toMessageBrief),
       });
     },
+  };
+}
+
+/**
+ * Read a slice of a chat in conversation order (after `after`, defaults to the
+ * beginning) up to `MAX_FULL_CHAT_MESSAGES`, paging the per-id query so a huge
+ * chat is never loaded in one shot. When the cap is reached with messages still
+ * remaining, `hasMore` is true and `nextAfter` is the last returned id — pass it
+ * back as `after` to continue.
+ */
+function listWholeChat(
+  chatId: number,
+  after: number,
+): { messages: Message[]; hasMore: boolean; nextAfter: number | null } {
+  const messages: Message[] = [];
+  let cursor = after;
+  while (messages.length < MAX_FULL_CHAT_MESSAGES) {
+    const page = dbMessages.listMessagesAfter(
+      chatId,
+      cursor,
+      Math.min(200, MAX_FULL_CHAT_MESSAGES - messages.length),
+    );
+    if (page.length === 0) break;
+    messages.push(...page);
+    cursor = page[page.length - 1].id;
+    if (page.length < 200) break;
+  }
+  const hasMore =
+    messages.length >= MAX_FULL_CHAT_MESSAGES &&
+    dbMessages.listMessagesAfter(chatId, cursor, 1).length > 0;
+  return {
+    messages,
+    hasMore,
+    nextAfter: hasMore ? messages[messages.length - 1].id : null,
   };
 }
 
@@ -1155,6 +1255,6 @@ export function createTeamToolDefinitions(
     }
   }
   tools.push(sendMessageTool(env));
-  tools.push(readChatTool(employeeId));
+  tools.push(readChatTool(employeeId, chatId));
   return tools;
 }

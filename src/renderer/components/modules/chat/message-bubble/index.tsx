@@ -5,7 +5,8 @@ import { t } from "@shared/l10n";
 import type { MessageAttachment } from "@shared/types";
 import { useState } from "react";
 import { cls } from "reactutils";
-import { IconFile, IconFolder } from "../../../icons";
+import { appStore } from "../../../../app-store";
+import { IconChat, IconFile, IconFolder } from "../../../icons";
 import { Markdown } from "../../../markdown";
 import {
   IMAGE_PREVIEW_ENABLED,
@@ -134,6 +135,28 @@ export function MessageBubble({
     }
   };
 
+  // A chat attachment is a reference, not a file: clicking it opens the
+  // referenced conversation instead of revealing anything on disk. Root chats
+  // open in the Chat module; a (defensively handled) group chat opens as a Nav
+  // entry. A missing referenced chat surfaces the same inline error slot.
+  const openConversation = async (chatId: number): Promise<void> => {
+    setRevealError(null);
+    try {
+      const summary = await imb.chats.summary(chatId);
+      if (!summary) {
+        setRevealError(t("Conversation unavailable"));
+        return;
+      }
+      if (summary.fromChatId === null) {
+        await appStore.focusChat(summary.id);
+      } else {
+        appStore.openChat(summary);
+      }
+    } catch (err) {
+      setRevealError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   return (
     <div className={cls("imb-msg", self ? "imb-self" : "imb-other")}>
       {avatar}
@@ -150,28 +173,44 @@ export function MessageBubble({
             {(chips.length > 0 || hidden > 0) && (
               <div className="imb-bubble-chips">
                 {chips.map(({ attachment, index }) => {
+                  const chatId =
+                    attachment.kind === "chat" &&
+                    typeof attachment.chatId === "number"
+                      ? attachment.chatId
+                      : null;
                   const hasPath =
                     typeof attachment.path === "string" &&
                     attachment.path.length > 0;
+                  const clickable = chatId !== null || hasPath;
                   return (
                     <button
                       key={`${attachment.name}-${attachment.size}-${index}`}
                       type="button"
                       className={cls(
                         "imb-bubble-chip",
-                        !hasPath && "imb-bubble-chip-static",
+                        !clickable && "imb-bubble-chip-static",
                       )}
-                      aria-disabled={!hasPath}
+                      aria-disabled={!clickable}
                       title={
-                        hasPath
-                          ? attachment.kind === "folder"
-                            ? t("Open folder")
-                            : t("Show in folder")
-                          : t("File location is unavailable.")
+                        chatId !== null
+                          ? t("Open conversation")
+                          : hasPath
+                            ? attachment.kind === "folder"
+                              ? t("Open folder")
+                              : t("Show in folder")
+                            : t("File location is unavailable.")
                       }
-                      onClick={hasPath ? () => void reveal(index) : undefined}
+                      onClick={
+                        chatId !== null
+                          ? () => void openConversation(chatId)
+                          : hasPath
+                            ? () => void reveal(index)
+                            : undefined
+                      }
                     >
-                      {attachment.kind === "folder" ? (
+                      {chatId !== null ? (
+                        <IconChat className="imb-icon imb-sm" />
+                      ) : attachment.kind === "folder" ? (
                         <IconFolder className="imb-icon imb-sm" />
                       ) : (
                         <IconFile className="imb-icon imb-sm" />
@@ -180,9 +219,11 @@ export function MessageBubble({
                         {attachment.name}
                       </span>
                       <span className="imb-bubble-chip-size">
-                        {attachment.kind === "folder"
-                          ? t("Folder")
-                          : formatSize(attachment.size)}
+                        {chatId !== null
+                          ? t("Conversation")
+                          : attachment.kind === "folder"
+                            ? t("Folder")
+                            : formatSize(attachment.size)}
                       </span>
                     </button>
                   );

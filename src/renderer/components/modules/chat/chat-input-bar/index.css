@@ -292,3 +292,63 @@
   color: var(--imb-muted);
   font-size: var(--imb-text-xs);
 }
+
+/* Conversation picker (attach menu → Conversation): choose one root chat to
+   attach by reference. The list scrolls; rows reuse the list-row affordance. */
+.imb-chat-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 10px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.imb-chat-picker-empty {
+  padding: 24px 8px;
+  text-align: center;
+  color: var(--imb-muted);
+  font-size: var(--imb-text-sm);
+}
+
+.imb-chat-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--imb-fg);
+  transition: background var(--imb-motion-fast);
+}
+
+.imb-chat-picker-item:hover {
+  background: var(--imb-bg);
+}
+
+.imb-chat-picker-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.imb-chat-picker-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--imb-text-sm);
+}
+
+.imb-chat-picker-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--imb-muted);
+  font-size: var(--imb-text-xs);
+}

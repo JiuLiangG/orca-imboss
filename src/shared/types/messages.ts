@@ -36,10 +36,18 @@ export interface MessageAttachment {
    */
   path?: string;
   /**
-   * `"folder"` for a directory attachment; absent means a regular file. When a
-   * folder is chosen from the picker, `size` is `0` and `type` is `"folder"`.
+   * `"folder"` for a directory attachment, `"chat"` for a reference to an
+   * existing conversation; absent means a regular file. When a folder is chosen
+   * from the picker, `size` is `0` and `type` is `"folder"`; a chat attachment
+   * carries `size` `0`, `type` `"chat"` and a `chatId` (no `path`).
    */
-  kind?: "file" | "folder";
+  kind?: "file" | "folder" | "chat";
+  /**
+   * Referenced conversation id; only set when `kind` is `"chat"`. The agent
+   * reads it in full with `imb_read_chat` (`full: true`); it is never a
+   * filesystem path.
+   */
+  chatId?: number;
 }
 
 /** Row of the `messages` table, ordered per chat by `created_at`. */

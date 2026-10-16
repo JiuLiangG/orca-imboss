@@ -3,7 +3,11 @@ import {
   MAX_USER_ATTACHMENTS,
 } from "@shared/constants/attachments";
 import { t } from "@shared/l10n";
-import type { CommonProject, MessageAttachment } from "@shared/types";
+import type {
+  ChatSummary,
+  CommonProject,
+  MessageAttachment,
+} from "@shared/types";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cls } from "reactutils";
@@ -19,14 +23,20 @@ import { useDropdownPosition } from "../../../../hooks/use-dropdown-position";
 import { useEscapeKey } from "../../../../hooks/use-escape-key";
 import {
   IconAttach,
+  IconChat,
   IconFile,
   IconFolder,
   IconImage,
   IconSend,
 } from "../../../icons";
+import { Avatar } from "../../../avatar";
+import { useMentionResolver } from "../../../markdown/use-mention";
+import { Modal } from "../../../modal";
+import { SearchInput } from "../../../search-input";
 import { Textarea } from "../../../textarea";
 import { Tooltip } from "../../../tooltip";
 import "./index.css";
+import { displayTitle, previewText } from "../relative-time";
 import { MentionPopup } from "./mention-popup";
 
 export interface ChatInputBarProps {
@@ -122,6 +132,11 @@ export function ChatInputBar({
   // Common projects: loaded when the attach menu opens and rendered as flat
   // menu items alongside Image / File / Folder.
   const [projects, setProjects] = useState<CommonProject[]>([]);
+  // Conversation picker: root chats selectable as `kind: "chat"` attachments.
+  const [chatPickerOpen, setChatPickerOpen] = useState(false);
+  const [chatQuery, setChatQuery] = useState("");
+  const [chatOptions, setChatOptions] = useState<ChatSummary[]>([]);
+  const [chatPickerError, setChatPickerError] = useState<string | null>(null);
 
   // Mention state
   const [mentionOpen, setMentionOpen] = useState(false);
@@ -141,6 +156,9 @@ export function ChatInputBar({
         String(e.id).includes(q),
     );
   }, [mentionOpen, mentionQuery, allEmployees]);
+  // Same plain-text previews as the chat list: `@<id>` mentions resolve to
+  // employee names (non-interactive, exactly like the list rows).
+  const { resolveMention } = useMentionResolver(chatId, false);
   const popupRef = useRef<HTMLDivElement>(null);
   const popupMenuRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -227,6 +245,40 @@ export function ChatInputBar({
       document.removeEventListener("scroll", reposition, true);
     };
   }, [popupOpen, positionPanel]);
+
+  // Load the attachable conversations whenever the picker opens, so a chat
+  // created since the last open is selectable without remounting the composer.
+  useEffect(() => {
+    if (!chatPickerOpen) return;
+    let alive = true;
+    void imb.chats
+      .summaries()
+      .then((list) => {
+        if (alive) setChatOptions(list);
+      })
+      .catch((err) => {
+        if (!alive) return;
+        setChatOptions([]);
+        setChatPickerError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [chatPickerOpen]);
+
+  // Attachable conversations: local root chats only — no task groups, no
+  // platform-bridged chats, and never the chat being composed (self-attach).
+  const chatCandidates = useMemo(() => {
+    const q = chatQuery.trim().toLowerCase();
+    return chatOptions
+      .filter(
+        (chat) =>
+          chat.fromChatId === null &&
+          chat.source === null &&
+          chat.id !== chatId,
+      )
+      .filter((chat) => q.length === 0 || chat.title.toLowerCase().includes(q));
+  }, [chatOptions, chatQuery, chatId]);
 
   const send = (): void => {
     const value = text.trim();
@@ -337,6 +389,38 @@ export function ChatInputBar({
       }
     }
     setPopupOpen(false);
+  };
+
+  /**
+   * Attach an existing conversation as a `kind: "chat"` chip (a reference, not
+   * a file). Deduped and capped like every other attachment; the title is
+   * snapshotted now so a later rename cannot desync the chip label.
+   */
+  const attachChat = (chat: ChatSummary): void => {
+    setChatPickerOpen(false);
+    const live = appStore.chatDrafts[chatId]?.attachments ?? [];
+    if (
+      live.some(
+        (item) =>
+          item.attachment.kind === "chat" && item.attachment.chatId === chat.id,
+      )
+    ) {
+      setNotice(t("Conversation already attached."));
+      return;
+    }
+    if (capCount(1) === 0) return;
+    commitPending([
+      {
+        id: nextAttachmentId(),
+        attachment: {
+          name: displayTitle(chat.title),
+          size: 0,
+          type: "chat",
+          kind: "chat",
+          chatId: chat.id,
+        },
+      },
+    ]);
   };
 
   const addFiles = (files: readonly File[] | null): void => {
@@ -680,7 +764,9 @@ export function ChatInputBar({
                       <img src={item.previewUrl} alt={item.attachment.name} />
                     ) : (
                       <div className="imb-file-icon-placeholder">
-                        {item.attachment.kind === "folder" ? (
+                        {item.attachment.kind === "chat" ? (
+                          <IconChat />
+                        ) : item.attachment.kind === "folder" ? (
                           <IconFolder />
                         ) : (
                           <IconFile />
@@ -801,6 +887,20 @@ export function ChatInputBar({
                     <IconFolder />
                     <span>{t("Folder")}</span>
                   </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="imb-attach-popup-item"
+                    onClick={() => {
+                      setPopupOpen(false);
+                      setChatQuery("");
+                      setChatPickerError(null);
+                      setChatPickerOpen(true);
+                    }}
+                  >
+                    <IconChat />
+                    <span>{t("Conversation")}</span>
+                  </button>
                   {/* Common projects: flat items at the same level as
                       Image/File/Folder, behind the separator. Nothing (not
                       even the separator) renders when none is configured. */}
@@ -864,6 +964,51 @@ export function ChatInputBar({
           e.target.value = "";
         }}
       />
+      <Modal
+        open={chatPickerOpen}
+        onClose={() => setChatPickerOpen(false)}
+        title={t("Conversation")}
+        sub={t("Select a conversation to attach")}
+        error={chatPickerError}
+      >
+        <SearchInput
+          value={chatQuery}
+          onValueChange={setChatQuery}
+          placeholder={t("Search chats")}
+        />
+        <div className="imb-chat-picker-list">
+          {chatCandidates.length === 0 ? (
+            <div className="imb-chat-picker-empty">
+              {t("No conversations found.")}
+            </div>
+          ) : (
+            chatCandidates.map((chat) => {
+              const title = displayTitle(chat.title);
+              const preview = previewText(
+                chat.preview ?? "",
+                80,
+                resolveMention,
+              );
+              return (
+                <button
+                  key={chat.id}
+                  type="button"
+                  className="imb-chat-picker-item"
+                  onClick={() => attachChat(chat)}
+                >
+                  <Avatar letter={title.slice(0, 1)} name={title} size={30} />
+                  <span className="imb-chat-picker-text">
+                    <span className="imb-chat-picker-title">{title}</span>
+                    {preview.length > 0 && (
+                      <span className="imb-chat-picker-preview">{preview}</span>
+                    )}
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

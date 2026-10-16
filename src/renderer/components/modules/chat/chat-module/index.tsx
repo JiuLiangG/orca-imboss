@@ -42,6 +42,7 @@ import { ChatInputBar } from "../chat-input-bar";
 import { CHAT_MUTE_ENABLED, MuteGlyph, chatMuteMenuItem } from "../chat-mute";
 import { MessageItem } from "../message-item";
 import {
+  displayTitle,
   formatChatTime,
   previewText,
   shouldShowTimeSeparator,
@@ -63,15 +64,6 @@ const CHAT_ROW_ESTIMATE = 90;
 /** Stable props for the virtualized chat list (see `VirtualList`). */
 const chatItemKey = (chat: ChatSummary): number => chat.id;
 const chatRowEstimate = (): number => CHAT_ROW_ESTIMATE;
-
-/**
- * Chat title for display: untitled chats fall back to the localized default
- * at render time (the DB stores `""` for a new chat, so the fallback follows
- * locale switches — unlike a title baked in at creation time).
- */
-function displayTitle(title: string): string {
-  return title.trim().length > 0 ? title : t("New Chat");
-}
 
 /** Transient per-chat run status driven by bound agent events. */
 interface ChatRunStatus {

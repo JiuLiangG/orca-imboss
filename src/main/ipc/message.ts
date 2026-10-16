@@ -102,7 +102,12 @@ export function registerMessageHandlers(): void {
 function resolveAttachment(
   messageId: unknown,
   index: unknown,
-): { name: string; type: string; path?: string; kind?: "file" | "folder" } {
+): {
+  name: string;
+  type: string;
+  path?: string;
+  kind?: "file" | "folder" | "chat";
+} {
   const safeId = assertInteger(messageId, "message id");
   const safeIndex = assertInteger(index, "attachment index");
   if (safeIndex < 0) {

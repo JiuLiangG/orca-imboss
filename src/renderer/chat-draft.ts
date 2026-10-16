@@ -60,8 +60,19 @@ export function toPlainAttachment(
   if (typeof attachment.path === "string" && attachment.path.length > 0) {
     plain.path = attachment.path;
   }
-  if (attachment.kind === "file" || attachment.kind === "folder") {
+  if (
+    attachment.kind === "file" ||
+    attachment.kind === "folder" ||
+    attachment.kind === "chat"
+  ) {
     plain.kind = attachment.kind;
+  }
+  if (
+    typeof attachment.chatId === "number" &&
+    Number.isSafeInteger(attachment.chatId) &&
+    attachment.chatId > 0
+  ) {
+    plain.chatId = attachment.chatId;
   }
   return plain;
 }

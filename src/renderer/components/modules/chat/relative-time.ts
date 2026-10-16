@@ -6,6 +6,7 @@
  * the full timestamp instead (no relative logic).
  */
 
+import { t } from "@shared/l10n";
 import type { Message } from "@shared/types";
 import { replaceMentions } from "../../markdown/mention";
 import { toPlainText } from "../../markdown/plain-text";
@@ -110,6 +111,16 @@ export function formatMessageTime(secs: number, locale: string): string {
     return `${date.getMonth() + 1}月${date.getDate()}日 ${hh}:${mm}`;
   }
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${hh}:${mm}`;
+}
+
+/**
+ * Chat title for display: untitled chats fall back to the localized default at
+ * render time (the DB stores `""` for a new chat, so the fallback follows
+ * locale switches). Shared by the chat list and the composer's conversation
+ * picker so both show the same title and derived letter avatar.
+ */
+export function displayTitle(title: string): string {
+  return title.trim().length > 0 ? title : t("New Chat");
 }
 
 /** Truncate a long preview for the chat list (fixed max width, CSS ellipsis). */
