@@ -4,6 +4,7 @@ import {
   SPEND_RANGES,
   SPEND_RANGE_LABELS,
 } from "@shared/constants/spend";
+import { TAG_FILTER_NONE } from "@shared/constants/tags";
 import { t } from "@shared/l10n";
 import type { SpendGrouping, SpendRange, SpendReport } from "@shared/types";
 import { useEffect, useState } from "react";
@@ -128,12 +129,17 @@ export function SpendModule(): React.JSX.Element {
   if (report !== null) {
     if (spendGrouping === "chat") {
       // The total row keeps the grand total; only the conversation rows below
-      // it are narrowed by the (AND) tag filter.
+      // it are narrowed by the (AND) tag filter. The "No tags" pseudo-value
+      // matches conversations with no tag at all.
       const visibleChats =
         tagFilter.length === 0
           ? report.chats
           : report.chats.filter((chat) =>
-              tagFilter.every((tag) => chat.tags.includes(tag)),
+              tagFilter.every((tag) =>
+                tag === TAG_FILTER_NONE
+                  ? chat.tags.length === 0
+                  : chat.tags.includes(tag),
+              ),
             );
       // "全部对话" is the default-selected first row (no subtitle).
       entries.push({
@@ -218,6 +224,7 @@ export function SpendModule(): React.JSX.Element {
               className="imb-spend-tag-filter"
               value={tagFilter}
               options={tagOptions}
+              allowNoTag
               placeholder={t("Filter by tags")}
               onChange={setTagFilter}
             />

@@ -19,4 +19,10 @@ export interface PageQuery {
    * result must carry **every** listed tag (AND). Empty/absent = no tag filter.
    */
   tags?: string[];
+  /**
+   * Server-side "no tags at all" filter (currently honored by
+   * `chats:summariesPage`): the result must have no row in `chat_tags`.
+   * Absent/false = no such restriction; composes with `tags` via AND.
+   */
+  noTags?: boolean;
 }

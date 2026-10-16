@@ -11,6 +11,19 @@ export const MAX_TAG_LENGTH = 50;
 export const MAX_TAGS_PER_CHAT = 20;
 
 /**
+ * Pseudo-value of the "No tags" option inside a tag **filter** (never a real
+ * tag). Stored in the same `string[]` as the selected concrete tags so the
+ * existing filter plumbing (`length > 0`, reset keys, clear-all) needs no
+ * special case; consumers strip it and translate it to a dedicated predicate
+ * (`PageQuery.noTags` on the server, `chat.tags.length === 0` in spend).
+ *
+ * `""` is safe as a sentinel because a real tag can never be blank:
+ * `normalizeTag()` / `parsePageQuery()` both drop whitespace-only values, and
+ * the filter state itself never passes through normalization.
+ */
+export const TAG_FILTER_NONE = "";
+
+/**
  * Normalize a raw tag the user typed: collapse control characters and runs of
  * whitespace, then trim and cap the length. Case is preserved on purpose —
  * `Work` and `work` are two distinct tags.

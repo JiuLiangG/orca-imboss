@@ -170,6 +170,15 @@ export function listChatSummariesPage(
     params.push(...tagFilter, tagFilter.length);
   }
 
+  // "No tags" filter: chats with no row in chat_tags at all. A fixed
+  // predicate like the tag AND above — appended last, never part of the
+  // keyset cursor, so pagination stays stable.
+  if (page.noTags) {
+    conditions.push(
+      "NOT EXISTS (SELECT 1 FROM chat_tags nt WHERE nt.chat_id = c.id)",
+    );
+  }
+
   const rows = db
     .prepare(
       `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,

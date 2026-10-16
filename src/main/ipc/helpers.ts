@@ -61,5 +61,11 @@ export function parsePageQuery(value: unknown): PageQuery {
     }
     if (tags.length > 0) page.tags = tags;
   }
+  if (record["noTags"] !== undefined && record["noTags"] !== null) {
+    if (typeof record["noTags"] !== "boolean") {
+      throw new Error("noTags must be a boolean.");
+    }
+    if (record["noTags"]) page.noTags = true;
+  }
   return page;
 }

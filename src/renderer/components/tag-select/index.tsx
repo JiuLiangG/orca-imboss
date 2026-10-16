@@ -1,4 +1,8 @@
-import { MAX_TAGS_PER_CHAT, normalizeTag } from "@shared/constants/tags";
+import {
+  MAX_TAGS_PER_CHAT,
+  normalizeTag,
+  TAG_FILTER_NONE,
+} from "@shared/constants/tags";
 import { t } from "@shared/l10n";
 import { useMemo } from "react";
 import { MultiSelect } from "../multi-select";
@@ -10,6 +14,14 @@ export interface TagSelectProps {
   onChange: (value: string[]) => void;
   /** Allow creating a new tag from the panel's filter text (editor mode). */
   allowCreate?: boolean;
+  /**
+   * Add a "No tags" pseudo-option at the top of the candidate list (filter
+   * mode only — editors must not offer it). Selecting it clears the selected
+   * concrete tags and vice versa (mutual exclusion), because the filters are
+   * AND-combined and mixing both would always match nothing. The option
+   * renders as plain `t("No tags")` text — no `#` prefix, no extra styling.
+   */
+  allowNoTag?: boolean;
   placeholder?: string;
   disabled?: boolean;
   noClear?: boolean;
@@ -29,6 +41,7 @@ export function TagSelect({
   options,
   onChange,
   allowCreate = false,
+  allowNoTag = false,
   placeholder = "",
   disabled = false,
   noClear = false,
@@ -36,21 +49,56 @@ export function TagSelect({
   id,
 }: TagSelectProps): React.JSX.Element {
   // A just-created tag may not be in the (refetched) candidate list yet; merge
-  // the selected values in so their chips always render.
+  // the selected values in so their chips always render. The "No tags" pseudo
+  // value is excluded here and re-injected exactly once below.
   const merged = useMemo(() => {
-    const missing = value.filter((tag) => !options.includes(tag));
-    return missing.length > 0 ? [...options, ...missing] : options;
-  }, [options, value]);
+    const missing = value.filter(
+      (tag) => tag !== TAG_FILTER_NONE && !options.includes(tag),
+    );
+    const base = missing.length > 0 ? [...options, ...missing] : options;
+    return allowNoTag ? [TAG_FILTER_NONE, ...base] : base;
+  }, [options, value, allowNoTag]);
   const multiOptions = useMemo(
-    () => merged.map((tag) => ({ value: tag, label: `#${tag}` })),
+    () =>
+      merged.map((tag) => ({
+        value: tag,
+        label: tag === TAG_FILTER_NONE ? t("No tags") : `#${tag}`,
+      })),
     [merged],
   );
+
+  /**
+   * Route every value change through here so the "No tags" pseudo-option and
+   * the concrete tags stay mutually exclusive (both directions):
+   * picking one side drops the other. Without `allowNoTag` this is a straight
+   * pass-through, so editor behaviour is unchanged.
+   */
+  function handleChange(next: string[]): void {
+    if (!allowNoTag) {
+      onChange(next);
+      return;
+    }
+    const hadNoTag = value.includes(TAG_FILTER_NONE);
+    const hasNoTag = next.includes(TAG_FILTER_NONE);
+    const real = next.filter((tag) => tag !== TAG_FILTER_NONE);
+    if (hasNoTag && !hadNoTag) {
+      // "No tags" just got picked → drop the concrete tags.
+      onChange([TAG_FILTER_NONE]);
+      return;
+    }
+    if (hasNoTag && hadNoTag && real.length > 0) {
+      // A concrete tag got picked while "No tags" was on → it replaces it.
+      onChange(real);
+      return;
+    }
+    onChange(next);
+  }
 
   function handleCreate(text: string): void {
     const tag = normalizeTag(text);
     if (tag.length === 0 || value.includes(tag)) return;
     if (value.length >= MAX_TAGS_PER_CHAT) return;
-    onChange([...value, tag]);
+    handleChange([...value, tag]);
   }
 
   return (
@@ -59,7 +107,7 @@ export function TagSelect({
       className={className}
       value={value}
       options={multiOptions}
-      onChange={onChange}
+      onChange={handleChange}
       searchable
       clearable={!noClear}
       searchPlaceholder={t("Search tags")}

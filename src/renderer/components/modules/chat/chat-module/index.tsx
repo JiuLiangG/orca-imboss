@@ -1,5 +1,6 @@
 import { ASSISTANT_ID } from "@shared/constants/employees";
 import { INTEGRATION_LABEL_KEYS } from "@shared/constants/integrations";
+import { TAG_FILTER_NONE } from "@shared/constants/tags";
 import { getLocale, t } from "@shared/l10n";
 import type {
   AgentStreamEvent,
@@ -170,9 +171,23 @@ export function ChatModule(): React.JSX.Element {
   // `params`) so the result set and pagination stay exact even with an empty
   // query. `useInfiniteList` is always mounted but short-circuits to an empty
   // page when neither is active.
-  const tagFilterKey = [...tagFilter].sort().join("\u0000");
   const isSearching = debouncedQuery.trim().length > 0;
   const serverMode = isSearching || tagFilter.length > 0;
+  // Split the "No tags" pseudo-value out of the filter: it travels as a
+  // dedicated boolean (never inside `tags[]`, which the server normalizes).
+  const noTagFilter = tagFilter.includes(TAG_FILTER_NONE);
+  const concreteTags = tagFilter.filter((tag) => tag !== TAG_FILTER_NONE);
+  // Stable reset key for the tag filter. The "No tags" pseudo-value is an
+  // empty string, so a plain `[...tagFilter].sort().join()` would produce ""
+  // for both "no filter" and the no-tag-only filter — `paramsKey` would not
+  // change on selection, `useInfiniteList` would never re-fetch, and the
+  // freshly-entered server mode would render the previous (empty) item list.
+  // Tag the no-flag explicitly with \u0001 (real tags can never contain control
+  // characters — `normalizeTag` strips them), keeping "" as the no-filter key.
+  const tagFilterKey =
+    concreteTags.length > 0 || noTagFilter
+      ? `${[...concreteTags].sort().join("\u0000")}\u0001${noTagFilter ? "1" : "0"}`
+      : "";
   // Force the virtualized list to remount (fresh measurement cache) whenever
   // its data source changes — the browse cache vs a server-paged search/tag
   // filter. Without this, clearing a filter swaps the item list in place while
@@ -194,7 +209,10 @@ export function ChatModule(): React.JSX.Element {
   const search = useInfiniteList(fetchPage, {
     query: debouncedQuery,
     pageSize: PAGE_SIZE,
-    params: tagFilter.length > 0 ? { tags: tagFilter } : undefined,
+    params:
+      tagFilter.length > 0
+        ? { tags: concreteTags, noTags: noTagFilter }
+        : undefined,
     paramsKey: tagFilterKey,
   });
 
@@ -752,6 +770,7 @@ export function ChatModule(): React.JSX.Element {
             className="imb-chat-tag-filter"
             value={tagFilter}
             options={tagOptions}
+            allowNoTag
             placeholder={t("Filter by tags")}
             onChange={setTagFilter}
           />
