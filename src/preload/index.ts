@@ -261,7 +261,11 @@ const api = {
       ipcRenderer.invoke("chats:delete", id) as Promise<boolean>,
     /** Replace one conversation's tags; returns the refreshed summary. */
     setTags: (id: number, tags: string[]) =>
-      ipcRenderer.invoke("chats:setTags", id, tags) as Promise<ChatSummary | null>,
+      ipcRenderer.invoke(
+        "chats:setTags",
+        id,
+        tags,
+      ) as Promise<ChatSummary | null>,
     /** Merge tags into a conversation's existing ones; returns the summary. */
     addTags: (id: number, tags: string[]) =>
       ipcRenderer.invoke(
@@ -283,6 +287,18 @@ const api = {
      * dropped when they reach the renderer.
      */
     list: () => ipcRenderer.invoke("projects:list") as Promise<CommonProject[]>,
+  },
+
+  imageGen: {
+    /**
+     * Redraw an image message with the prompt it already carries
+     * (`IMAGE_GENERATION_ENABLED`); resolves to the updated message.
+     */
+    reroll: (messageId: number) =>
+      ipcRenderer.invoke(
+        "imageGen:reroll",
+        messageId,
+      ) as Promise<Message | null>,
   },
 
   messages: {

@@ -36,8 +36,12 @@ import * as dbEmployees from "../db/employees";
 import * as dbMessages from "../db/messages";
 import * as dbReadCursors from "../db/read-cursors";
 import * as dbSessions from "../db/sessions";
-import { savePastedFile } from "../attachments";
-import { generateImage, getImageModelRef, imageModelRef } from "../image-gen";
+import {
+  drawIntoImageMessage,
+  getImageModelRef,
+  imageModelRef,
+  normalizeImageSize,
+} from "../image-gen";
 import { readMcpServers } from "../mcp-store";
 import { notifyUnread, sendToRenderer } from "../notifications";
 import { materializeSessionFile, sessionPathFor } from "./session-files";
@@ -1225,11 +1229,6 @@ function askTool(env: AgentEnvironment): AnyPiTool {
  *   marker is present in `mcp`. Employees have no structured ask/answer
  *   tools — they exchange questions and answers as plain text messages.
  */
-/** Default output size when the caller does not ask for one. */
-const DEFAULT_IMAGE_SIZE = "1024x1024";
-/** `"<width>x<height>"`, the shape every OpenAI-compatible endpoint takes. */
-const IMAGE_SIZE_RE = /^\d{2,5}x\d{2,5}$/;
-
 /**
  * `imb_generate_image` — generate a picture and show it in the chat.
  *
@@ -1309,41 +1308,21 @@ async function performGenerateImage(
   );
 
   try {
-    const image = await generateImage(ref, input.prompt, size);
-    const attachment = savePastedFile(
-      input.chatId,
-      imageFileName(image.mime),
-      image.mime,
-      image.bytes,
+    const finished = await drawIntoImageMessage(
+      placeholder.id,
+      ref,
+      input.prompt,
+      size,
     );
-    dbMessages.updateImageGeneration(placeholder.id, {
-      status: "done",
-      attachment,
-      imageModel: imageModelRef(ref),
-    });
     return toolResult({
       messageId: placeholder.id,
-      path: attachment.path ?? null,
+      path: finished?.attachments?.[0]?.path ?? null,
     });
   } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
-    // Leave a visible failure instead of a placeholder that shimmers forever.
-    dbMessages.updateImageGeneration(placeholder.id, { status: "error" });
-    throw new Error(reason);
+    // `drawIntoImageMessage` already marked the row; just report the reason so
+    // the agent can tell the boss what went wrong.
+    throw new Error(err instanceof Error ? err.message : String(err));
   }
-}
-
-/** Keep the requested size sane; anything else falls back to the default. */
-function normalizeImageSize(value: string | undefined): string {
-  const trimmed = (value ?? "").trim();
-  return IMAGE_SIZE_RE.test(trimmed) ? trimmed : DEFAULT_IMAGE_SIZE;
-}
-
-/** Attachment file name for a generated picture (extension from its MIME). */
-function imageFileName(mime: string): string {
-  const ext =
-    mime === "image/jpeg" ? "jpg" : mime === "image/webp" ? "webp" : "png";
-  return `imboss-image-${Date.now()}.${ext}`;
 }
 
 export function createTeamToolDefinitions(

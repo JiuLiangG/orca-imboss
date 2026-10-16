@@ -1,6 +1,8 @@
 import { SettingKeys } from "@shared/constants/settings";
-import type { ProviderApiType } from "@shared/types";
+import type { Message, ProviderApiType } from "@shared/types";
 import { listProviders, revealProviderKey } from "./agent/providers";
+import { savePastedFile } from "./attachments";
+import * as dbMessages from "./db/messages";
 import { getSetting } from "./db/settings";
 
 /**
@@ -268,4 +270,100 @@ function errorDetail(body: string): string {
 
 function trimBase(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "");
+}
+
+/** Default output size when the caller does not ask for one. */
+export const DEFAULT_IMAGE_SIZE = "1024x1024";
+/** `"<width>x<height>"`, the shape every OpenAI-compatible endpoint takes. */
+const IMAGE_SIZE_RE = /^\d{2,5}x\d{2,5}$/;
+
+/** Keep a requested size sane; anything else falls back to the default. */
+export function normalizeImageSize(value: string | undefined): string {
+  const trimmed = (value ?? "").trim();
+  return IMAGE_SIZE_RE.test(trimmed) ? trimmed : DEFAULT_IMAGE_SIZE;
+}
+
+/** Attachment file name for a generated picture (extension from its MIME). */
+function imageFileName(mime: string): string {
+  const ext =
+    mime === "image/jpeg" ? "jpg" : mime === "image/webp" ? "webp" : "png";
+  return `imboss-image-${Date.now()}.${ext}`;
+}
+
+/**
+ * Draw `prompt` into an image message that is already in its `generating`
+ * state. Shared by the tool (which appends the placeholder first) and by the
+ * boss's re-roll (which reuses a finished row).
+ *
+ * A failure keeps whatever picture the row already had: a re-roll that fails
+ * must not destroy the picture the boss is looking at, so the row goes back to
+ * `done` and the caller surfaces the reason instead.
+ */
+export async function drawIntoImageMessage(
+  messageId: number,
+  ref: ImageModelRef,
+  prompt: string,
+  size: string,
+): Promise<Message | null> {
+  const previous = dbMessages.getMessageById(messageId);
+  try {
+    const image = await generateImage(ref, prompt, size);
+    const message = dbMessages.getMessageById(messageId);
+    if (message === null) return null;
+    const attachment = savePastedFile(
+      message.chatId,
+      imageFileName(image.mime),
+      image.mime,
+      image.bytes,
+    );
+    return dbMessages.updateImageGeneration(messageId, {
+      status: "done",
+      attachment,
+      imageModel: imageModelRef(ref),
+    });
+  } catch (err) {
+    dbMessages.updateImageGeneration(messageId, {
+      status: hasPicture(previous) ? "done" : "error",
+    });
+    throw err;
+  }
+}
+
+/** True when the row already carries a picture. */
+function hasPicture(message: Message | null): boolean {
+  const path = message?.attachments?.[0]?.path;
+  return typeof path === "string" && path.length > 0;
+}
+
+/**
+ * Re-roll a finished (or failed) image message with the prompt it already
+ * carries — the boss's "draw it again". The row goes back to `generating`, so
+ * the chat shows the placeholder again until the new picture lands.
+ */
+export async function rerollImageMessage(
+  messageId: number,
+): Promise<Message | null> {
+  const message = dbMessages.getMessageById(messageId);
+  if (message === null) return null;
+  if (message.kind !== "image") {
+    throw new Error("Only image messages can be redrawn.");
+  }
+  const ref = getImageModelRef();
+  if (ref === null) {
+    throw new Error(
+      "No image model is configured. Choose one under Settings › Providers › Image generation model.",
+    );
+  }
+  if (
+    dbMessages.updateImageGeneration(messageId, { status: "generating" }) ===
+    null
+  ) {
+    return null;
+  }
+  return drawIntoImageMessage(
+    messageId,
+    ref,
+    message.content,
+    DEFAULT_IMAGE_SIZE,
+  );
 }

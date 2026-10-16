@@ -18,12 +18,16 @@ import "./index.css";
  * swapped for the picture without a second channel — and the picture animates
  * in, which is the whole transition.
  *
- * The picture is rendered here rather than through the bubble's image stack:
- * a generated picture is a single, deliberate artefact, so it gets a larger
- * frame of its own (still click-to-enlarge through the shared viewer).
+ * A finished picture offers **Regenerate**: it redraws with the prompt the row
+ * already carries (`imageGen:reroll`), which puts the row back into
+ * `generating` — so the same placeholder-and-swap path runs again. A re-roll
+ * that fails keeps the picture that was already there and reports why here; a
+ * prompt that needs changing is simply typed in the composer, so this button
+ * never edits it.
  *
- * The prompt stays visible under the picture: it is what a re-roll would reuse,
- * and it is the only record of what was asked for.
+ * The picture is rendered here rather than through the bubble's image stack: a
+ * generated picture is a single, deliberate artefact, so it gets a larger frame
+ * of its own (still click-to-enlarge through the shared viewer).
  */
 export function ImageMessage({
   message,
@@ -34,6 +38,7 @@ export function ImageMessage({
 }): React.JSX.Element | null {
   const [origin, setOrigin] = useState<DOMRect | null>(null);
   const [zoomed, setZoomed] = useState(false);
+  const [rerollError, setRerollError] = useState<string | null>(null);
 
   if (!IMAGE_GENERATION_ENABLED) return null;
 
@@ -46,6 +51,15 @@ export function ImageMessage({
     path.length > 0;
   const failed = message.imageStatus === "error";
   const src = done ? toImbFileUrl(path) : "";
+
+  const reroll = async (): Promise<void> => {
+    setRerollError(null);
+    try {
+      await imb.imageGen.reroll(message.id);
+    } catch (err) {
+      setRerollError(reasonOf(err));
+    }
+  };
 
   return (
     <div
@@ -94,6 +108,51 @@ export function ImageMessage({
         </div>
       )}
       <p className="imb-image-gen-prompt">{message.content}</p>
+      {(done || failed) && (
+        <button
+          type="button"
+          className="imb-image-gen-reroll"
+          onClick={() => void reroll()}
+        >
+          <RefreshGlyph />
+          {t("Regenerate")}
+        </button>
+      )}
+      {rerollError !== null && (
+        <p className="imb-image-gen-error" role="alert">
+          {rerollError}
+        </p>
+      )}
     </div>
+  );
+}
+
+/**
+ * IPC rejections arrive wrapped ("Error invoking remote method …: Error: …");
+ * show the reason on its own.
+ */
+function reasonOf(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const marker = "Error: ";
+  const at = raw.lastIndexOf(marker);
+  return at >= 0 ? raw.slice(at + marker.length) : raw;
+}
+
+/** Small "draw it again" glyph (a circular arrow). */ function RefreshGlyph(): React.JSX.Element {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20 11a8 8 0 1 0-2.3 5.7" />
+      <path d="M20 5v6h-6" />
+    </svg>
   );
 }

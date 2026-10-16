@@ -111,6 +111,34 @@
   overflow-wrap: anywhere;
 }
 
+/* "Draw it again": redraws with the prompt already on the row. */
+.imb-image-gen-reroll {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-pill);
+  background: var(--imb-surface);
+  color: var(--imb-muted);
+  font-size: var(--imb-text-xs);
+  cursor: pointer;
+}
+
+.imb-image-gen-reroll:hover {
+  background: var(--imb-bg-2);
+  color: var(--imb-fg);
+}
+
+/* Why the last re-roll failed (the picture, if there was one, is kept). */
+.imb-image-gen-error {
+  margin: 0;
+  max-width: 240px;
+  font-size: var(--imb-text-xs);
+  color: var(--imb-danger);
+  overflow-wrap: anywhere;
+}
+
 /* Respect a reduced-motion preference: keep the slot, drop the motion. */
 @media (prefers-reduced-motion: reduce) {
   .imb-image-gen-figure {
