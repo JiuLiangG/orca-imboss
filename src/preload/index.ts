@@ -145,6 +145,8 @@ const api = {
       ipcRenderer.invoke("window:isMaximized") as Promise<boolean>,
     onMaximized: (cb: (maximized: boolean) => void) =>
       on<boolean>("window:maximized", cb),
+    /** Fired when the OS window regains focus (used to re-clear unread). */
+    onFocus: (cb: () => void) => on<undefined>("window:focus", cb),
   },
 
   theme: {

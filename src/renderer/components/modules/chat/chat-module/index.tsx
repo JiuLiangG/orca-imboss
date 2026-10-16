@@ -205,6 +205,14 @@ export function ChatModule(): React.JSX.Element {
   const listHasMore = serverMode ? search.hasMore : false;
   const listLoadingMore = serverMode ? search.loadingMore : false;
 
+  // Mirrors of the currently displayed list and its source, for the idempotent
+  // unread clear: it runs from event subscriptions that must stay stable, so it
+  // cannot close over the per-render `chats` / `serverMode` values directly.
+  const chatsRef = useRef<ChatSummary[]>(chats);
+  chatsRef.current = chats;
+  const serverModeRef = useRef(serverMode);
+  serverModeRef.current = serverMode;
+
   // Lazy-load the chat cache on first visit.
   useEffect(() => {
     appStore.ensureChats();
@@ -289,6 +297,45 @@ export function ChatModule(): React.JSX.Element {
       setError(err instanceof Error ? err.message : String(err));
     }
   }, []);
+
+  /**
+   * Mark `chatId` read and mirror the cleared counter into every list source:
+   * the browse cache (`setChatUnread`), and — when the visible list is a
+   * server-paged search / tag filter — the matching row in `search.items`
+   * (otherwise its badge would stay stale). Unconditional; callers either know
+   * the chat is unread or call the guarded {@link clearSelectedUnread}.
+   */
+  const applyUnreadCleared = useCallback(
+    (chatId: number): void => {
+      void imb.chats.markRead(chatId);
+      appStore.setChatUnread(chatId, 0);
+      if (serverModeRef.current) {
+        search.mutate((items) =>
+          items.map((c) => (c.id === chatId ? { ...c, unread: 0 } : c)),
+        );
+      }
+    },
+    [search.mutate],
+  );
+
+  /**
+   * Idempotent "selected ⇒ read": clear `chatId`'s unread only when it
+   * currently has some. Repeated calls (window focus, unread pushes, a no-op
+   * re-selection) are therefore cheap and never re-issue IPC. Used wherever a
+   * chat can become the displayed one *without* the `selectedId` effect running
+   * (e.g. regaining window focus, or a notification click landing on the chat
+   * that is already selected).
+   */
+  const clearSelectedUnread = useCallback(
+    (chatId: number | null): void => {
+      if (chatId === null) return;
+      const inCache = appStore.data.chats.items.find((c) => c.id === chatId);
+      const inList = chatsRef.current.find((c) => c.id === chatId);
+      if ((inCache?.unread ?? 0) <= 0 && (inList?.unread ?? 0) <= 0) return;
+      applyUnreadCleared(chatId);
+    },
+    [applyUnreadCleared],
+  );
 
   // Fold a bound agent stream event into the per-chat run status. Only run
   // start/end and compaction affect the UI; tool events and streamed deltas are
@@ -378,9 +425,8 @@ export function ChatModule(): React.JSX.Element {
         ? { chatId: selectedId, scrollTop: saved.scrollTop }
         : null;
     void loadMessages(selectedId);
-    void imb.chats.markRead(selectedId);
-    appStore.setChatUnread(selectedId, 0);
-  }, [selectedId, loadMessages]);
+    clearSelectedUnread(selectedId);
+  }, [selectedId, loadMessages, clearSelectedUnread]);
 
   // Switching chats abandons any in-progress rename and drops the optimistic
   // title (the new chat's title comes from its own summary).
@@ -443,20 +489,76 @@ export function ChatModule(): React.JSX.Element {
     if (focusChatId === null) return;
     if (!chats.some((chat) => chat.id === focusChatId)) return;
     selectChat(focusChatId);
+    // `selectChat` is a no-op when the target is already selected (React bails
+    // out on the identical state and the selectedId effect never re-runs), so
+    // clear its unread explicitly to cover the notification-click path that
+    // lands on the currently-open chat.
+    clearSelectedUnread(focusChatId);
     appStore.focusChatId = null;
-  }, [focusChatId, chats, selectChat]);
+  }, [focusChatId, chats, selectChat, clearSelectedUnread]);
 
   useEffect(() => {
-    const offMessages = imb.messages.onChanged(({ chatId }) => {
-      // Only the currently-open chat refreshes its thread. The notification
-      // beep is handled globally in app-store for any root chat, so it is no
-      // longer gated on this selection.
-      if (chatId !== selectedIdRef.current) return;
-      void imb.chats.markRead(chatId);
+    const offMessages = imb.messages.onChanged((payload) => {
+      const { chatId } = payload;
+      if (chatId !== selectedIdRef.current) {
+        // A background chat: keep the visible (server-paged) list's badge in
+        // sync, since `refreshChatSummary` only updates the browse cache. The
+        // +1 mirrors `appendMessage`'s unread rule (root chat, non-silent,
+        // employee/assistant sender) — the same rule app-store uses for the
+        // global beep.
+        if (
+          serverModeRef.current &&
+          payload.root &&
+          payload.senderEmployeeId !== null &&
+          !payload.silent
+        ) {
+          search.mutate((items) =>
+            items.map((c) =>
+              c.id === chatId ? { ...c, unread: c.unread + 1 } : c,
+            ),
+          );
+        }
+        return;
+      }
+      // The currently-open chat: refresh its thread and keep it read. The
+      // notification beep is handled globally in app-store for any root chat,
+      // so it is no longer gated on this selection.
+      applyUnreadCleared(chatId);
       void loadMessages(chatId);
     });
     return offMessages;
-  }, [loadMessages]);
+  }, [applyUnreadCleared, loadMessages, search.mutate]);
+
+  // Two paths that can leave the *already-selected* chat marked unread:
+  //  - the window regains focus (nothing changes on focus by itself), and
+  //  - an `imb_notify` bump arrives for the selected chat while it is open
+  //    (that path pushes only `chats:unreadChanged`, never `messages:changed`).
+  // Both clear it again; the clear is idempotent, so they are cheap no-ops in
+  // the common case. `chats:unreadChanged` additionally keeps the visible
+  // (server-paged) list's badge in sync with the browse cache for every chat.
+  useEffect(() => {
+    const offFocus = imb.windowControls.onFocus(() => {
+      clearSelectedUnread(selectedIdRef.current);
+    });
+    const offUnread = imb.chats.onUnreadChanged(({ chatId, unread }) => {
+      if (chatId === selectedIdRef.current) {
+        // The selected chat is read by definition; clear the stray bump.
+        if (unread > 0) applyUnreadCleared(chatId);
+        return;
+      }
+      // Any other chat: keep the visible (server-paged) list's badge in sync
+      // with the browse cache (the payload carries the authoritative count).
+      if (serverModeRef.current) {
+        search.mutate((items) =>
+          items.map((c) => (c.id === chatId ? { ...c, unread } : c)),
+        );
+      }
+    });
+    return () => {
+      offFocus();
+      offUnread();
+    };
+  }, [applyUnreadCleared, clearSelectedUnread, search.mutate]);
 
   const selectedRunStatus =
     selectedId !== null ? runStatus.get(selectedId) : undefined;
@@ -553,6 +655,9 @@ export function ChatModule(): React.JSX.Element {
       // list and its detail/input can be rendered.
       setQuery("");
       setSelectedId(chat.id);
+      // A brand-new chat has no unread, but run the same idempotent clear so
+      // every "selected ⇒ read" rendezvous goes through one path.
+      clearSelectedUnread(chat.id);
       // Reset the composer and focus the new chat's input.
       setFocusToken((token) => token + 1);
     } catch (err) {

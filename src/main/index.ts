@@ -191,6 +191,13 @@ function createWindow(): void {
     mainWindow.webContents.send("window:maximized", false),
   );
 
+  // Forward focus regain to the renderer: the chat module clears the selected
+  // conversation's unread again on focus, because an `imb_notify` bump while
+  // the window was in the background only pushes `chats:unreadChanged` (no
+  // `messages:changed`), so the selection never changes and the selectedId
+  // effect never runs again.
+  mainWindow.on("focus", () => mainWindow.webContents.send("window:focus"));
+
   mainWindow.on("close", () => saveWindowBounds(mainWindow));
 
   // Register the window for OS notification click-to-focus + jump-to-chat.
