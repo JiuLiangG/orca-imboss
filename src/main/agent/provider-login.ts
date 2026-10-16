@@ -5,15 +5,18 @@ import {
 } from "@shared/constants/providers";
 import type { ProviderLoginEvent } from "@shared/types";
 import { getModelRuntime } from "./model-runtime";
+import { installGrokBuildXaiLogin } from "./xai-device-login";
 
 type LoginInteraction = Parameters<ModelRuntime["login"]>[2];
 
 /**
  * Subscription sign-in for a built-in provider, driven by Pi's
  * `ModelRuntime.login`. The SDK writes the OAuth credential into
- * `auth.json` and refreshes its own auth snapshot. xAI's flow is device
- * code: the callback receives the user code and verification URL, then the
- * call stays pending until the user approves or `signal` aborts.
+ * `auth.json` and refreshes its own auth snapshot. The device-code request
+ * itself is grok-build's contract (see `xai-device-login.ts`): Pi's bundled
+ * login asks for fewer scopes and attributes the grant to Pi. The callback
+ * receives the user code and verification URL, then the call stays pending
+ * until the user approves or `signal` aborts.
  */
 export async function loginProviderSubscription(
   providerId: string,
@@ -24,6 +27,7 @@ export async function loginProviderSubscription(
     throw new Error("Subscription sign-in is only available for xAI.");
   }
   const runtime = await getModelRuntime();
+  installGrokBuildXaiLogin(runtime);
   const interaction: LoginInteraction = {
     signal,
     notify: (event) => {
