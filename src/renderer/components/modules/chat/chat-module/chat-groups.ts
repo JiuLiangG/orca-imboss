@@ -39,13 +39,17 @@ export function groupChatsByDate(
       continue;
     }
 
-    // Chat timestamp fallback: lastAt (seconds) -> createdAt (ISO string) -> 0
-    let tsMillis = 0;
-    if (chat.lastAt != null) {
-      tsMillis = chat.lastAt * 1000;
-    } else if (chat.createdAt) {
-      tsMillis = new Date(chat.createdAt).getTime();
-    }
+    // Recency timestamp in milliseconds. ChatSummary.lastMessageAt is a UNIX
+    // timestamp in seconds (falling back to createdAt for a new chat with no messages).
+    const secs =
+      typeof chat.lastMessageAt === "number" && chat.lastMessageAt > 0
+        ? chat.lastMessageAt
+        : typeof chat.lastAt === "number" && chat.lastAt > 0
+          ? chat.lastAt
+          : typeof chat.createdAt === "number"
+            ? chat.createdAt
+            : 0;
+    const tsMillis = secs * 1000;
 
     if (tsMillis >= startOfToday) {
       todayChats.push(chat);
