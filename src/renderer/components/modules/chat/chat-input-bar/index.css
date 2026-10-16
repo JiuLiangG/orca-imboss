@@ -232,6 +232,12 @@
   box-shadow: var(--imb-elev-raised);
   min-width: 120px;
   padding: 4px 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.imb-attach-popup>* {
+  flex-shrink: 0;
 }
 
 .imb-attach-anchor {
@@ -242,9 +248,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  /* Compact rows: this class is exclusive to the attach popup (see the
-     200px-min-width trigger), so the tighter height never touches other
-     menus. ~38px → ~30px. */
+  /* Menu rows (built-in actions + common projects): this class is
+     exclusive to the attach popup (see the 200px-min-width trigger), so
+     the compact height never touches other menus. ~38px → ~30px. */
   padding: 6px 16px;
   cursor: pointer;
   border: none;
@@ -353,3 +359,5 @@
   color: var(--imb-muted);
   font-size: var(--imb-text-xs);
 }
+
+.imb-attach-popup-opts {}

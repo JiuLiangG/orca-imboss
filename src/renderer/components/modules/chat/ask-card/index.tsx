@@ -164,7 +164,7 @@ export function AskCard({
                   <label className="imb-ask-option" key={opt}>
                     <input
                       type="radio"
-                      name={`imb-q-${q.id}`}
+                      name={`imb-${message.id}-q-${q.id}`}
                       checked={selectedByQuestion[q.id]?.includes(opt) ?? false}
                       disabled={submitted || readonly}
                       onChange={() => {

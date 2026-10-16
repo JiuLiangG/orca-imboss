@@ -21,22 +21,21 @@ import {
 import { useClickOutside } from "../../../../hooks/use-click-outside";
 import { useDropdownPosition } from "../../../../hooks/use-dropdown-position";
 import { useEscapeKey } from "../../../../hooks/use-escape-key";
+import { Avatar } from "../../../avatar";
 import {
   IconAttach,
   IconChat,
   IconFile,
   IconFolder,
-  IconImage,
   IconSend,
 } from "../../../icons";
-import { Avatar } from "../../../avatar";
 import { useMentionResolver } from "../../../markdown/use-mention";
 import { Modal } from "../../../modal";
 import { SearchInput } from "../../../search-input";
 import { Textarea } from "../../../textarea";
 import { Tooltip } from "../../../tooltip";
-import "./index.css";
 import { displayTitle, previewText } from "../relative-time";
+import "./index.css";
 import { MentionPopup } from "./mention-popup";
 
 export interface ChatInputBarProps {
@@ -162,9 +161,8 @@ export function ChatInputBar({
   const popupRef = useRef<HTMLDivElement>(null);
   const popupMenuRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { panelStyle, positionPanel } = useDropdownPosition(popupRef, 200);
+  const { panelStyle, positionPanel } = useDropdownPosition(popupRef, 200, 300);
 
   // A new chat resets the composer (draft/attachments) and lands the caret in
   // the input. `focusToken` starts at `0`, so mounting with an existing chat
@@ -857,18 +855,6 @@ export function ChatInputBar({
                     className="imb-attach-popup-item"
                     onClick={() => {
                       setPopupOpen(false);
-                      imageInputRef.current?.click();
-                    }}
-                  >
-                    <IconImage />
-                    <span>{t("Image")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="imb-attach-popup-item"
-                    onClick={() => {
-                      setPopupOpen(false);
                       fileInputRef.current?.click();
                     }}
                   >
@@ -901,9 +887,9 @@ export function ChatInputBar({
                     <IconChat />
                     <span>{t("Conversation")}</span>
                   </button>
-                  {/* Common projects: flat items at the same level as
-                      Image/File/Folder, behind the separator. Nothing (not
-                      even the separator) renders when none is configured. */}
+                  {/* Common projects: rows behind the separator, below the
+                      icon row. Nothing (not even the separator) renders when
+                      none is configured. */}
                   {projects.length > 0 && (
                     <>
                       <div className="imb-attach-popup-sep" role="separator" />
@@ -943,17 +929,6 @@ export function ChatInputBar({
           </button>
         </div>
       </div>
-      <input
-        ref={imageInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        hidden
-        onChange={(e) => {
-          addFiles(e.target.files ? Array.from(e.target.files) : null);
-          e.target.value = "";
-        }}
-      />
       <input
         ref={fileInputRef}
         type="file"
