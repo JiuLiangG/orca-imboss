@@ -3,6 +3,7 @@ import type { CronJobInfo } from "@shared/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { cls } from "reactutils";
 import { appStore, useApp } from "../../../../app-store";
+import { useDebouncedValue } from "../../../../hooks/use-debounced-value";
 import { ModuleView } from "../../../app-shell";
 import { Button } from "../../../button";
 import { DetailBody } from "../../../detail-pane/detail-body";
@@ -39,6 +40,9 @@ export function CronModule(): React.JSX.Element {
   const [listError, setListError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  // The input keeps the raw `query` (instant feedback); filtering uses the
+  // debounced value so the list is not re-scanned on every keystroke.
+  const debouncedQuery = useDebouncedValue(query);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -77,7 +81,7 @@ export function CronModule(): React.JSX.Element {
   );
 
   const filtered = useMemo((): CronJobInfo[] => {
-    const needle = query.trim().toLowerCase();
+    const needle = debouncedQuery.trim().toLowerCase();
     if (!needle) return jobs;
     return jobs.filter(
       (job) =>
@@ -86,7 +90,7 @@ export function CronModule(): React.JSX.Element {
         job.schedule.toLowerCase().includes(needle) ||
         job.content.toLowerCase().includes(needle),
     );
-  }, [jobs, query, employeeName]);
+  }, [jobs, debouncedQuery, employeeName]);
 
   // Group the (filtered) jobs by employee. Groups are ordered by employee id
   // (matching the Employees module); jobs stay in creation order within each

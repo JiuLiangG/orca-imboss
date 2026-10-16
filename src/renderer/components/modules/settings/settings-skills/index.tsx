@@ -2,6 +2,7 @@ import { t } from "@shared/l10n";
 import type { InstalledSkill } from "@shared/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appStore, useApp } from "../../../../app-store";
+import { useDebouncedValue } from "../../../../hooks/use-debounced-value";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
 import { Avatar } from "../../../avatar";
 import { Button } from "../../../button";
@@ -26,6 +27,9 @@ import "./index.css";
 export function SettingsSkills(): React.JSX.Element {
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  // The input keeps the raw `query` (instant feedback); filtering uses the
+  // debounced value so the list is not re-scanned on every keystroke.
+  const debouncedQuery = useDebouncedValue(query);
   const [busy, setBusy] = useState(false);
   const [uninstallTarget, setUninstallTarget] = useState<InstalledSkill | null>(
     null,
@@ -41,14 +45,14 @@ export function SettingsSkills(): React.JSX.Element {
 
   // Centralized in appStore (loaded on first visit); filter client-side.
   const skills = useMemo((): readonly InstalledSkill[] => {
-    const needle = query.trim().toLowerCase();
+    const needle = debouncedQuery.trim().toLowerCase();
     if (!needle) return data.skills.items;
     return data.skills.items.filter(
       (skill) =>
         skill.name.toLowerCase().includes(needle) ||
         (skill.description ?? "").toLowerCase().includes(needle),
     );
-  }, [data.skills.items, query]);
+  }, [data.skills.items, debouncedQuery]);
 
   const multi = useMultiSelect<InstalledSkill, string>({
     getKey: (skill) => skill.name,
@@ -63,7 +67,7 @@ export function SettingsSkills(): React.JSX.Element {
   // Query changes reset the selection.
   useEffect(() => {
     clearSelection();
-  }, [clearSelection, query]);
+  }, [clearSelection, debouncedQuery]);
 
   // Re-fetch on every entry: skills live on the filesystem and can change
   // outside the app, and no `skills:changed` event is emitted. First load

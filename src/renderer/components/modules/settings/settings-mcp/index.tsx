@@ -2,6 +2,7 @@ import { t } from "@shared/l10n";
 import type { McpServer, McpServerInput } from "@shared/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appStore, useApp } from "../../../../app-store";
+import { useDebouncedValue } from "../../../../hooks/use-debounced-value";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
 import { McpAddModal } from "../../mcp/mcp-add-modal";
 import { McpDetail } from "../../mcp/mcp-detail";
@@ -25,6 +26,9 @@ import "../settings-split.css";
 export function SettingsMcp(): React.JSX.Element {
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  // The input keeps the raw `query` (instant feedback); filtering uses the
+  // debounced value so the list is not re-scanned on every keystroke.
+  const debouncedQuery = useDebouncedValue(query);
   const [addOpen, setAddOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteNames, setDeleteNames] = useState<string[]>([]);
@@ -37,14 +41,14 @@ export function SettingsMcp(): React.JSX.Element {
 
   // Centralized in appStore (loaded on first visit); filter client-side.
   const servers = useMemo((): readonly McpServer[] => {
-    const needle = query.trim().toLowerCase();
+    const needle = debouncedQuery.trim().toLowerCase();
     if (!needle) return data.mcp.items;
     return data.mcp.items.filter(
       (server) =>
         server.name.toLowerCase().includes(needle) ||
         server.description.toLowerCase().includes(needle),
     );
-  }, [data.mcp.items, query]);
+  }, [data.mcp.items, debouncedQuery]);
 
   const multi = useMultiSelect<McpServer, string>({
     getKey: (server) => server.name,
@@ -59,7 +63,7 @@ export function SettingsMcp(): React.JSX.Element {
   // Query changes reset the selection (the old paginated resetVersion bump).
   useEffect(() => {
     clearSelection();
-  }, [clearSelection, query]);
+  }, [clearSelection, debouncedQuery]);
 
   // Re-fetch on every entry (MCP servers can change via the agent/external
   // edits); first load shows the loading state, revisits revalidate silently.

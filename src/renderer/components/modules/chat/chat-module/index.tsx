@@ -19,6 +19,7 @@ import {
 } from "react";
 import { cls } from "reactutils";
 import { appStore, IS_MAC, useApp } from "../../../../app-store";
+import { useDebouncedValue } from "../../../../hooks/use-debounced-value";
 import { useInfiniteList } from "../../../../hooks/use-infinite-list";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
 import { ModuleView } from "../../../app-shell";
@@ -100,6 +101,11 @@ export function ChatModule(): React.JSX.Element {
   );
   const [messages, setMessages] = useState<Message[]>([]);
   const [query, setQuery] = useState("");
+  // The input keeps the raw `query` (instant feedback); everything that drives
+  // the (server-paged) search uses the debounced value so one keystroke does
+  // not fire an IPC + FTS/LIKE query, and the virtualized list is not remounted
+  // mid-typing.
+  const debouncedQuery = useDebouncedValue(query);
   // Tag filter of the list below the search box (AND). Candidate tags + a
   // per-chat optimistic override of the row chips are kept here too. Session-
   // only component state, so a module switch / restart clears it (like the
@@ -165,7 +171,7 @@ export function ChatModule(): React.JSX.Element {
   // query. `useInfiniteList` is always mounted but short-circuits to an empty
   // page when neither is active.
   const tagFilterKey = [...tagFilter].sort().join("\u0000");
-  const isSearching = query.trim().length > 0;
+  const isSearching = debouncedQuery.trim().length > 0;
   const serverMode = isSearching || tagFilter.length > 0;
   // Force the virtualized list to remount (fresh measurement cache) whenever
   // its data source changes — the browse cache vs a server-paged search/tag
@@ -174,7 +180,7 @@ export function ChatModule(): React.JSX.Element {
   // get positioned by stale sizes (overlap). Restarting from the top on a
   // source change matches the search box's existing reset behaviour.
   const listSourceKey = serverMode
-    ? `search:${query}\u0000${tagFilterKey}`
+    ? `search:${debouncedQuery}\u0000${tagFilterKey}`
     : "browse";
   const fetchPage = useCallback(
     (page: PageQuery): Promise<PageResult<ChatSummary>> => {
@@ -186,7 +192,7 @@ export function ChatModule(): React.JSX.Element {
     [serverMode],
   );
   const search = useInfiniteList(fetchPage, {
-    query,
+    query: debouncedQuery,
     pageSize: PAGE_SIZE,
     params: tagFilter.length > 0 ? { tags: tagFilter } : undefined,
     paramsKey: tagFilterKey,
@@ -351,7 +357,7 @@ export function ChatModule(): React.JSX.Element {
   // Switching between browse/search (query/tag change) clears the selection.
   useEffect(() => {
     clearSelection();
-  }, [clearSelection, query, tagFilterKey]);
+  }, [clearSelection, debouncedQuery, tagFilterKey]);
 
   // Open thread + clear unread whenever the selection changes.
   useEffect(() => {

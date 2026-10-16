@@ -7,6 +7,7 @@ import { t } from "@shared/l10n";
 import type { Employee, EmployeeInput, ModelOption } from "@shared/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appStore, useApp } from "../../../../app-store";
+import { useDebouncedValue } from "../../../../hooks/use-debounced-value";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
 import { ModuleView } from "../../../app-shell";
 import { Button } from "../../../button";
@@ -29,6 +30,9 @@ import { EmployeeRecruitModal } from "../employee-recruit-modal";
 export function EmployeesModule(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
+  // The input keeps the raw `query` (instant feedback); filtering uses the
+  // debounced value so large lists are not re-scanned on every keystroke.
+  const debouncedQuery = useDebouncedValue(query);
   const [recruitOpen, setRecruitOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteIds, setDeleteIds] = useState<number[]>([]);
@@ -48,14 +52,14 @@ export function EmployeesModule(): React.JSX.Element {
       mcp: [...employee.mcp],
       skills: [...employee.skills],
     }));
-    const needle = query.trim().toLowerCase();
+    const needle = debouncedQuery.trim().toLowerCase();
     if (!needle) return source;
     return source.filter(
       (employee) =>
         employee.name.toLowerCase().includes(needle) ||
         employee.role.toLowerCase().includes(needle),
     );
-  }, [data.employees.items, query]);
+  }, [data.employees.items, debouncedQuery]);
 
   // Model options still come via IPC (models out of scope); loaded once.
   const [models, setModels] = useState<ModelOption[]>([]);
@@ -108,7 +112,7 @@ export function EmployeesModule(): React.JSX.Element {
   // Query changes reset the selection.
   useEffect(() => {
     clearSelection();
-  }, [clearSelection, query]);
+  }, [clearSelection, debouncedQuery]);
 
   // Auto-select the first employee after page 1 loads (and recover when the
   // selected employee disappears, e.g. bulk delete). The resolved active item
