@@ -1374,16 +1374,16 @@ export function createTeamToolDefinitions(
     if (mcp.includes(BUILTIN_REMOVE_CRON_MARKER)) {
       tools.push(removeCronjobTool(employeeId));
     }
+    // Image generation is opt-in for employees (marker in their "Linked MCP"
+    // list).
+    if (
+      IMAGE_GENERATION_ENABLED &&
+      mcp.includes(BUILTIN_GENERATE_IMAGE_MARKER)
+    ) {
+      tools.push(generateImageTool(employeeId));
+    }
   }
   tools.push(sendMessageTool(env));
   tools.push(readChatTool(employeeId, chatId));
-  // Image generation is opt-in for employees (marker in their "Linked MCP"
-  // list) and unconditional for the assistant, whose `mcp` list is immutable.
-  if (
-    IMAGE_GENERATION_ENABLED &&
-    (isAssistant || mcp.includes(BUILTIN_GENERATE_IMAGE_MARKER))
-  ) {
-    tools.push(generateImageTool(employeeId));
-  }
   return tools;
 }
