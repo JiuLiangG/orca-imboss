@@ -49,6 +49,7 @@ import {
 } from "../relative-time";
 import "../thread.css";
 import { TimeSeparator } from "../time-separator";
+import { groupChatsByDate, type ChatListRow } from "./chat-groups";
 import "./index.css";
 
 const PAGE_SIZE = 50;
@@ -62,8 +63,10 @@ const PAGE_SIZE = 50;
 const CHAT_ROW_ESTIMATE = 90;
 
 /** Stable props for the virtualized chat list (see `VirtualList`). */
-const chatItemKey = (chat: ChatSummary): number => chat.id;
-const chatRowEstimate = (): number => CHAT_ROW_ESTIMATE;
+const chatItemKey = (row: ChatListRow): string | number =>
+  row.kind === "group" ? row.id : row.chat.id;
+const chatRowEstimate = (row: ChatListRow): number =>
+  row.kind === "group" ? 30 : CHAT_ROW_ESTIMATE;
 
 /**
  * Empty-list text for the conversation list: an empty list means something
@@ -234,6 +237,7 @@ export function ChatModule(): React.JSX.Element {
   });
 
   const chats = serverMode ? search.items : (data.chats.items as ChatSummary[]);
+  const groupedRows = useMemo(() => groupChatsByDate(chats), [chats]);
 
   const listLoading = serverMode ? search.loading : data.chats.loading;
   const listError = serverMode ? search.error : data.chats.error;
@@ -801,9 +805,12 @@ export function ChatModule(): React.JSX.Element {
     >
       <ItemList
         key={listSourceKey}
-        items={chats}
+        items={groupedRows}
         getItemKey={chatItemKey}
-        estimateSize={chatRowEstimate}
+        estimateSize={(index) => {
+          const row = groupedRows[index];
+          return row ? chatRowEstimate(row) : CHAT_ROW_ESTIMATE;
+        }}
         loading={listLoading}
         loadingMore={listLoadingMore}
         hasMore={listHasMore}
@@ -812,101 +819,114 @@ export function ChatModule(): React.JSX.Element {
         emptyMessage={chatListEmptyMessage(isSearching, tagFilter.length)}
         selectable
         selectedKeys={multi.selectedKeys}
-        onItemClick={(chat, index, mods) =>
-          multi.onItemClick(chat, index, mods)
-        }
-        renderItem={(chat, { selected: isSelectedRow }) => (
-          <ListRow
-            className={cls(chat.pinned && "imb-chat-pinned")}
-            active={chat.id === selectedId}
-            selected={isSelectedRow}
-            footer={
-              <TagSelect
-                className="imb-chat-tag-select"
-                value={chat.tags}
-                options={tagOptions}
-                allowCreate
-                noClear
-                placeholder={`# ${t("Tags")}`}
-                onChange={(next) => void saveTags(chat.id, next)}
-              />
-            }
-            avatar={
-              <Avatar
-                letter={displayTitle(chat.title).slice(0, 1)}
-                name={displayTitle(chat.title)}
-                size={30}
-              />
-            }
-            name={
-              <span className="imb-chat-name-wrap">
-                {chat.pinned && (
-                  <PinGlyph className="imb-chat-pin" aria-hidden="true" />
-                )}
-                {CHAT_MUTE_ENABLED && chat.muted && (
-                  <MuteGlyph className="imb-chat-mute" aria-hidden="true" />
-                )}
-                <span className="imb-chat-name-text">
-                  {displayTitle(chat.title)}
-                </span>
-                {chat.source && (
-                  <span className="imb-chat-source">
-                    {t(INTEGRATION_LABEL_KEYS[chat.source])}
+        onItemClick={(row, index, mods) => {
+          if (row.kind === "chat") {
+            multi.onItemClick(row.chat, index, mods);
+          }
+        }}
+        renderItem={(row, { selected: isSelectedRow }) => {
+          if (row.kind === "group") {
+            return (
+              <div className="imb-chat-group-header">
+                <span className="imb-chat-group-label">{row.label}</span>
+                <span className="imb-chat-group-count">{row.count}</span>
+              </div>
+            );
+          }
+          const chat = row.chat;
+          return (
+            <ListRow
+              className={cls(chat.pinned && "imb-chat-pinned")}
+              active={chat.id === selectedId}
+              selected={isSelectedRow}
+              footer={
+                <TagSelect
+                  className="imb-chat-tag-select"
+                  value={chat.tags}
+                  options={tagOptions}
+                  allowCreate
+                  noClear
+                  placeholder={`# ${t("Tags")}`}
+                  onChange={(next) => void saveTags(chat.id, next)}
+                />
+              }
+              avatar={
+                <Avatar
+                  letter={displayTitle(chat.title).slice(0, 1)}
+                  name={displayTitle(chat.title)}
+                  size={30}
+                />
+              }
+              name={
+                <span className="imb-chat-name-wrap">
+                  {chat.pinned && (
+                    <PinGlyph className="imb-chat-pin" aria-hidden="true" />
+                  )}
+                  {CHAT_MUTE_ENABLED && chat.muted && (
+                    <MuteGlyph className="imb-chat-mute" aria-hidden="true" />
+                  )}
+                  <span className="imb-chat-name-text">
+                    {displayTitle(chat.title)}
                   </span>
-                )}
-              </span>
-            }
-            meta={formatChatTime(chat.lastAt, locale)}
-            sub={previewText(chat.preview ?? "", 80, resolveMention)}
-            badge={
-              chat.unread > 0 ? (
-                <span className="imb-unread">
-                  {chat.unread > 99 ? "99+" : chat.unread}
+                  {chat.source && (
+                    <span className="imb-chat-source">
+                      {t(INTEGRATION_LABEL_KEYS[chat.source])}
+                    </span>
+                  )}
                 </span>
-              ) : undefined
-            }
-            onContextMenu={(e) => {
-              e.preventDefault();
-              const muteItem = chatMuteMenuItem(
-                chat,
-                (muted) => void toggleMute(chat.id, muted),
-              );
-              setCtxMenu({
-                x: e.clientX,
-                y: e.clientY,
-                items: [
-                  {
-                    key: "select-all",
-                    label: t("Select all"),
-                    onSelect: toggleSelectAll,
-                  },
-                  {
-                    key: "pin",
-                    label: chat.pinned ? t("Unpin") : t("Pin"),
-                    onSelect: () => void togglePin(chat.id, !chat.pinned),
-                  },
-                  ...(muteItem ? [muteItem] : []),
-                  {
-                    key: "delete",
-                    label: t("Delete"),
-                    danger: true,
-                    onSelect: () => {
-                      // Selection-aware: a right-click on an already-selected
-                      // row deletes the whole selection; otherwise it deletes
-                      // just the right-clicked chat (never a hidden select-all).
-                      setDeleteIds(
-                        multi.selectedKeys.has(chat.id)
-                          ? [...multi.selectedKeys]
-                          : [chat.id],
-                      );
-                      setDeleteOpen(true);
+              }
+              meta={formatChatTime(chat.lastAt, locale)}
+              sub={previewText(chat.preview ?? "", 80, resolveMention)}
+              badge={
+                chat.unread > 0 ? (
+                  <span className="imb-unread">
+                    {chat.unread > 99 ? "99+" : chat.unread}
+                  </span>
+                ) : undefined
+              }
+              onContextMenu={(e) => {
+                e.preventDefault();
+                const muteItem = chatMuteMenuItem(
+                  chat,
+                  (muted) => void toggleMute(chat.id, muted),
+                );
+                setCtxMenu({
+                  x: e.clientX,
+                  y: e.clientY,
+                  items: [
+                    {
+                      key: "select-all",
+                      label: t("Select all"),
+                      onSelect: toggleSelectAll,
                     },
-                  },
-                ],
-              });
-            }}
-          />
-        )}
+                    {
+                      key: "pin",
+                      label: chat.pinned ? t("Unpin") : t("Pin"),
+                      onSelect: () => void togglePin(chat.id, !chat.pinned),
+                    },
+                    ...(muteItem ? [muteItem] : []),
+                    {
+                      key: "delete",
+                      label: t("Delete"),
+                      danger: true,
+                      onSelect: () => {
+                        // Selection-aware: a right-click on an already-selected
+                        // row deletes the whole selection; otherwise it deletes
+                        // just the right-clicked chat (never a hidden select-all).
+                        setDeleteIds(
+                          multi.selectedKeys.has(chat.id)
+                            ? [...multi.selectedKeys]
+                            : [chat.id],
+                        );
+                        setDeleteOpen(true);
+                      },
+                    },
+                  ],
+                });
+              }}
+            />
+          );
+        }}
       />
     </ListPane>
   );

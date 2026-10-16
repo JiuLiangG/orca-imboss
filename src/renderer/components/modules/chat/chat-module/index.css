@@ -134,6 +134,30 @@
   font-size: var(--imb-text-xs);
 }
 
-.imb-chat-tag-select .imb-ms-caret {
-  display: none;
+
+/* Date grouping headers in chat list */
+.imb-chat-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 4px 12px;
+  font-size: var(--imb-text-xs);
+  font-weight: 600;
+  color: var(--imb-muted);
+  user-select: none;
+  pointer-events: none;
 }
+
+.imb-chat-group-label {
+  letter-spacing: 0.02em;
+}
+
+.imb-chat-group-count {
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: var(--imb-radius-pill);
+  background: var(--imb-bg-2);
+  color: var(--imb-muted);
+  line-height: 16px;
+}
+

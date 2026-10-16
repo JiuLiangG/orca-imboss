@@ -144,6 +144,7 @@
   "e.g. npx, node, python": "如 npx、node、python",
   "e.g. Researcher": "如：调研员",
   "e.g. web-search": "如：web-search",
+  "Earlier": "更早",
   "Edit scheduled task": "编辑定时任务",
   "Edit": "编辑",
   "Emerald": "翡翠绿",
@@ -278,6 +279,7 @@
   "Pending": "未开始",
   "Pick a common project from the composer's attach menu to attach its folder and add its tags to the conversation in one click.": "在输入框的附件菜单里选择常用项目，即可一键附加其文件夹并给对话打上对应标签。",
   "Pin": "置顶",
+  "Pinned": "置顶",
   "Pink": "日落粉",
   "Please answer at least one question first.": "请先回答至少一个问题。",
   "Please enter a base URL.": "请填写接口地址。",
@@ -401,6 +403,7 @@
   "This scheduled task will be removed. This cannot be undone.": "该定时任务将被移除，此操作不可撤销。",
   "This sign-in step is not supported.": "不支持这一步登录。",
   "This transport requires a server URL.": "该传输方式需要服务地址。",
+  "This week": "本周",
   "Time range": "时间范围",
   "Today": "今天",
   "Tokens": "Token",
@@ -433,6 +436,7 @@
   "What are your instructions?": "您有什么吩咐？",
   "Working directory": "工作目录",
   "XHigh": "很高",
+  "Yesterday": "昨天",
   "You're up to date.": "已是最新版本。",
   "Zoom": "缩放"
 }
