@@ -817,6 +817,7 @@ export function ChatModule(): React.JSX.Element {
               <Avatar
                 letter={displayTitle(chat.title).slice(0, 1)}
                 name={displayTitle(chat.title)}
+                size={30}
               />
             }
             name={
