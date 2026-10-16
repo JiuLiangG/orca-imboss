@@ -28,6 +28,10 @@ const SAVE_DEBOUNCE_MS = 400;
 export function SettingsGeneral(): React.JSX.Element {
   const { locale } = useApp();
   const [defaultModel, setDefaultModel] = useState("");
+  // App-wide image-generation model, stored as `"<provider>/<modelId>"`
+  // (empty = image generation off). Lives here rather than on a provider page
+  // because it is one global choice, not a per-provider setting.
+  const [imageModel, setImageModel] = useState("");
   const [defaultThinking, setDefaultThinking] = useState("");
   const [envVars, setEnvVars] = useState<EnvVar[]>([]);
   const [models, setModels] = useState<ModelOption[]>([]);
@@ -47,12 +51,14 @@ export function SettingsGeneral(): React.JSX.Element {
     void (async () => {
       const [
         defaultModelStored,
+        imageModelStored,
         defaultThinkingStored,
         envStored,
         models,
         workDir,
       ] = await Promise.all([
         imb.settings.get(SettingKeys.DefaultModel),
+        imb.settings.get(SettingKeys.ImageModel),
         imb.settings.get(SettingKeys.DefaultThinkingLevel),
         imb.settings.get(SettingKeys.UserEnv),
         imb.models.list(),
@@ -60,6 +66,7 @@ export function SettingsGeneral(): React.JSX.Element {
       ]);
       if (!alive) return;
       setDefaultModel(defaultModelStored ?? "");
+      setImageModel(imageModelStored ?? "");
       setDefaultThinking(defaultThinkingStored ?? "");
       setEnvVars(parseEnv(envStored));
       setModels(models);
@@ -74,6 +81,11 @@ export function SettingsGeneral(): React.JSX.Element {
   function changeDefaultModel(value: string): void {
     setDefaultModel(value);
     void imb.settings.set(SettingKeys.DefaultModel, value);
+  }
+
+  function changeImageModel(value: string): void {
+    setImageModel(value);
+    void imb.settings.set(SettingKeys.ImageModel, value);
   }
 
   function changeDefaultThinking(value: string): void {
@@ -150,6 +162,25 @@ export function SettingsGeneral(): React.JSX.Element {
               })),
             ]}
             onChange={changeDefaultModel}
+          />
+        </Field>
+
+        <Field
+          label={t("Image generation model")}
+          hint={t(
+            "The model an agent uses to generate an image in a chat. Leave it unset to turn image generation off.",
+          )}
+        >
+          <Select
+            value={imageModel}
+            options={[
+              { value: "", label: t("None") },
+              ...models.map((model) => ({
+                value: modelRef(model),
+                label: modelRef(model),
+              })),
+            ]}
+            onChange={changeImageModel}
           />
         </Field>
 

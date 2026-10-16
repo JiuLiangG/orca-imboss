@@ -1,6 +1,5 @@
-import { SettingKeys } from "@shared/constants/settings";
 import { t } from "@shared/l10n";
-import type { ModelOption, ProviderInfo, ProviderUpsert } from "@shared/types";
+import type { ProviderInfo, ProviderUpsert } from "@shared/types";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../../button";
 import { DetailBody } from "../../../detail-pane/detail-body";
@@ -9,8 +8,6 @@ import { Field } from "../../../field";
 import { Modal } from "../../../modal";
 import { PasswordField } from "../../../password-field";
 import { PasswordInput } from "../../../password-input";
-import { Select } from "../../../select";
-import { modelRef } from "../../../../thinking-options";
 import {
   isHttpUrl,
   parseModelIds,
@@ -42,31 +39,6 @@ export function ProviderDetail({
   const [config, setConfig] = useState<ProviderConfigFormValue>(() =>
     providerConfigToForm(provider),
   );
-  // The image-generation model is one app-wide choice, edited from any
-  // provider's page; the setting stores `"<provider>/<modelId>"`.
-  const [imageModel, setImageModel] = useState("");
-  const [models, setModels] = useState<ModelOption[]>([]);
-
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      const [stored, list] = await Promise.all([
-        imb.settings.get(SettingKeys.ImageModel),
-        imb.models.list(),
-      ]);
-      if (!alive) return;
-      setImageModel(stored ?? "");
-      setModels(list);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  function changeImageModel(value: string): void {
-    setImageModel(value);
-    void imb.settings.set(SettingKeys.ImageModel, value);
-  }
   const [apiKey, setApiKey] = useState("");
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -258,24 +230,6 @@ export function ProviderDetail({
           />
         </Field>
         {error !== null && <p className="imb-error-text">{error}</p>}
-        <Field
-          label={t("Image generation model")}
-          hint={t(
-            "One app-wide choice: the model an agent uses to draw pictures it posts into a chat. Leave it empty to turn image generation off.",
-          )}
-        >
-          <Select
-            value={imageModel}
-            options={[
-              { value: "", label: t("None") },
-              ...models.map((model) => ({
-                value: modelRef(model),
-                label: modelRef(model),
-              })),
-            ]}
-            onChange={changeImageModel}
-          />
-        </Field>
       </DetailBody>
 
       <Modal

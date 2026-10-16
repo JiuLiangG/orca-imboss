@@ -1,3 +1,4 @@
+import { SettingKeys } from "@shared/constants/settings";
 import type {
   ProviderLoginEvent,
   ProviderModelsQuery,
@@ -14,6 +15,8 @@ import {
   revealProviderKey,
   upsertProvider,
 } from "../agent/providers";
+import { setSetting } from "../db/settings";
+import { getImageModelRef } from "../image-gen";
 import { assertString, parsePageQuery } from "./helpers";
 
 /** One in-flight subscription sign-in. A second click is rejected. */
@@ -40,7 +43,9 @@ export function registerProviderHandlers(): void {
 
   ipcMain.handle("providers:remove", async (_event, id: unknown) => {
     // Same for removal: keep the model store in sync after deleting a provider.
-    await removeProvider(assertString(id, "provider id"));
+    const providerId = assertString(id, "provider id");
+    await removeProvider(providerId);
+    clearImageModelIfProviderRemoved(providerId);
     await refreshModelStore(new AbortController().signal);
   });
 
@@ -85,6 +90,22 @@ export function registerProviderHandlers(): void {
     clipboard.writeText(key);
     return true;
   });
+}
+
+/**
+ * The image-generation model is one app-wide setting stored as
+ * `"<provider>/<modelId>"`. Once its provider is deleted that ref can never
+ * resolve, so the setting is cleared at this single point where the removal has
+ * actually succeeded — otherwise the dangling value would keep breaking
+ * `imb_generate_image` with a confusing "not configured" failure. Only a ref
+ * whose `<provider>` equals the removed id is cleared; removing any other
+ * provider leaves the setting untouched.
+ */
+function clearImageModelIfProviderRemoved(providerId: string): void {
+  const ref = getImageModelRef();
+  if (ref !== null && ref.provider === providerId) {
+    setSetting(SettingKeys.ImageModel, "");
+  }
 }
 
 /** Pi already requires https. Re-check before handing the URL to the OS. */

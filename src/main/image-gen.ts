@@ -374,7 +374,7 @@ export async function rerollImageMessage(
   const ref = getImageModelRef();
   if (ref === null) {
     throw new Error(
-      "No image model is configured. Choose one under Settings › Providers › Image generation model.",
+      "No image model is configured, so image generation is off. Choose one under Settings › General › Image generation model.",
     );
   }
   if (

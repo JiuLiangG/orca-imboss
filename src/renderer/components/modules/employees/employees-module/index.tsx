@@ -1,4 +1,5 @@
 import {
+  BUILTIN_GENERATE_IMAGE_MARKER,
   BUILTIN_REMOVE_CRON_MARKER,
   BUILTIN_SET_CRON_MARKER,
 } from "@shared/constants/agent_tools";
@@ -87,11 +88,13 @@ export function EmployeesModule(): React.JSX.Element {
     void appStore.reloadSkills();
   }, []);
 
-  // Linked-MCP options = built-in opt-in cron tools + configured MCP servers.
+  // Linked-MCP options = built-in opt-in tools (cron + image generation) +
+  // configured MCP servers.
   const mcpOptions = useMemo((): MultiSelectOption[] => {
     return [
       { value: BUILTIN_SET_CRON_MARKER, label: t("Set cron job") },
       { value: BUILTIN_REMOVE_CRON_MARKER, label: t("Remove cron job") },
+      { value: BUILTIN_GENERATE_IMAGE_MARKER, label: t("Generate image") },
       ...data.mcp.items.map((m) => ({ value: m.name, label: m.name })),
     ];
   }, [data.mcp.items]);

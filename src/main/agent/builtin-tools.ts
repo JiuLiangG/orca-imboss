@@ -1,5 +1,6 @@
 import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import {
+  BUILTIN_GENERATE_IMAGE_MARKER,
   BUILTIN_REMOVE_CRON_MARKER,
   BUILTIN_SET_CRON_MARKER,
   BUILTIN_TOOL_OPTIONS,
@@ -63,8 +64,10 @@ import { listSkills } from "./skills";
  * `imb_progress`, `imb_ask`) plus `imb_send_message` and `imb_read_chat`; a
  * participant gets
  * `imb_send_message` and `imb_read_chat`, plus `imb_set_cronjob` and/or
- * `imb_remove_cronjob` when the employee opted in via their "Linked MCP" list.
- * The cron tools are deliberately NOT part of the assistant's tool set, and
+ * `imb_remove_cronjob` and/or `imb_generate_image` when the employee opted in
+ * via their "Linked MCP" list. The assistant gets those three tools
+ * unconditionally: its `mcp` list is immutable, so it can never be gated the
+ * way employees are.
  * `imb_progress` and `imb_ask` are assistant-only: employees exchange questions
  * and answers as plain text messages. All agent runs are serialized per
  * (employee, chat) via the session queue.
@@ -1223,11 +1226,14 @@ function askTool(env: AgentEnvironment): AnyPiTool {
  * - Assistant (id 0): orchestration tools — `imb_set_employees`,
  *   `imb_create_chat`, `imb_add_participant`, `imb_read_chat`,
  *   `imb_list_employees`, `imb_toolset`, `imb_notify`, `imb_progress`,
- *   `imb_ask`; plus `imb_send_message`. No cron tools.
+ *   `imb_ask`; plus `imb_send_message`, the cron tools and `imb_generate_image`
+ *   (never gated: the assistant's `mcp` list is immutable).
  * - Participant employee: `imb_send_message`, `imb_read_chat`; plus
- *   `imb_set_cronjob` / `imb_remove_cronjob` when the corresponding opt-in
- *   marker is present in `mcp`. Employees have no structured ask/answer
- *   tools — they exchange questions and answers as plain text messages.
+ *   `imb_set_cronjob` / `imb_remove_cronjob` / `imb_generate_image` when the
+ *   corresponding opt-in marker is present in `mcp` (the image tool also
+ *   needs `IMAGE_GENERATION_ENABLED`). Employees have no structured
+ *   ask/answer tools — they exchange questions and answers as plain text
+ *   messages.
  */
 /**
  * `imb_generate_image` — generate a picture and show it in the chat.
@@ -1238,9 +1244,11 @@ function askTool(env: AgentEnvironment): AnyPiTool {
  * picture or with a failure. The tool returns the stored file path so the agent
  * can also use the picture elsewhere.
  *
- * Registered for every agent (assistant and employees) while
- * `IMAGE_GENERATION_ENABLED` is set: the boss asking for a picture can land in
- * any conversation, and any participant may be the one who should draw it.
+ * Registered while `IMAGE_GENERATION_ENABLED` is set, and only for agents
+ * allowed to draw: always for the assistant (its `mcp` list is immutable), and
+ * for an employee only when the boss linked the built-in "Generate image"
+ * option to it — the same opt-in mechanism as the cron tools. `execute`
+ * re-checks the marker defensively (stale session / dirty data).
  */
 function generateImageTool(employeeId: number): AnyPiTool {
   return {
@@ -1249,11 +1257,9 @@ function generateImageTool(employeeId: number): AnyPiTool {
     description:
       "Generate one picture from a text prompt and post it into a chat. Call this only when the boss " +
       "actually asked for an image — it costs money and takes tens of seconds. The chat immediately " +
-      "shows a placeholder that is replaced by the picture once the model answers. It requires an " +
-      "image model to be configured in Settings › Providers; without one the call fails and you " +
-      "should tell the boss to configure it. `size` is an OpenAI-style size such as 1024x1024 " +
-      "(default), 1536x1024 or 1024x1536; the Google backend generates at its own default " +
-      "resolution. One picture per call.",
+      "shows a placeholder that is replaced by the picture once the model answers. `size` is an OpenAI-style " +
+      "size such as 1024x1024 (default), 1536x1024 or 1024x1536; the Google backend generates at " +
+      "its own default resolution. One picture per call.",
     promptSnippet: "draw a picture",
     parameters: Type.Object({
       chatId: Type.Integer({ minimum: 1 }),
@@ -1284,12 +1290,24 @@ async function performGenerateImage(
   if (!sender || sender.disabled) {
     throw new Error("Sender is not an active employee.");
   }
+  // Defense in depth: the tool is normally only registered for an employee
+  // that linked the built-in option (see `createTeamToolDefinitions`), so this
+  // only trips when a session still carries a stale tool list. The assistant
+  // is never gated, exactly like the cron tools.
+  if (
+    employeeId !== ASSISTANT_ID &&
+    !sender.mcp.includes(BUILTIN_GENERATE_IMAGE_MARKER)
+  ) {
+    throw new Error(
+      'Image generation has not been enabled for you. Ask the boss to link the built-in "Generate image" tool to your employee (Employees › your name › Linked MCP).',
+    );
+  }
 
   const ref = getImageModelRef();
   if (ref === null) {
     throw new Error(
-      "No image model is configured. Ask the boss to choose one under " +
-        "Settings › Providers › Image generation model.",
+      "No image model is configured, so image generation is off. Ask the boss to choose one " +
+        "under Settings › General › Image generation model.",
     );
   }
 
@@ -1359,6 +1377,13 @@ export function createTeamToolDefinitions(
   }
   tools.push(sendMessageTool(env));
   tools.push(readChatTool(employeeId, chatId));
-  if (IMAGE_GENERATION_ENABLED) tools.push(generateImageTool(employeeId));
+  // Image generation is opt-in for employees (marker in their "Linked MCP"
+  // list) and unconditional for the assistant, whose `mcp` list is immutable.
+  if (
+    IMAGE_GENERATION_ENABLED &&
+    (isAssistant || mcp.includes(BUILTIN_GENERATE_IMAGE_MARKER))
+  ) {
+    tools.push(generateImageTool(employeeId));
+  }
   return tools;
 }
