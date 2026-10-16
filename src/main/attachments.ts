@@ -166,3 +166,24 @@ export async function deletePastedFilesForChat(chatId: number): Promise<void> {
   if (!Number.isSafeInteger(chatId)) return;
   await rm(chatAttachmentsDir(chatId), { recursive: true, force: true });
 }
+
+/**
+ * Delete a file this app wrote under the attachments dir, without the
+ * `pasted-` name check `deletePastedFile` applies — for files the app generated
+ * itself (a picture dropped by the image-message generation cap). Ownership is
+ * still verified by directory: the path must resolve inside
+ * `getAttachmentsDir()` and name a regular (non-symlink) file, so a
+ * caller-supplied path can never reach a user file outside the store.
+ */
+export function deleteAttachmentFile(path: string): void {
+  if (path.length === 0 || !isAbsolute(path)) return;
+  const root = getAttachmentsDir();
+  const resolved = resolve(path);
+  if (!resolved.startsWith(root + sep)) return;
+  try {
+    if (!lstatSync(resolved).isFile()) return;
+  } catch {
+    return; // already gone or inaccessible
+  }
+  rmSync(resolved, { force: true });
+}

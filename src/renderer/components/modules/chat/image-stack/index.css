@@ -1,9 +1,12 @@
 .imb-image-stack {
+  /* Deck edge length. The component overrides this for a larger frame (a
+     generated picture) and scales the fan to match, so the two stay in step. */
+  --imb-stack-size: 130px;
   position: relative;
-  width: 130px;
-  height: 130px;
+  width: var(--imb-stack-size);
+  height: var(--imb-stack-size);
   /* Reserve the space the fanned cards peek into above the front card. */
-  margin-top: 20px;
+  margin-top: calc(var(--imb-stack-size) * 0.154);
   flex: none;
 }
 
@@ -41,6 +44,11 @@
 
 .imb-image-card-front {
   cursor: grab;
+}
+
+/* The card drawn while a picture is being produced: a slot, not a control. */
+.imb-image-card-pending {
+  cursor: default;
 }
 
 .imb-image-card-front:active {

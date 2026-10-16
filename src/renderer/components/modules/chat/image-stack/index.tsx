@@ -5,6 +5,7 @@ import {
   useState,
   type CSSProperties,
   type PointerEvent,
+  type ReactNode,
 } from "react";
 import { cls } from "reactutils";
 import { useWheelStep } from "../../../../hooks/use-wheel-step";
@@ -47,7 +48,22 @@ export interface ImageStackProps {
    * and falls back to a file chip.
    */
   onImageError?: (index: number) => void;
+  /**
+   * Deck edge length in px. Defaults to `DEFAULT_STACK_SIZE` (the bubble's
+   * thumbnail); the fan geometry scales with it, so a larger frame (a generated
+   * picture) still reads as a stack.
+   */
+  size?: number;
+  /**
+   * Contents of a card drawn in front of the deck, for a picture that is still
+   * being produced. The deck behind stays visible but is held still until the
+   * card goes away — the arriving picture takes the front.
+   */
+  pending?: ReactNode;
 }
+
+/** Deck edge length the fan geometry is authored for. */
+export const DEFAULT_STACK_SIZE = 130;
 
 /** Pointer travel (px) past which a drag counts as "swipe to next". */
 const SWIPE_THRESHOLD = 60;
@@ -88,9 +104,17 @@ export function ImageStack({
   images,
   self,
   onImageError,
+  size = DEFAULT_STACK_SIZE,
+  pending,
 }: ImageStackProps): React.JSX.Element {
   const count = images.length;
   const single = count === 1;
+  // The fan is authored for the default deck; scale it with the frame so a
+  // larger deck still shows the layers behind the front card.
+  const fan = size / DEFAULT_STACK_SIZE;
+  // A lone image has nothing to flip, and a deck with a card being produced in
+  // front is held still until that card gives way.
+  const rotatable = !single && pending === undefined;
   const [front, setFront] = useState(0);
   const [drag, setDrag] = useState<DragState>({ dx: 0, dy: 0, active: false });
   const [lightbox, setLightbox] = useState<number | null>(null);
@@ -107,16 +131,16 @@ export function ImageStack({
     setLightbox((value) => (value === null || value < count ? value : null));
   }, [count]);
 
-  // Wheel over the deck flips it; a lone image has nothing to flip, so it never
-  // intercepts the wheel.
+  // Wheel over the deck flips it; a lone image (or a deck with a card being
+  // produced) has nothing to flip, so it never intercepts the wheel.
   useWheelStep(
     stackRef,
     (direction) => setFront((value) => (value + direction + count) % count),
-    !single,
+    rotatable,
   );
 
   const onPointerDown = (event: PointerEvent<HTMLButtonElement>): void => {
-    if (single || event.button !== 0) return;
+    if (!rotatable || event.button !== 0) return;
     start.current = { x: event.clientX, y: event.clientY };
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -155,6 +179,8 @@ export function ImageStack({
     position: number,
     event: React.MouseEvent<HTMLButtonElement>,
   ): void => {
+    // Nothing to bring forward while a card is being produced in front.
+    if (pending !== undefined) return;
     if (suppressClick.current) return;
     if (position === front) {
       setOrigin(event.currentTarget.getBoundingClientRect());
@@ -172,17 +198,32 @@ export function ImageStack({
     <div
       ref={stackRef}
       className={cls("imb-image-stack", single && "imb-image-stack-single")}
+      style={{ "--imb-stack-size": `${size}px` } as CSSProperties}
     >
+      {pending !== undefined && (
+        // The card being produced. It is the element that gives way when the
+        // picture arrives, so it is also where the swap transition belongs.
+        <div
+          className="imb-image-card imb-image-card-pending"
+          style={{ zIndex: CARD_Z_BASE + 1 }}
+          aria-hidden="true"
+        >
+          {pending}
+        </div>
+      )}
       {images.map((image, position) => {
-        const rel = (position - front + count) % count;
+        // With a card in front, every picture sits one layer further back.
+        const rel =
+          ((position - front + count) % count) +
+          (pending !== undefined ? 1 : 0);
         const isFront = rel === 0;
         const layer = CARD_LAYERS[Math.min(rel, CARD_LAYERS.length - 1)];
         const rotation =
           layer.rotate * lean + (isFront && drag.active ? drag.dx * 0.06 : 0);
         const style: CSSProperties = {
-          transform: `translate3d(${layer.x + (isFront ? drag.dx : 0)}px, ${
-            layer.y + (isFront ? drag.dy : 0)
-          }px, 0) rotate(${rotation}deg) scale(${layer.scale})`,
+          transform: `translate3d(${
+            layer.x * fan + (isFront ? drag.dx : 0)
+          }px, ${layer.y * fan + (isFront ? drag.dy : 0)}px, 0) rotate(${rotation}deg) scale(${layer.scale})`,
           zIndex: CARD_Z_BASE - rel,
           transition: isFront && drag.active ? "none" : undefined,
         };
@@ -220,7 +261,7 @@ export function ImageStack({
         );
       })}
 
-      {count > 1 && (
+      {count > 1 && pending === undefined && (
         <span className="imb-image-stack-count" aria-hidden="true">
           {`${front + 1} / ${count}`}
         </span>

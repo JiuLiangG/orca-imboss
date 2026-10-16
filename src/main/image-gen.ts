@@ -1,7 +1,7 @@
 import { SettingKeys } from "@shared/constants/settings";
 import type { Message, ProviderApiType } from "@shared/types";
 import { listProviders, revealProviderKey } from "./agent/providers";
-import { savePastedFile } from "./attachments";
+import { deleteAttachmentFile, savePastedFile } from "./attachments";
 import * as dbMessages from "./db/messages";
 import { getSetting } from "./db/settings";
 
@@ -291,6 +291,27 @@ function imageFileName(mime: string): string {
 }
 
 /**
+ * Delete the pictures a row dropped. A row keeps the newest
+ * `MAX_IMAGE_GENERATIONS` generations, so anything it carried before and no
+ * longer carries has just fallen off the cap — leaving those files behind would
+ * be orphaned disk that nothing references.
+ */
+function dropSupersededFiles(
+  before: Message | null,
+  after: Message | null,
+): void {
+  if (after === null) return;
+  const kept = new Set(
+    (after.attachments ?? []).map((attachment) => attachment.path),
+  );
+  for (const attachment of before?.attachments ?? []) {
+    if (typeof attachment.path === "string" && !kept.has(attachment.path)) {
+      deleteAttachmentFile(attachment.path);
+    }
+  }
+}
+
+/**
  * Draw `prompt` into an image message that is already in its `generating`
  * state. Shared by the tool (which appends the placeholder first) and by the
  * boss's re-roll (which reuses a finished row).
@@ -316,11 +337,13 @@ export async function drawIntoImageMessage(
       image.mime,
       image.bytes,
     );
-    return dbMessages.updateImageGeneration(messageId, {
+    const updated = dbMessages.updateImageGeneration(messageId, {
       status: "done",
       attachment,
       imageModel: imageModelRef(ref),
     });
+    dropSupersededFiles(previous, updated);
+    return updated;
   } catch (err) {
     dbMessages.updateImageGeneration(messageId, {
       status: hasPicture(previous) ? "done" : "error",

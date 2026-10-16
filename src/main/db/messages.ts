@@ -42,6 +42,14 @@ const MAX_ATTACH_NAME_LENGTH = 256;
 const MAX_ATTACH_TYPE_LENGTH = 128;
 const MAX_ATTACH_PATH_LENGTH = 4096;
 const MAX_ATTACH_SIZE = MAX_ATTACHMENT_BYTES; // metadata only
+
+/**
+ * Pictures kept on one image message. A re-roll appends, so the row doubles as
+ * the history of its attempts; the cap keeps a long re-roll session from
+ * growing the row (and the disk) without bound.
+ */
+const MAX_IMAGE_GENERATIONS = 6;
+
 /** Cap for the `image_model` reference (`"<provider>/<modelId>"`). */
 const MAX_IMAGE_MODEL_LENGTH = 256;
 
@@ -343,15 +351,24 @@ export function updateImageGeneration(
 ): Message | null {
   const db = getDB();
   const row = db
-    .prepare("SELECT kind FROM messages WHERE id = ?")
-    .get(messageId) as { kind: string } | undefined;
+    .prepare("SELECT kind, attachments FROM messages WHERE id = ?")
+    .get(messageId) as { kind: string; attachments: string | null } | undefined;
   if (!row) return null;
   if (row.kind !== "image") {
     throw new Error("Only image messages can be updated this way.");
   }
 
+  // A new picture is appended, never substituted: re-drawing keeps the ones
+  // before it, so the message becomes a stack the boss can flip through. Past
+  // the cap the oldest are dropped — their files are the caller's to delete,
+  // which it does by diffing the row before and after this call.
   const attachmentsJson = patch.attachment
-    ? serializeAttachments([patch.attachment], 1)
+    ? serializeAttachments(
+        [...(parseAttachments(row.attachments) ?? []), patch.attachment].slice(
+          -MAX_IMAGE_GENERATIONS,
+        ),
+        undefined,
+      )
     : null;
   db.prepare(
     "UPDATE messages SET image_status = ?, " +

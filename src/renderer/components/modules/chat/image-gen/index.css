@@ -17,9 +17,18 @@
   align-items: flex-start;
 }
 
-/* The picture, and the slot the placeholder fills while it is drawn. */
-.imb-image-gen-figure,
+/* Holds the deck (or the bare placeholder), and scopes the arrival animation. */
+.imb-image-gen-deck {
+  flex: none;
+}
+
+/* The slot the placeholder fills while a picture is drawn (the deck's card
+   overrides the frame below). */
 .imb-image-gen-placeholder {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 240px;
   height: 240px;
   padding: 0;
@@ -30,42 +39,36 @@
   box-shadow: var(--imb-elev-raised);
 }
 
-.imb-image-gen-figure {
-  display: block;
-  cursor: zoom-in;
-  /* The swap: the picture fades and de-blurs into the slot the placeholder
-     occupied. Mount-only, so it never replays on an unrelated re-render. */
-  animation: imb-image-gen-in 320ms ease-out both;
-}
-
-.imb-image-gen-figure img {
-  display: block;
+/* Inside the deck's card the placeholder fills the card, which already carries
+   the frame's border, radius and shadow. */
+.imb-image-card .imb-image-gen-placeholder {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* The swap: the freshly drawn picture fades and de-blurs into the slot the
+   placeholder occupied. `.imb-image-gen-arrived` is set only when a picture
+   actually arrives (never when a thread merely mounts), and the front card is a
+   new element per generation, so this runs exactly once per picture. */
+.imb-image-gen-arrived .imb-image-card-front {
+  animation: imb-image-gen-in 320ms ease-out both;
 }
 
 @keyframes imb-image-gen-in {
   from {
     opacity: 0;
-    transform: scale(0.985);
     filter: blur(6px);
   }
   to {
     opacity: 1;
-    transform: none;
     filter: none;
   }
 }
 
 /* Animated placeholder: a soft sheen sweeping across the empty slot. */
-.imb-image-gen-placeholder {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .imb-image-gen-shimmer {
   position: absolute;
   inset: 0;
@@ -130,7 +133,7 @@
   color: var(--imb-fg);
 }
 
-/* Why the last re-roll failed (the picture, if there was one, is kept). */
+/* Why the last re-roll failed (the pictures, if there were any, are kept). */
 .imb-image-gen-error {
   margin: 0;
   max-width: 240px;
@@ -141,7 +144,7 @@
 
 /* Respect a reduced-motion preference: keep the slot, drop the motion. */
 @media (prefers-reduced-motion: reduce) {
-  .imb-image-gen-figure {
+  .imb-image-gen-arrived .imb-image-card-front {
     animation: none;
   }
   .imb-image-gen-shimmer {
