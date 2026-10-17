@@ -106,6 +106,4 @@ export interface BuildEmployeeSystemPromptArgs {
    * platform-agnostic.
    */
   toolsGuidelines: readonly string[];
-  /** Current date in `yyyy-MM-dd`. */
-  today: string;
 }

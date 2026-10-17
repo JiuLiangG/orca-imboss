@@ -42,7 +42,6 @@ export function buildEmployeeSystemPrompt({
   fromChatId,
   toolEntries,
   toolsGuidelines,
-  today,
 }: BuildEmployeeSystemPromptArgs): string {
   const persona = personaParts
     .map((part) => part.trim())
@@ -78,8 +77,6 @@ export function buildEmployeeSystemPrompt({
   }
   const identityBlock = identityLines.join("\n");
 
-  const metaBlock = `Today is ${today}`;
-
   // Role-specific reporting skill: the assistant aggregates employee reports into
   // boss-facing progress + a summary; a non-assistant reports finished work to its
   // assigner.
@@ -96,7 +93,6 @@ export function buildEmployeeSystemPrompt({
     NEVER_BLOCK_WAITING_PROMPT,
     RESPONSE_LANGUAGE_PROMPT,
     toolsBlock,
-    metaBlock,
   ];
 
   return sections.filter((section) => section.trim().length > 0).join("\n\n");

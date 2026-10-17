@@ -449,12 +449,6 @@ export class AgentSession {
       ? WINDOWS_TOOLS_GUIDELINES
       : TOOLS_GUIDELINES;
 
-    // Current local date (`yyyy-MM-dd`) for the `Today is ...` line. Kept out
-    // of the composition signature so a warm session never rebuilds at
-    // midnight (it may show a day-stale date until the next rebuild).
-    const now = new Date();
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-
     // Every employee session goes fully custom (decision 8): the SDK base
     // prompt is dropped and the app builds the identity block, role block,
     // persona, response-language rule, `[builtinSkills]`, `[tools]` and the
@@ -474,7 +468,6 @@ export class AgentSession {
         fromChatId: spec.fromChatId,
         toolEntries,
         toolsGuidelines,
-        today,
       });
 
     // Anchor `<project_context>` to the app's `~/.imboss/agent` dir only,
