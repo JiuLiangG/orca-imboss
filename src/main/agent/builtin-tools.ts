@@ -558,14 +558,18 @@ function createChatTool(
     name: "imb_create_chat",
     label: "Create chat",
     description:
-      "Create a new chat with the given employee participants, initializing one persistent agent session per employee participant " +
+      "Create a new chat with the given title and employee participants, initializing one persistent agent session per employee participant " +
       "(the assistant orchestrates from its own root-chat session and gets no session here). " +
       "The assistant always joins, and the chat that spawned this one is linked as `from_chat_id`. " +
       "Participants are NOT notified or started automatically — assign their work afterwards with `imb_send_message`, " +
       "passing their ids in `notify` to wake them.",
     promptSnippet: "new team chat",
     parameters: Type.Object({
-      title: Type.String({ minLength: 1, maxLength: 200 }),
+      title: Type.String({
+        minLength: 1,
+        maxLength: 200,
+        description: "Descriptive title for the new chat.",
+      }),
       participants: Type.Array(Type.Integer({ minimum: 1 }), { minItems: 1 }),
     }),
     execute: async (_toolCallId, params) => {
