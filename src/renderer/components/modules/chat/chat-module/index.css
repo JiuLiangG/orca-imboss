@@ -144,6 +144,7 @@
   font-size: var(--imb-text-xs);
   font-weight: 600;
   color: var(--imb-muted);
+  background: var(--imb-border);
   user-select: none;
   pointer-events: none;
 }
@@ -160,4 +161,3 @@
   color: var(--imb-muted);
   line-height: 16px;
 }
-

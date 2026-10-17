@@ -1,6 +1,7 @@
 :root {
   --imb-bg: #ededed;
   --imb-bg-2: rgb(from var(--imb-bg) r g b / 0.75);
+  --imb-bg-group: #e6e6e6;
   --imb-surface: #f7f7f7;
   --imb-surface-warm: var(--imb-surface);
   --imb-fg: #1a1a1a;
@@ -93,6 +94,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme-mode="light"]) {
     --imb-bg: #1a1a1a;
+    --imb-bg-group: #3e3e3e;
     --imb-surface: #2c2c2c;
     --imb-fg: #f7f7f7;
     --imb-fg-2: var(--imb-fg);
@@ -111,6 +113,7 @@
 
 :root[data-theme-mode="dark"] {
   --imb-bg: #1a1a1a;
+  --imb-bg-group: #3e3e3e;
   --imb-surface: #2c2c2c;
   --imb-fg: #f7f7f7;
   --imb-fg-2: var(--imb-fg);
