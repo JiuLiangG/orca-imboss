@@ -3,6 +3,7 @@ import type { InstalledSkill } from "@shared/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appStore, useApp } from "../../../../app-store";
 import { useDebouncedValue } from "../../../../hooks/use-debounced-value";
+import { useModuleFilter } from "../../../../hooks/use-module-filter";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
 import { Avatar } from "../../../avatar";
 import { Button } from "../../../button";
@@ -26,9 +27,11 @@ import "./index.css";
  */
 export function SettingsSkills(): React.JSX.Element {
   const [selectedName, setSelectedName] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
+  // Search text stored on the appStore so switching Settings sections / leaving
+  // the Settings module does not lose it; session-only, cleared by a restart.
   // The input keeps the raw `query` (instant feedback); filtering uses the
   // debounced value so the list is not re-scanned on every keystroke.
+  const { query, setQuery } = useModuleFilter("settings-skills");
   const debouncedQuery = useDebouncedValue(query);
   const [busy, setBusy] = useState(false);
   const [uninstallTarget, setUninstallTarget] = useState<InstalledSkill | null>(

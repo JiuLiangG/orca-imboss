@@ -104,6 +104,27 @@ export type SettingsSection =
   | "backup"
   | "about";
 
+/**
+ * Modules whose list pane has filter state (a search box and/or a tag filter)
+ * that must survive a module switch. See `filters` below.
+ */
+export type FilterModule =
+  "chat" | "employees" | "cron" | "spend" | "settings-mcp" | "settings-skills";
+
+/**
+ * Filter state of one module's list pane. Both fields are always present so the
+ * shared hook has one uniform shape; a module without a search box (spend) or
+ * without a tag filter (employees / cron / the two Settings panes) simply never
+ * writes that field.
+ */
+export interface ModuleFilterState {
+  /** Raw search-box text (the debounce is applied by the consumer). */
+  query: string;
+  /** Tag filter (AND). May contain `TAG_FILTER_NONE` (the "No tags" pseudo
+   *  value) where the module offers it. */
+  tags: string[];
+}
+
 /** True when running on macOS (native traffic lights stay, no custom buttons). */
 export const IS_MAC = imb.platform === "darwin";
 
@@ -181,6 +202,20 @@ export const appStore = proxy({
   // `activeChatId` (an opened *group* chat). Written by `ChatModule` so the
   // selection survives a module switch; session-only.
   activeRootChatId: null as number | null,
+
+  // List-pane search / tag filter per module (see `useModuleFilter`). Modules
+  // are unmounted on a module switch (App.tsx renders only the active one), so
+  // the filters have to live outside the component tree to be restored.
+  // Session-only: a switch keeps them, an app restart clears them (same as the
+  // selection, the thread scroll and the composer drafts).
+  filters: {
+    chat: { query: "", tags: [] as string[] },
+    employees: { query: "", tags: [] as string[] },
+    cron: { query: "", tags: [] as string[] },
+    spend: { query: "", tags: [] as string[] },
+    "settings-mcp": { query: "", tags: [] as string[] },
+    "settings-skills": { query: "", tags: [] as string[] },
+  } as Record<FilterModule, ModuleFilterState>,
 
   // Active Settings section. Lifted out of `SettingsModule` so main can
   // deep-link to a section (the update notification opens "about").
@@ -717,6 +752,13 @@ export const appStore = proxy({
     appStore.activeRootChatId = chatId;
   },
 
+  /** Clear one module's list-pane search text and tag filter. */
+  resetFilter(module: FilterModule): void {
+    const filter = appStore.filters[module];
+    filter.query = "";
+    filter.tags = [];
+  },
+
   // --- Providers (full cache) ----------------------------------------------------
   async loadProviders(): Promise<void> {
     if (appStore.data.providers.loading) return;
@@ -759,6 +801,11 @@ export const appStore = proxy({
   },
 
   async focusChat(chatId: number): Promise<void> {
+    // A jump to a specific chat (OS notification click, a cron job's "open
+    // chat") is an explicit intent: drop the chat module's restored search /
+    // tag filter first, or the target may not be part of the filtered result
+    // and the pending `focusChatId` could never resolve into a selection.
+    appStore.resetFilter("chat");
     appStore.focusChatId = chatId;
     appStore.module = "chat";
     await imb.settings.set(SettingKeys.Module, "chat");

@@ -22,6 +22,7 @@ import { cls } from "reactutils";
 import { appStore, IS_MAC, useApp } from "../../../../app-store";
 import { useDebouncedValue } from "../../../../hooks/use-debounced-value";
 import { useInfiniteList } from "../../../../hooks/use-infinite-list";
+import { useModuleFilter } from "../../../../hooks/use-module-filter";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
 import { ModuleView } from "../../../app-shell";
 import { Avatar } from "../../../avatar";
@@ -105,17 +106,23 @@ export function ChatModule(): React.JSX.Element {
     () => appStore.activeRootChatId,
   );
   const [messages, setMessages] = useState<Message[]>([]);
-  const [query, setQuery] = useState("");
+  // Search text + tag filter of the list below, stored on the appStore so a
+  // module switch does not lose them (the module unmounts on a switch).
+  // Session-only: an app restart starts with an empty search / no tag filter.
   // The input keeps the raw `query` (instant feedback); everything that drives
   // the (server-paged) search uses the debounced value so one keystroke does
   // not fire an IPC + FTS/LIKE query, and the virtualized list is not remounted
   // mid-typing.
+  const {
+    query,
+    tags: tagFilter,
+    setQuery,
+    setTags: setTagFilter,
+  } = useModuleFilter("chat");
   const debouncedQuery = useDebouncedValue(query);
-  // Tag filter of the list below the search box (AND). Candidate tags + a
-  // per-chat optimistic override of the row chips are kept here too. Session-
-  // only component state, so a module switch / restart clears it (like the
-  // search box).
-  const [tagFilter, setTagFilter] = useState<string[]>([]);
+  // Candidate tags for both tag pickers (row editor + list filter). Kept in
+  // component state: the candidates come from the `chat_tags` table and must be
+  // re-read on every mount so a tag deleted meanwhile cannot linger.
   const [tagOptions, setTagOptions] = useState<string[]>([]);
   // Bumped on chat creation so the composer resets and focuses (see
   // `ChatInputBar`). Starts at 0 so ordinary selections never steal focus.

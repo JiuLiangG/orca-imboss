@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { cls } from "reactutils";
 import { appStore, useApp } from "../../../../app-store";
 import { useDebouncedValue } from "../../../../hooks/use-debounced-value";
+import { useModuleFilter } from "../../../../hooks/use-module-filter";
 import { ModuleView } from "../../../app-shell";
 import { Button } from "../../../button";
 import { DetailBody } from "../../../detail-pane/detail-body";
@@ -39,9 +40,11 @@ export function CronModule(): React.JSX.Element {
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
+  // Search text stored on the appStore so a module switch does not lose it (the
+  // module unmounts on a switch); session-only, cleared by an app restart.
   // The input keeps the raw `query` (instant feedback); filtering uses the
   // debounced value so the list is not re-scanned on every keystroke.
+  const { query, setQuery } = useModuleFilter("cron");
   const debouncedQuery = useDebouncedValue(query);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);

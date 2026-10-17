@@ -15,6 +15,7 @@ import type {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appStore, useApp } from "../../../../app-store";
 import { useDebouncedValue } from "../../../../hooks/use-debounced-value";
+import { useModuleFilter } from "../../../../hooks/use-module-filter";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
 import { ModuleView } from "../../../app-shell";
 import { Button } from "../../../button";
@@ -45,9 +46,11 @@ const IMPORT_NOTICE_MS = 5000;
 
 export function EmployeesModule(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [query, setQuery] = useState("");
+  // Search text stored on the appStore so a module switch does not lose it (the
+  // module unmounts on a switch); session-only, cleared by an app restart.
   // The input keeps the raw `query` (instant feedback); filtering uses the
   // debounced value so large lists are not re-scanned on every keystroke.
+  const { query, setQuery } = useModuleFilter("employees");
   const debouncedQuery = useDebouncedValue(query);
   const [recruitOpen, setRecruitOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);

@@ -9,6 +9,7 @@ import { t } from "@shared/l10n";
 import type { SpendGrouping, SpendRange, SpendReport } from "@shared/types";
 import { useEffect, useState } from "react";
 import { appStore, useApp } from "../../../../app-store";
+import { useModuleFilter } from "../../../../hooks/use-module-filter";
 import { ModuleView } from "../../../app-shell";
 import { Avatar } from "../../../avatar";
 import { EmployeeAvatar } from "../../../employee-avatar";
@@ -48,9 +49,12 @@ export function SpendModule(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   // Bumped by the employees/chats change subscriptions to re-fetch the report.
   const [refreshToken, setRefreshToken] = useState(0);
-  // Conversation-grouping tag filter (AND) + its candidate tags. Local
-  // component state, so a module switch / restart clears it.
-  const [tagFilter, setTagFilter] = useState<string[]>([]);
+  // Conversation-grouping tag filter (AND), stored on the appStore so a module
+  // switch keeps it (session-only: an app restart clears it) — the grouping,
+  // range and selected row already live there for the same reason.
+  const { tags: tagFilter, setTags: setTagFilter } = useModuleFilter("spend");
+  // Candidate tags, re-read on every mount (the `chat_tags` table may have
+  // changed while the module was unmounted).
   const [tagOptions, setTagOptions] = useState<string[]>([]);
 
   // The conversation grouping has no range picker: it always shows the

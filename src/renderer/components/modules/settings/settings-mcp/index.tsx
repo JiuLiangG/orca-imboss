@@ -3,6 +3,7 @@ import type { McpServer, McpServerInput } from "@shared/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appStore, useApp } from "../../../../app-store";
 import { useDebouncedValue } from "../../../../hooks/use-debounced-value";
+import { useModuleFilter } from "../../../../hooks/use-module-filter";
 import { useMultiSelect } from "../../../../hooks/use-multi-select";
 import { McpAddModal } from "../../mcp/mcp-add-modal";
 import { McpDetail } from "../../mcp/mcp-detail";
@@ -25,9 +26,11 @@ import "../settings-split.css";
  */
 export function SettingsMcp(): React.JSX.Element {
   const [selectedName, setSelectedName] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
+  // Search text stored on the appStore so switching Settings sections / leaving
+  // the Settings module does not lose it; session-only, cleared by a restart.
   // The input keeps the raw `query` (instant feedback); filtering uses the
   // debounced value so the list is not re-scanned on every keystroke.
+  const { query, setQuery } = useModuleFilter("settings-mcp");
   const debouncedQuery = useDebouncedValue(query);
   const [addOpen, setAddOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
