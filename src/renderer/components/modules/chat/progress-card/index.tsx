@@ -4,7 +4,6 @@ import { useEffect, useMemo } from "react";
 import { cls } from "reactutils";
 import { appStore, useApp } from "../../../../app-store";
 import { EmployeeAvatar } from "../../../employee-avatar";
-import { IconOpen } from "../../../icons";
 import { HaltButton } from "../halt-button";
 import { MessageTime } from "../message-time";
 import { useChatSummary } from "../use-chat-summary";
@@ -22,8 +21,8 @@ export interface ProgressCardProps {
   steps: MessageStep[];
   /**
    * Task group this card reports on (`null` for cards stored before the link
-   * existed). Enables the open-group arrow and turns resolvable step names
-   * into links to that employee's agent session in the group.
+   * existed). Turns the card title into a link to that group and resolvable
+   * step names into links to that employee's agent session in the group.
    */
   groupChatId: number | null;
   /** Exact send time, revealed on hover at the card's bottom-right corner. */
@@ -56,25 +55,28 @@ export function ProgressCard({
     return map;
   }, [data.employees.items]);
 
-  // Step links follow the arrow's policy: they need a conversation that
+  // Title and step links share one policy: they need a conversation that
   // actually exists. No link (legacy card), a still-loading summary or a
-  // deleted group keep the names static.
+  // deleted group keep the title and the names static.
   const targetChatId =
     summary === undefined || summary === null ? null : groupChatId;
 
   return (
     <>
       <div className="imb-progress-card">
-        <div className="imb-progress-card-title">{title}</div>
-        {summary !== undefined && summary !== null && (
+        {/* The title itself is the open-group link (the old corner arrow is
+            gone): a plain `div` when there is no conversation to open, so a
+            legacy or deleted-group card has no click target at all. */}
+        {summary !== undefined && summary !== null ? (
           <button
             type="button"
-            className="imb-progress-open"
-            aria-label={t("Open group chat")}
+            className="imb-progress-card-title"
             onClick={() => appStore.openChat(summary)}
           >
-            <IconOpen />
+            {title}
           </button>
+        ) : (
+          <div className="imb-progress-card-title">{title}</div>
         )}
         {steps.map((step, index) => {
           const employeeId = step.employeeId;

@@ -225,7 +225,7 @@ export function IconChevronDown(props: IconProps): React.JSX.Element {
   );
 }
 
-/** "Open" affordance: an arrow leaving its box (used by the progress card). */
+/** "Open" affordance: an arrow leaving its box (used by the image card). */
 export function IconOpen(props: IconProps): React.JSX.Element {
   return (
     <svg {...base(props)} strokeWidth={1.8}>

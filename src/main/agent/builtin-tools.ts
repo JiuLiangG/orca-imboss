@@ -683,7 +683,7 @@ function sendMessageTool(env: AgentEnvironment): AnyPiTool {
  *
  * Split out of `imb_send_message` so publishing progress has a dedicated,
  * typed tool: the sender is always the assistant (id 0), the card links to the
- * task group it reports on (`groupChatId`, rendered as an open-group arrow),
+ * task group it reports on (`groupChatId`, rendered as the card's title link),
  * and it neither notifies anyone nor carries attachments. Registered only for
  * the assistant in `createTeamToolDefinitions`; the shared send pipeline keeps
  * its participant check, which the assistant satisfies in every chat it posts
