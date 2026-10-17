@@ -156,32 +156,6 @@ export function ChatModule(): React.JSX.Element {
   // theme color or click target there).
   const { resolveMention } = useMentionResolver(selectedId ?? 0, false);
 
-  /** Pin or unpin one conversation, then refresh the list order. */
-  const togglePin = useCallback(
-    async (id: number, pinned: boolean): Promise<void> => {
-      try {
-        await imb.chats.setPinned(id, pinned);
-        await appStore.reloadChats();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    },
-    [],
-  );
-
-  /** Mute or unmute one conversation, then refresh the list cache. */
-  const toggleMute = useCallback(
-    async (id: number, muted: boolean): Promise<void> => {
-      try {
-        await imb.chats.setMuted(id, muted);
-        await appStore.reloadChats();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    },
-    [],
-  );
-
   // Hybrid search: an empty query reads the appStore chat cache (root-only,
   // recency-ordered); a non-empty query switches to a server-paged FTS/LIKE
   // search. An active tag filter also forces the server-paged path (via
@@ -247,6 +221,86 @@ export function ChatModule(): React.JSX.Element {
   chatsRef.current = chats;
   const serverModeRef = useRef(serverMode);
   serverModeRef.current = serverMode;
+  const isSearchingRef = useRef(isSearching);
+  isSearchingRef.current = isSearching;
+  // Stable handle to the paged list, so action callbacks (pin / mute / delete /
+  // rename) can recompute it without their dependency arrays churning on every
+  // render — `useInfiniteList` returns a fresh wrapper object each render while
+  // `reset` / `mutate` themselves are stable.
+  const searchRef = useRef(search);
+  searchRef.current = search;
+
+  /**
+   * Rebuild the visible chat list after a mutation that can change *which* rows
+   * match or how they sort (delete, pin, tag edits).
+   * - No filter (`browse`): the list renders `appStore.data.chats.items`, so
+   *   `reloadChats()` re-fetches it.
+   * - Keyword search / tag filter: the list renders `search.items`, which
+   *   `reloadChats()` never touches (it only refills the app store cache), so
+   *   page 1 has to be recomputed from the current query + filter — otherwise a
+   *   deleted row keeps showing up / the result set stays stale.
+   * Callers must not `reloadChats()` themselves: this refreshes both sources.
+   */
+  const refreshVisibleList = useCallback(async (): Promise<void> => {
+    if (serverModeRef.current) searchRef.current.reset();
+    await appStore.reloadChats();
+  }, []);
+
+  /**
+   * Patch one row of the server-paged list in place (no re-fetch, no flash).
+   * Only valid for mutations that leave membership and ordering untouched
+   * (title under a tag filter, mute): `reloadChats()` never updates
+   * `search.items`, so such a row would otherwise keep its stale summary.
+   */
+  const patchPagedChat = useCallback(
+    (chatId: number, patch: Partial<ChatSummary>): void => {
+      if (!serverModeRef.current) return;
+      searchRef.current.mutate((items) =>
+        items.map((chat) =>
+          chat.id === chatId ? { ...chat, ...patch } : chat,
+        ),
+      );
+    },
+    [],
+  );
+
+  /**
+   * Pin or unpin one conversation, then refresh the list order. Pinned chats
+   * sort first, so both data sources must be rebuilt: the browse cache via
+   * `reloadChats()` and — when a search / tag filter is active — the
+   * server-paged page 1 via `search.reset()` (a re-sort across not-yet-loaded
+   * pages cannot be done locally by patching rows).
+   */
+  const togglePin = useCallback(
+    async (id: number, pinned: boolean): Promise<void> => {
+      try {
+        await imb.chats.setPinned(id, pinned);
+        await refreshVisibleList();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [refreshVisibleList],
+  );
+
+  /**
+   * Mute or unmute one conversation, then refresh the list cache. Mute changes
+   * neither the membership nor the order of the rows, so the server-paged list
+   * is patched in place (a re-fetch would flash the list and re-mount the open
+   * thread for nothing).
+   */
+  const toggleMute = useCallback(
+    async (id: number, muted: boolean): Promise<void> => {
+      try {
+        await imb.chats.setMuted(id, muted);
+        patchPagedChat(id, { muted: muted === true });
+        await appStore.reloadChats();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [patchPagedChat],
+  );
 
   // Lazy-load the chat cache on first visit.
   useEffect(() => {
@@ -686,9 +740,13 @@ export function ChatModule(): React.JSX.Element {
       // new chat explicitly and clear any stale multi-selection.
       await appStore.reloadChats();
       clearSelection();
-      // Clear any active search so the new chat is present in the (unfiltered)
-      // list and its detail/input can be rendered.
+      // Clear any active search *and* tag filter so the new chat is present in
+      // the (unfiltered) list and its detail/input can be rendered. Clearing
+      // only the query left the tag filter applying: a brand-new chat has no
+      // tags, so it was missing from the filtered result, the detail pane
+      // stayed empty and the auto-select effect re-selected another chat.
       setQuery("");
+      setTagFilter([]);
       setSelectedId(chat.id);
       // A brand-new chat has no unread, but run the same idempotent clear so
       // every "selected ⇒ read" rendezvous goes through one path.
@@ -702,19 +760,39 @@ export function ChatModule(): React.JSX.Element {
 
   const deleteSelected = useCallback(async (): Promise<void> => {
     if (deleteIds.length === 0) return;
-    try {
-      setDeleteOpen(false);
-      for (const id of deleteIds) {
+    setDeleteOpen(false);
+    const ids = [...deleteIds];
+    // Drop the target ids straight away so a re-opened dialog / a second action
+    // can never re-use the just-deleted set.
+    setDeleteIds([]);
+    // Delete one by one and remember the first failure instead of aborting: an
+    // aborted loop would leave the already-deleted chats (and their cascade)
+    // deleted while the list below was never refreshed.
+    let failure: string | null = null;
+    for (const id of ids) {
+      try {
         await imb.chats.remove(id);
+      } catch (err) {
+        failure ??= err instanceof Error ? err.message : String(err);
       }
-      await appStore.reloadChats();
-      // Drop the just-deleted keys so a subsequent bulk action only acts on
-      // the reloaded (and auto-select-recovered) list.
-      clearSelection();
+    }
+    // Drop the just-deleted keys before refreshing: the auto-select effect
+    // re-mirrors the recovered active row into the selection once the refreshed
+    // items land, so clearing first cannot wipe a fresh selection.
+    clearSelection();
+    // Refresh both list sources: the browse cache, and — for a keyword search /
+    // tag filter — page 1 recomputed from the current query + filter, so the
+    // deleted rows really disappear and later pages shift up as expected.
+    try {
+      await refreshVisibleList();
+      // Candidate tags come from the `chat_tags` table: deleting the last chat
+      // holding a tag would otherwise leave it selectable in both tag pickers.
+      setTagOptions(await imb.tags.list());
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [deleteIds, clearSelection]);
+    if (failure !== null) setError(failure);
+  }, [deleteIds, clearSelection, refreshVisibleList]);
 
   const toggleSelectAll = useCallback((): void => {
     if (multi.selectedKeys.size === chats.length && chats.length > 0) {
@@ -766,11 +844,21 @@ export function ChatModule(): React.JSX.Element {
       const updated = await imb.chats.update(chatId, next);
       if (updated !== null) {
         setTitleOverride({ chatId, title: updated.title });
+        if (isSearchingRef.current) {
+          // A keyword search matches on the title, so the row may newly match /
+          // stop matching: recompute page 1 from the current query.
+          searchRef.current.reset();
+        } else {
+          // Tag filter (or no filter): the title affects neither membership nor
+          // order, so patch the row instead of re-fetching (and re-mounting the
+          // open thread). `chats:changed` covers the browse cache.
+          patchPagedChat(chatId, { title: updated.title });
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [selectedId, selectedRawTitle, titleDraft]);
+  }, [selectedId, selectedRawTitle, titleDraft, patchPagedChat]);
 
   const listPane = (
     <ListPane
