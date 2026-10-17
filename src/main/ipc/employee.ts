@@ -1,11 +1,25 @@
+import { ASSISTANT_ID } from "@shared/constants/employees";
+import { EMPLOYEE_EXPORT_EXTENSION } from "@shared/constants/employee_transfer";
+import { t } from "@shared/l10n";
 import type { Employee, EmployeeInput } from "@shared/types";
-import { ipcMain } from "electron";
+import { app, ipcMain } from "electron";
+import { join } from "path";
 import { disposeForEmployee } from "../agent/session-queue";
 import { deleteAvatarFiles, saveAvatar } from "../avatars";
 import * as cron from "../cron";
 import * as dbEmployees from "../db/employees";
 import { listByEmployee, unlinkSessionFile } from "../db/sessions";
+import {
+  defaultEmployeeExportFileName,
+  exportEmployeeToFile,
+} from "../employee-transfer/export";
+import {
+  applyEmployeeImport,
+  cancelEmployeeImport,
+  inspectEmployeeExport,
+} from "../employee-transfer/import";
 import { sendToRenderer } from "../notifications";
+import { showOpenDialog, showSaveDialog } from "./dialog";
 import { assertInteger, assertString, parsePageQuery } from "./helpers";
 
 /** Notify the renderer that the employees collection changed (name/avatar). */
@@ -73,4 +87,65 @@ export function registerEmployeeHandlers(): void {
       return employee;
     },
   );
+
+  // --- export / import (one employee per zip) ----------------------------
+
+  ipcMain.handle("employees:export", async (_event, id: unknown) => {
+    const safeId = assertInteger(id, "employee id");
+    // Defence in depth: the renderer never offers this for the assistant, and
+    // main refuses it too (id 0 can only ever come back as a copy).
+    if (safeId === ASSISTANT_ID) {
+      throw new Error(t("The built-in assistant cannot be exported."));
+    }
+    const employee = dbEmployees.getEmployee(safeId);
+    if (!employee) throw new Error(t("Employee not found."));
+    const destination = await showSaveDialog({
+      title: t("Export employee"),
+      defaultPath: join(
+        app.getPath("downloads"),
+        defaultEmployeeExportFileName(employee),
+      ),
+      filters: [
+        {
+          name: t("imboss employee export"),
+          extensions: [EMPLOYEE_EXPORT_EXTENSION],
+        },
+        { name: t("All files"), extensions: ["*"] },
+      ],
+    });
+    if (destination === null) return null;
+    return exportEmployeeToFile(employee, destination);
+  });
+
+  ipcMain.handle("employees:importInspect", async () => {
+    const paths = await showOpenDialog({
+      title: t("Import employee"),
+      properties: ["openFile"],
+      filters: [
+        {
+          name: t("imboss employee export"),
+          extensions: [EMPLOYEE_EXPORT_EXTENSION],
+        },
+        { name: t("All files"), extensions: ["*"] },
+      ],
+    });
+    if (paths === null) return null;
+    return inspectEmployeeExport(paths[0]);
+  });
+
+  ipcMain.handle(
+    "employees:importApply",
+    (_event, token: unknown, options: unknown) => {
+      const safeToken = assertString(token, "import token");
+      const overwrite =
+        typeof options === "object" &&
+        options !== null &&
+        (options as Record<string, unknown>)["overwrite"] === true;
+      return applyEmployeeImport(safeToken, { overwrite });
+    },
+  );
+
+  ipcMain.handle("employees:importCancel", (_event, token: unknown) => {
+    cancelEmployeeImport(assertString(token, "import token"));
+  });
 }

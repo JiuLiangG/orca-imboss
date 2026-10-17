@@ -1,0 +1,229 @@
+.imb-import-intro {
+  color: var(--imb-muted);
+  font-size: var(--imb-text-sm);
+  margin: 0 0 var(--imb-space-4);
+  word-break: break-all;
+}
+
+.imb-import-section {
+  margin-bottom: var(--imb-space-4);
+}
+
+.imb-import-section-title {
+  font-size: var(--imb-text-sm);
+  font-weight: 600;
+  margin: 0 0 var(--imb-space-2);
+}
+
+.imb-import-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--imb-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.imb-import-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--imb-space-2);
+  flex-wrap: wrap;
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-md);
+  background: var(--imb-surface);
+  padding: var(--imb-space-2) var(--imb-space-3);
+  font-size: var(--imb-text-sm);
+}
+
+.imb-import-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.imb-import-row-name {
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.imb-import-row-meta {
+  color: var(--imb-muted);
+  font-size: var(--imb-text-xs);
+  word-break: break-word;
+}
+
+.imb-import-row-secrets {
+  color: var(--imb-warn);
+  font-size: var(--imb-text-xs);
+  word-break: break-word;
+}
+
+.imb-import-badge {
+  flex-shrink: 0;
+  font-size: var(--imb-text-xs);
+  border-radius: var(--imb-radius-pill);
+  padding: 1px 8px;
+  border: 1px solid var(--imb-border);
+  color: var(--imb-muted);
+  white-space: nowrap;
+}
+
+.imb-import-badge--conflict {
+  border-color: var(--imb-warn);
+  color: color-mix(in oklch, var(--imb-warn) 70%, var(--imb-fg));
+}
+
+.imb-import-badge--invalid {
+  border-color: var(--imb-danger);
+  color: var(--imb-danger);
+}
+
+.imb-import-empty {
+  color: var(--imb-muted);
+  font-size: var(--imb-text-sm);
+  margin: 0;
+}
+
+.imb-import-warnings {
+  margin: 0;
+  padding-left: var(--imb-space-4);
+  color: var(--imb-muted);
+  font-size: var(--imb-text-xs);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.imb-import-overwrite {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--imb-space-3);
+  border-top: 1px solid var(--imb-border);
+  padding-top: var(--imb-space-3);
+}
+
+.imb-import-overwrite-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--imb-text-sm);
+  min-width: 0;
+}
+
+.imb-import-overwrite-hint {
+  color: var(--imb-muted);
+  font-size: var(--imb-text-xs);
+}
+
+.imb-import-confirm-list {
+  margin: var(--imb-space-2) 0 0;
+  padding-left: var(--imb-space-4);
+  font-size: var(--imb-text-sm);
+}
+
+.imb-import-confirm-list li {
+  word-break: break-all;
+}
+
+/* Result notice of a finished import (module-level, above the error banner).
+   Auto-dismisses after a few seconds; the × dismisses it immediately. */
+.imb-employee-import-notice {
+  position: fixed;
+  left: 50%;
+  bottom: 44px;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--imb-space-2);
+  background: var(--imb-surface);
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-md);
+  padding: 6px 8px 6px 14px;
+  max-width: 60vw;
+  box-shadow: var(--imb-elev-raised);
+  margin: 0;
+  font-size: var(--imb-text-sm);
+  animation: imb-import-notice-in var(--imb-motion-base)
+    var(--imb-ease-standard);
+}
+
+.imb-employee-import-notice > span {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.imb-employee-import-notice-close {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: var(--imb-radius-sm);
+  background: transparent;
+  color: var(--imb-muted);
+  cursor: pointer;
+}
+
+.imb-employee-import-notice-close:hover {
+  color: var(--imb-fg);
+  background: var(--imb-bg-group);
+}
+
+.imb-employee-import-notice-close:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+}
+
+@keyframes imb-import-notice-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* Employee avatar in the import preview: real image when the package carries
+   one, otherwise the name initial (never a broken image / alt text). */
+.imb-import-avatar {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--imb-radius-pill);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--imb-border);
+  background: color-mix(in oklch, var(--imb-accent) 15%, var(--imb-surface));
+}
+
+.imb-import-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.imb-import-avatar-initial {
+  color: var(--imb-accent);
+  font-weight: 600;
+  font-size: var(--imb-text-lg);
+  line-height: 1;
+  user-select: none;
+}
+
+/* The dialog initially focuses the intro line (to stay scrolled to the top);
+   a paragraph is not interactive, so it needs no focus ring. */
+.imb-import-intro:focus,
+.imb-import-intro:focus-visible {
+  outline: none;
+}

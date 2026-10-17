@@ -10,6 +10,7 @@ import {
   mkdirSync,
   readFileSync,
   renameSync,
+  rmSync,
   writeFileSync,
 } from "fs";
 import { dirname, join } from "path";
@@ -175,9 +176,127 @@ export function deleteMcpServer(name: string): boolean {
   return true;
 }
 
+/**
+ * Raw `mcpServers` entries exactly as stored on disk, unknown per-server
+ * fields included. Used by the employee export, which must reproduce the
+ * configured server rather than the normalised view.
+ */
+export function readMcpRawEntries(): Record<string, unknown> {
+  const { servers } = loadDoc();
+  return { ...servers };
+}
+
+/** Whole-file text snapshot of `mcp.json` (null when it does not exist). */
+export function snapshotMcpConfig(): string | null {
+  try {
+    return readFileSync(getMcpConfigPath(), "utf8");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Atomically restore a snapshot taken by `snapshotMcpConfig` (null = the file
+ * did not exist, so it is removed again). Used to roll back a failed import.
+ */
+export function restoreMcpConfig(snapshot: string | null): void {
+  const path = getMcpConfigPath();
+  if (snapshot === null) {
+    rmSync(path, { force: true });
+    return;
+  }
+  mkdirSync(dirname(path), { recursive: true });
+  const tmp = `${path}.${process.pid}.${Date.now()}.tmp`;
+  writeFileSync(tmp, snapshot, { encoding: "utf8", mode: 0o600 });
+  renameSync(tmp, path);
+}
+
+/** Result of merging imported servers into `mcp.json`. */
+export interface McpImportResult {
+  /** Servers that did not exist locally and were written. */
+  added: string[];
+  /** Servers that existed locally and were replaced (overwrite requested). */
+  overwritten: string[];
+  /** Servers left untouched because they already existed. */
+  kept: string[];
+  /** Entries dropped as invalid (bad name / not a command-or-url entry). */
+  invalid: string[];
+}
+
+/**
+ * Merge raw `mcp.json` entries (e.g. from an employee export) into the local
+ * config. Validation reuses the same rules as the CRUD path; unknown
+ * per-server fields travel along. Unrelated top-level keys and unrelated
+ * servers are untouched, and the write stays atomic (temp file + rename).
+ */
+export function importMcpEntries(
+  entries: Record<string, unknown>,
+  options: { overwrite: boolean },
+): McpImportResult {
+  const result: McpImportResult = {
+    added: [],
+    overwritten: [],
+    kept: [],
+    invalid: [],
+  };
+  const { root, servers } = loadDoc();
+  let changed = false;
+
+  for (const [rawName, rawEntry] of Object.entries(entries)) {
+    const name = typeof rawName === "string" ? rawName.trim() : "";
+    const normalized = NAME_RE.test(name) ? toMcpServer(name, rawEntry) : null;
+    if (!normalized || !isImportableConfig(normalized.config)) {
+      result.invalid.push(typeof rawName === "string" ? rawName : "");
+      continue;
+    }
+    if (Object.prototype.hasOwnProperty.call(servers, name)) {
+      if (!options.overwrite) {
+        result.kept.push(name);
+        continue;
+      }
+      result.overwritten.push(name);
+    } else {
+      result.added.push(name);
+    }
+    // `previous` keeps unknown fields while the transport-owned ones are
+    // rewritten from the validated config.
+    servers[name] = toFileEntry(
+      normalized.config,
+      normalized.description,
+      rawEntry,
+    );
+    changed = true;
+  }
+
+  if (changed) saveDoc(root, servers);
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // normalisation / validation
 // ---------------------------------------------------------------------------
+
+/**
+ * Stricter checks for an entry coming from outside (an employee export): the
+ * reader is lenient by design, but a server we *write* into `mcp.json` must
+ * satisfy the same rules the CRUD form enforces, or the UI could no longer
+ * edit it.
+ */
+function isImportableConfig(config: McpConfig): boolean {
+  if (config.transport === "stdio") {
+    if (config.command.length === 0) return false;
+    return Object.keys(config.env).every((key) => ENV_KEY_RE.test(key));
+  }
+  try {
+    const parsed = new URL(config.url);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+  return true;
+}
 
 /** Defensively unpack a create/update payload coming from IPC. */
 function readInput(input: unknown): {

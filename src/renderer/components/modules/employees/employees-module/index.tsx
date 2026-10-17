@@ -5,7 +5,13 @@ import {
 } from "@shared/constants/agent_tools";
 import { SettingKeys } from "@shared/constants/settings";
 import { t } from "@shared/l10n";
-import type { Employee, EmployeeInput, ModelOption } from "@shared/types";
+import type {
+  Employee,
+  EmployeeImportPreview,
+  EmployeeImportResult,
+  EmployeeInput,
+  ModelOption,
+} from "@shared/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appStore, useApp } from "../../../../app-store";
 import { useDebouncedValue } from "../../../../hooks/use-debounced-value";
@@ -18,6 +24,7 @@ import {
   type ContextMenuState,
 } from "../../../context-menu";
 import { EmployeeAvatar } from "../../../employee-avatar";
+import { IconX } from "../../../icons";
 import { ItemList } from "../../../item-list";
 import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
@@ -26,7 +33,15 @@ import "../../../modules/module-common.css";
 import type { MultiSelectOption } from "../../../multi-select";
 import { SearchInput } from "../../../search-input";
 import { EmployeeDetail } from "../employee-detail";
+import { EmployeeImportModal } from "../employee-import-modal";
 import { EmployeeRecruitModal } from "../employee-recruit-modal";
+
+/**
+ * How long the transient import result stays on screen. The app's other short
+ * flashes use 1.5s ("Saved"), but a result summary is a sentence long, so it
+ * gets 5s — still within the "a few seconds" convention.
+ */
+const IMPORT_NOTICE_MS = 5000;
 
 export function EmployeesModule(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -38,7 +53,17 @@ export function EmployeesModule(): React.JSX.Element {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteIds, setDeleteIds] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
+  // Import is a two-step flow: inspect (nothing written) → confirm → apply.
+  const [importPreview, setImportPreview] =
+    useState<EmployeeImportPreview | null>(null);
+  const [importBusy, setImportBusy] = useState<"inspect" | "apply" | null>(
+    null,
+  );
+  const [importOverwrite, setImportOverwrite] = useState(false);
+  const [importConfirmOpen, setImportConfirmOpen] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
 
   const { data } = useApp();
   const loading = data.employees.loading;
@@ -214,6 +239,125 @@ export function EmployeesModule(): React.JSX.Element {
     }
   }, [multi, employees]);
 
+  // --- transient import notice ---------------------------------------------
+
+  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** Show the result notice, replacing (and re-timing) any previous one. */
+  const showNotice = useCallback((message: string): void => {
+    if (noticeTimerRef.current !== null) clearTimeout(noticeTimerRef.current);
+    setNotice(message);
+    noticeTimerRef.current = setTimeout(() => {
+      noticeTimerRef.current = null;
+      setNotice(null);
+    }, IMPORT_NOTICE_MS);
+  }, []);
+
+  /** Hide the notice immediately and cancel its timer (close button). */
+  const dismissNotice = useCallback((): void => {
+    if (noticeTimerRef.current !== null) {
+      clearTimeout(noticeTimerRef.current);
+      noticeTimerRef.current = null;
+    }
+    setNotice(null);
+  }, []);
+
+  // Never leave a timer running after the module unmounts.
+  useEffect(() => {
+    return () => {
+      if (noticeTimerRef.current !== null) {
+        clearTimeout(noticeTimerRef.current);
+        noticeTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  // --- import an exported employee -----------------------------------------
+
+  /** Step 1: pick a file and unpack it into staging (nothing applied yet). */
+  const startImport = useCallback(async (): Promise<void> => {
+    if (importBusy !== null) return;
+    setImportBusy("inspect");
+    setImportError(null);
+    dismissNotice();
+    try {
+      const preview = await imb.employees.importInspect();
+      // `null` = the native open dialog was cancelled.
+      if (preview !== null) {
+        setImportPreview(preview);
+        setImportOverwrite(false);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setImportBusy(null);
+    }
+  }, [importBusy, dismissNotice]);
+
+  /** Drop a staged package (dialog dismissed or confirm refused). */
+  const discardImport = useCallback((): void => {
+    const token = importPreview?.token;
+    setImportPreview(null);
+    setImportOverwrite(false);
+    setImportError(null);
+    if (token !== undefined) void imb.employees.importCancel(token);
+  }, [importPreview]);
+
+  /** Write the previewed package; `overwrite` was confirmed by the user. */
+  const applyImport = useCallback(
+    async (overwrite: boolean): Promise<void> => {
+      const preview = importPreview;
+      if (preview === null || importBusy !== null) return;
+      setImportBusy("apply");
+      setImportError(null);
+      try {
+        const result = await imb.employees.importApply(preview.token, {
+          overwrite,
+        });
+        appStore.addEmployee(result.employee);
+        setSelectedId(result.employee.id);
+        // The detail pane's MCP / skill option lists must show what the
+        // package just installed.
+        void appStore.reloadMcp();
+        void appStore.reloadSkills();
+        setImportPreview(null);
+        setImportOverwrite(false);
+        setImportConfirmOpen(false);
+        showNotice(importSummary(result));
+      } catch (err) {
+        // The package is still staged, so the dialog stays open for a retry.
+        setImportError(err instanceof Error ? err.message : String(err));
+        setImportConfirmOpen(false);
+      } finally {
+        setImportBusy(null);
+      }
+    },
+    [importPreview, importBusy, showNotice],
+  );
+
+  const confirmImport = useCallback((): void => {
+    if (importPreview === null) return;
+    setImportError(null);
+    // An overwrite is destructive on local data: ask a second time.
+    if (importOverwrite && importPreview.hasConflicts) {
+      setImportConfirmOpen(true);
+      return;
+    }
+    void applyImport(false);
+  }, [importPreview, importOverwrite, applyImport]);
+
+  const importTargets = useMemo(() => {
+    if (importPreview === null) return { skills: [], mcp: [] };
+    return {
+      skills: importPreview.skills
+        .filter((skill) => skill.exists && skill.invalidReason === null)
+        .map((skill) => skill.name),
+      mcp: importPreview.mcpServers
+        .filter((server) => server.exists)
+        .map((server) => server.name),
+    };
+  }, [importPreview]);
+
   const listPane = (
     <ListPane
       title={t("Employees")}
@@ -225,7 +369,33 @@ export function EmployeesModule(): React.JSX.Element {
         />
       }
       footer={
-        <Button block onClick={() => setRecruitOpen(true)}>
+        // The Recruit button opens a small menu: create a new employee (the
+        // previous behaviour) or import an exported one. Reuses the module's
+        // `ContextMenu` (same look as the row context menus).
+        <Button
+          block
+          onClick={(event) => {
+            const rect = event.currentTarget.getBoundingClientRect();
+            setCtxMenu({
+              // Dropdown, not a cursor menu: attached to the button, opened
+              // upwards and centred on it (flips back down only if it would
+              // leave the viewport).
+              anchor: { rect, placement: "top", align: "center" },
+              items: [
+                {
+                  key: "recruit-new",
+                  label: t("New employee…"),
+                  onSelect: () => setRecruitOpen(true),
+                },
+                {
+                  key: "recruit-import",
+                  label: t("Import from file…"),
+                  onSelect: () => void startImport(),
+                },
+              ],
+            });
+          }}
+        >
           {t("Recruit")}
         </Button>
       }
@@ -344,9 +514,132 @@ export function EmployeesModule(): React.JSX.Element {
         defaultModel={defaultModel}
         onCreate={create}
       />
+      <EmployeeImportModal
+        open={importPreview !== null}
+        preview={importPreview}
+        overwrite={importOverwrite}
+        onOverwriteChange={setImportOverwrite}
+        busy={importBusy === "apply"}
+        error={importError}
+        onCancel={discardImport}
+        onConfirm={confirmImport}
+      />
+      <Modal
+        open={importConfirmOpen}
+        onClose={() => setImportConfirmOpen(false)}
+        title={t("Overwrite existing items?")}
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setImportConfirmOpen(false)}
+              disabled={importBusy === "apply"}
+            >
+              {t("Cancel")}
+            </Button>
+            <Button
+              variant="danger"
+              loading={importBusy === "apply"}
+              onClick={() => void applyImport(true)}
+            >
+              {t("Overwrite and import")}
+            </Button>
+          </>
+        }
+      >
+        <p className="imb-module-note">
+          {t(
+            "These items already exist on this machine and will be replaced by the ones in the file:",
+          )}
+        </p>
+        <ul className="imb-import-confirm-list">
+          {importTargets.skills.map((name) => (
+            <li key={`skill-${name}`}>
+              {t("Skill folder “${name}”", { name })}
+            </li>
+          ))}
+          {importTargets.mcp.map((name) => (
+            <li key={`mcp-${name}`}>{t("MCP server “${name}”", { name })}</li>
+          ))}
+        </ul>
+      </Modal>
+      {notice !== null && (
+        <div className="imb-employee-import-notice" role="status">
+          <span>{notice}</span>
+          <button
+            type="button"
+            className="imb-employee-import-notice-close"
+            aria-label={t("Close")}
+            title={t("Close")}
+            onClick={dismissNotice}
+          >
+            <IconX className="imb-icon imb-sm" />
+          </button>
+        </div>
+      )}
       {error !== null && (
         <p className="imb-error-text imb-module-error">{error}</p>
       )}
     </>
   );
+}
+
+/** One-line summary of a finished import, shown as a module notice. */
+function importSummary(result: EmployeeImportResult): string {
+  const parts: string[] = [
+    t("Imported ${name}.", {
+      name: result.employee.name.trim() || t("Unnamed"),
+    }),
+  ];
+  if (result.skills.installed.length > 0) {
+    parts.push(
+      t("Skills added: ${names}.", {
+        names: result.skills.installed.join(", "),
+      }),
+    );
+  }
+  if (result.skills.overwritten.length > 0) {
+    parts.push(
+      t("Skills overwritten: ${names}.", {
+        names: result.skills.overwritten.join(", "),
+      }),
+    );
+  }
+  if (result.skills.kept.length > 0) {
+    parts.push(
+      t("Skills kept as they are: ${names}.", {
+        names: result.skills.kept.join(", "),
+      }),
+    );
+  }
+  if (result.mcp.added.length > 0) {
+    parts.push(
+      t("MCP servers added: ${names}.", { names: result.mcp.added.join(", ") }),
+    );
+  }
+  if (result.mcp.overwritten.length > 0) {
+    parts.push(
+      t("MCP servers overwritten: ${names}.", {
+        names: result.mcp.overwritten.join(", "),
+      }),
+    );
+  }
+  const secretNames = Object.entries(result.secretsToFill).map(
+    ([name, keys]) => `${name} (${keys.join(", ")})`,
+  );
+  if (secretNames.length > 0) {
+    parts.push(
+      t("Fill in credentials for: ${names}.", {
+        names: secretNames.join("; "),
+      }),
+    );
+  }
+  if (result.warnings.length > 0) {
+    parts.push(
+      t("${count} warning(s) were recorded for this import.", {
+        count: String(result.warnings.length),
+      }),
+    );
+  }
+  return parts.join(" ");
 }

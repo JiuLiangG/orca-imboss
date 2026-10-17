@@ -166,7 +166,12 @@ export async function uninstallSkill(name: string): Promise<void> {
   await rm(dest, { recursive: true, force: true });
 }
 
-function isValidSkillName(name: string): boolean {
+/**
+ * True when `name` is a legal user skill folder name (`SAFE_NAME_RE`). Shared
+ * with the employee import/export code, which must apply the same rule to
+ * archive members and destination folders.
+ */
+export function isValidSkillName(name: string): boolean {
   return SAFE_NAME_RE.test(name);
 }
 

@@ -11,6 +11,10 @@ import type {
   CronJobInfo,
   Employee,
   EmployeeDeleteResult,
+  EmployeeExportResult,
+  EmployeeImportApplyOptions,
+  EmployeeImportPreview,
+  EmployeeImportResult,
   EmployeeInput,
   EmployeeSession,
   InstalledSkill,
@@ -182,6 +186,34 @@ const api = {
         ext,
         data,
       ) as Promise<Employee | null>,
+    /**
+     * Write one employee (+ its MCP servers and skill folders) to a zip the
+     * user picks in a native save dialog. `null` = dialog cancelled.
+     */
+    exportToFile: (id: number) =>
+      ipcRenderer.invoke(
+        "employees:export",
+        id,
+      ) as Promise<EmployeeExportResult | null>,
+    /**
+     * Pick an exported zip and unpack it into a staging folder. Nothing is
+     * applied yet: the preview carries the token the apply step needs.
+     * `null` = dialog cancelled.
+     */
+    importInspect: () =>
+      ipcRenderer.invoke(
+        "employees:importInspect",
+      ) as Promise<EmployeeImportPreview | null>,
+    /** Apply a previewed package (creates a new employee). */
+    importApply: (token: string, options: EmployeeImportApplyOptions) =>
+      ipcRenderer.invoke(
+        "employees:importApply",
+        token,
+        options,
+      ) as Promise<EmployeeImportResult>,
+    /** Discard a staged package the user declined. */
+    importCancel: (token: string) =>
+      ipcRenderer.invoke("employees:importCancel", token) as Promise<void>,
     /** Fired when main creates/updates/deletes an employee (e.g. the agent's
      *  `imb_set_employees`), so the renderer cache can re-fetch. */
     onChanged: (cb: (payload: { ids: number[] }) => void) =>

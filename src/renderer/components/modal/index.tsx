@@ -51,7 +51,9 @@ export function Modal({
       dialog?.querySelector<HTMLElement>(
         'input, textarea, select, button:not([disabled]), [tabindex]:not([tabindex="-1"])',
       );
-    first?.focus();
+    // `preventScroll` keeps the dialog body at its initial scroll position: a
+    // control near the bottom must not yank the content down when it opens.
+    first?.focus({ preventScroll: true });
 
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === "Escape") {

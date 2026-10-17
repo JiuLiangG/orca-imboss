@@ -6,6 +6,14 @@
 
 export type Placement = "top" | "bottom" | "left" | "right";
 
+/**
+ * Cross-axis alignment of the floating element relative to its trigger.
+ * `center` (default) centers it on the trigger — right for tooltips; `start`
+ * aligns its leading edge with the trigger's leading edge — right for menus and
+ * dropdowns that should hang off a button rather than straddle it.
+ */
+export type Align = "center" | "start";
+
 export const DEFAULT_OFFSET = 8;
 const VIEWPORT_MARGIN = 4;
 
@@ -23,7 +31,8 @@ const OPPOSITE: Record<Placement, Placement> = {
 };
 
 /**
- * Anchor the bubble for `side`, centered on the trigger's edge. Returns the
+ * Anchor the bubble for `side`, centered on the trigger's edge (`align:
+ * "center"`) or aligned to its leading edge (`align: "start"`). Returns the
  * un-clamped top/left. Centering is absolute for the cross axis, so it may fall
  * off-screen on the cross axis; the caller clamps.
  */
@@ -32,26 +41,29 @@ function basePosition(
   trigger: DOMRect,
   bubble: DOMRect,
   offset: number,
+  align: Align,
 ): { top: number; left: number } {
+  const centeredLeft = trigger.left + trigger.width / 2 - bubble.width / 2;
+  const centeredTop = trigger.top + trigger.height / 2 - bubble.height / 2;
   switch (side) {
     case "top":
       return {
         top: trigger.top - offset - bubble.height,
-        left: trigger.left + trigger.width / 2 - bubble.width / 2,
+        left: align === "start" ? trigger.left : centeredLeft,
       };
     case "bottom":
       return {
         top: trigger.bottom + offset,
-        left: trigger.left + trigger.width / 2 - bubble.width / 2,
+        left: align === "start" ? trigger.left : centeredLeft,
       };
     case "left":
       return {
-        top: trigger.top + trigger.height / 2 - bubble.height / 2,
+        top: align === "start" ? trigger.top : centeredTop,
         left: trigger.left - offset - bubble.width,
       };
     case "right":
       return {
-        top: trigger.top + trigger.height / 2 - bubble.height / 2,
+        top: align === "start" ? trigger.top : centeredTop,
         left: trigger.right + offset,
       };
   }
@@ -63,6 +75,7 @@ export function computeAnchoredPosition(
   trigger: DOMRect,
   bubble: DOMRect,
   offset: number,
+  align: Align = "center",
 ): AnchoredPosition {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
@@ -82,10 +95,10 @@ export function computeAnchoredPosition(
   };
 
   let side = placement;
-  let pos = basePosition(side, trigger, bubble, offset);
+  let pos = basePosition(side, trigger, bubble, offset, align);
   if (overflow(pos)) {
     side = OPPOSITE[side];
-    pos = basePosition(side, trigger, bubble, offset);
+    pos = basePosition(side, trigger, bubble, offset, align);
   }
 
   return {

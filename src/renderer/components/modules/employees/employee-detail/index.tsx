@@ -79,6 +79,9 @@ export function EmployeeDetail({
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [cropOpen, setCropOpen] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -133,6 +136,33 @@ export function EmployeeDetail({
 
   const triggerPicker = (): void => fileRef.current?.click();
 
+  /** Write this employee (+ its MCP settings and skill folders) to a zip. */
+  const runExport = async (): Promise<void> => {
+    setExporting(true);
+    setExportError(null);
+    setExportNotice(null);
+    try {
+      const result = await imb.employees.exportToFile(employee.id);
+      // `null` = the native save dialog was cancelled.
+      if (result !== null) {
+        setExportNotice(
+          t(
+            "Exported ${files} files (${size}) to ${path}. Credential values were cleared — fill them in again after importing.",
+            {
+              files: String(result.files),
+              size: formatBytes(result.sizeBytes),
+              path: result.path,
+            },
+          ),
+        );
+      }
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const displayName = (form.name ?? "").trim() || employee.name || t("Unnamed");
   // The assistant's role is immutable; show the persisted value rather than a
   // (hidden) editable field.
@@ -151,13 +181,26 @@ export function EmployeeDetail({
         sub={displayRole || "—"}
         actions={
           isAssistant ? undefined : (
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() => setRemoveOpen(true)}
-            >
-              {t("Remove")}
-            </Button>
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={exporting}
+                title={t(
+                  "Export this employee with its MCP settings and skill folders as a zip. Credential values are cleared.",
+                )}
+                onClick={() => void runExport()}
+              >
+                {t("Export")}
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => setRemoveOpen(true)}
+              >
+                {t("Remove")}
+              </Button>
+            </>
           )
         }
       />
@@ -208,6 +251,14 @@ export function EmployeeDetail({
           <p className="imb-error-text imb-employee-avatar-error">
             {avatarError}
           </p>
+        )}
+        {exportError !== null && (
+          <p className="imb-error-text imb-employee-export-note">
+            {exportError}
+          </p>
+        )}
+        {exportNotice !== null && (
+          <p className="imb-employee-export-note imb-mono">{exportNotice}</p>
         )}
 
         <div
@@ -371,4 +422,16 @@ export function EmployeeDetail({
       />
     </>
   );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`;
 }

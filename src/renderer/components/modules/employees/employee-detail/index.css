@@ -92,3 +92,13 @@
   font-size: var(--imb-text-sm);
   margin: var(--imb-space-2) 0;
 }
+
+/* Result / error line of the "Export" action (zip with MCP + skills). */
+.imb-employee-export-note {
+  color: var(--imb-muted);
+  font-size: var(--imb-text-sm);
+  margin: 0 0 var(--imb-space-4);
+  word-break: break-all;
+}
+
+/* Append the shared bytes formatter at the end of the detail component. */
