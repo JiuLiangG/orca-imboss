@@ -1,0 +1,183 @@
+/* Floating "jump to one of my messages" control (bottom-right of the root
+   chat thread). The wrapper `.imb-chat-thread-wrap` is the positioning
+   context — the thread itself scrolls, so an absolutely positioned child of
+   it would scroll away with the messages.
+
+   The container spans the thread's width but is `pointer-events: none`: only
+   the button and the (open) panel are hit-testable, so the empty strip along
+   the bottom edge never swallows clicks on the transcript. `right`/`bottom`
+   keep the button `var(--imb-space-5)` inside the thread's corner, exactly
+   like the agent-session jump buttons. */
+.imb-my-jump {
+  position: absolute;
+  left: 0;
+  right: var(--imb-space-5);
+  bottom: var(--imb-space-5);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--imb-space-2);
+  pointer-events: none;
+}
+
+/* Panel. It is the first flow child and the container is bottom-pinned, so the
+   panel grows upwards and the button never moves. The height expand is a real
+   one: `grid-template-rows: 0fr → 1fr` (Chromium interpolates it) plus an
+   opacity fade, both on `--imb-motion-base` / `--imb-ease-standard`. */
+.imb-my-jump-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  width: 320px;
+  /* Clamped against the container, i.e. the thread's width minus the inset. */
+  max-width: calc(100% - var(--imb-space-5));
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-md);
+  background: var(--imb-surface);
+  /* The panel floats above the transcript, so it takes the overlay elevation
+     (the FAB below keeps the lighter `raised`). */
+  box-shadow: var(--imb-elev-overlay);
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+  transition:
+    grid-template-rows var(--imb-motion-base) var(--imb-ease-standard),
+    opacity var(--imb-motion-base) var(--imb-ease-standard);
+}
+
+.imb-my-jump-open .imb-my-jump-panel {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* A grid item's automatic minimum size would stop the collapsed row from
+   reaching 0 — `min-height: 0` + `overflow: hidden` is what makes 0fr collapse
+   cleanly. The border/shadow live on the panel itself, so its own overflow
+   cannot clip them. */
+.imb-my-jump-panel-inner {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.imb-my-jump-list {
+  flex: 1;
+  min-height: 0;
+  /* ~8 one-line rows; the rest scrolls. */
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: var(--imb-space-1);
+}
+
+.imb-my-jump-item {
+  flex: none;
+  display: block;
+  width: 100%;
+  padding: 4px var(--imb-space-2);
+  border: 0;
+  border-radius: var(--imb-radius-sm);
+  background: transparent;
+  color: var(--imb-fg-2);
+  font: inherit;
+  font-size: var(--imb-text-sm);
+  line-height: 20px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.imb-my-jump-item:hover {
+  background: var(--imb-fg-soft);
+}
+
+.imb-my-jump-item:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+}
+
+/* The entry at the top of the viewport ("you are here"). */
+.imb-my-jump-item-current {
+  background: var(--imb-accent-soft);
+  color: var(--imb-fg);
+  font-weight: 600;
+}
+
+.imb-my-jump-item-current:hover {
+  background: var(--imb-accent-soft);
+}
+
+/* Floating trigger. Same visual language as the agent-session jump buttons
+   (raised pill, opaque hover tint — a translucent tint would show the text
+   scrolling underneath). */
+.imb-my-jump-fab {
+  pointer-events: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-pill);
+  background: var(--imb-surface);
+  color: var(--imb-fg-2);
+  box-shadow: var(--imb-elev-raised);
+  cursor: pointer;
+  transition:
+    color var(--imb-motion-fast) var(--imb-ease-standard),
+    background var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-my-jump-fab:hover {
+  background: color-mix(in oklch, var(--imb-fg) 8%, var(--imb-surface));
+  color: var(--imb-fg);
+}
+
+.imb-my-jump-fab:active {
+  background: color-mix(in oklch, var(--imb-fg) 12%, var(--imb-surface));
+}
+
+.imb-my-jump-fab:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+}
+
+.imb-my-jump-fab-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Landing flash: `jumpToMessage` tags the target row with `data-quote-target`
+   and removes it on `animationend`, so no React state is involved. Reduced
+   motion is handled in JS (no tag is set at all); this rule is a belt. */
+@keyframes imb-quote-flash {
+  from {
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--imb-accent), transparent 45%);
+  }
+
+  to {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+
+.imb-msg[data-quote-target] .imb-bubble {
+  animation: imb-quote-flash 700ms var(--imb-ease-standard);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imb-my-jump-panel {
+    transition: none;
+  }
+
+  .imb-msg[data-quote-target] .imb-bubble {
+    animation: none;
+  }
+}

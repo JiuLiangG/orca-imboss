@@ -251,6 +251,7 @@
   "Model": "使用的模型",
   "Month": "本月",
   "Mute": "静音",
+  "My messages": "我的发言",
   "Name": "名字",
   "name": "名称",
   "Needs credentials filled in after import: ${keys}": "导入后需要补填凭据：${keys}",

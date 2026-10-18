@@ -158,7 +158,13 @@ export function MessageBubble({
   };
 
   return (
-    <div className={cls("imb-msg", self ? "imb-self" : "imb-other")}>
+    <div
+      className={cls("imb-msg", self ? "imb-self" : "imb-other")}
+      // Anchor for in-thread jumps (the root chat's "my messages" list). Text
+      // bubbles are the only kind the boss writes, so tagging this row covers
+      // every jump target without touching the other message kinds.
+      data-message-id={messageId}
+    >
       {avatar}
       <div className={cls("imb-bubble", mediaOnly && "imb-bubble-media")}>
         {hasAttachments && (

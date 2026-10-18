@@ -58,7 +58,11 @@
   --imb-radius-pill: 9999px;
   --imb-elev-flat: none;
   --imb-elev-ring: 0 0 0 1px var(--imb-border);
+  /* In-flow cards and controls: a hairline lift only. */
   --imb-elev-raised: 0 1px 2px rgba(0, 0, 0, 0.06);
+  /* Layers that float *above* the content (menus, popovers, panels): a real cast
+     shadow so the surface reads as detached from the text underneath. */
+  --imb-elev-overlay: 0 8px 24px rgba(0, 0, 0, 0.15);
   --imb-focus-ring: 0 0 0 3px color-mix(in oklab, var(--imb-accent), transparent 70%);
   --imb-motion-fast: 100ms;
   --imb-motion-base: 200ms;

@@ -43,6 +43,11 @@ import { ChatInputBar } from "../chat-input-bar";
 import { CHAT_MUTE_ENABLED, MuteGlyph, chatMuteMenuItem } from "../chat-mute";
 import { MessageItem } from "../message-item";
 import {
+  MY_JUMP_TOP_GAP,
+  MyMessageJump,
+  type MyMessageEntry,
+} from "../my-message-jump";
+import {
   displayTitle,
   formatChatTime,
   previewText,
@@ -87,6 +92,43 @@ interface ChatRunStatus {
 
 /** Distance from the bottom (px) still considered "pinned" for auto-scroll. */
 const PIN_THRESHOLD = 32;
+
+/** Landing-flash duration (ms); mirrors the `imb-quote-flash` keyframe. */
+const FLASH_MS = 700;
+
+/**
+ * Collapse every whitespace run (newlines included) to one space — the "my
+ * messages" list is one line per entry, so the raw text is never shown.
+ */
+function collapseWhitespace(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Briefly outline the row a jump landed on. Pure DOM (a `data-`attribute read by
+ * `my-message-jump/index.css`) so nothing re-renders and nothing shifts; skipped
+ * entirely when the user asked for reduced motion.
+ */
+let flashSeq = 0;
+function flashRow(row: HTMLElement): void {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const token = String(++flashSeq);
+  let timer = 0;
+  const clear = (): void => {
+    window.clearTimeout(timer);
+    row.removeEventListener("animationend", clear);
+    // A newer flash may own the attribute by now.
+    if (row.dataset.quoteTarget === token) delete row.dataset.quoteTarget;
+  };
+  // Drop and re-add the attribute (with a reflow) so a repeated jump restarts
+  // the keyframe instead of continuing a finished one.
+  delete row.dataset.quoteTarget;
+  void row.offsetWidth;
+  row.dataset.quoteTarget = token;
+  row.addEventListener("animationend", clear);
+  // Defensive: `animationend` never fires if the row is detached mid-animation.
+  timer = window.setTimeout(clear, FLASH_MS + 300);
+}
 
 /**
  * Per-chat thread scroll, kept outside the component so it survives a module
@@ -668,6 +710,25 @@ export function ChatModule(): React.JSX.Element {
     [messages, pairing],
   );
 
+  // Messages the boss herself wrote, **oldest first** (the order they were said
+  // in — the list reads top-down like the transcript): a plain text bubble with
+  // no sender (the composer and IM integrations both store it that way).
+  // `answer` rows are folded into their ask card and not rendered, the
+  // `interrupted` notice is an app-generated hint, and every other kind is
+  // written by an employee or by the app — none of them is "something the boss
+  // said".
+  const myMessages = useMemo<MyMessageEntry[]>(() => {
+    const entries: MyMessageEntry[] = [];
+    for (const message of visibleMessages) {
+      if (message.senderEmployeeId !== null || message.kind !== "text") {
+        continue;
+      }
+      const text = collapseWhitespace(message.content);
+      if (text.length > 0) entries.push({ id: message.id, text });
+    }
+    return entries;
+  }, [visibleMessages]);
+
   // Cmd/Ctrl+K focuses the chat search (the same muscle memory as most apps).
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -717,6 +778,66 @@ export function ChatModule(): React.JSX.Element {
         pinned,
       });
     }
+  }, []);
+
+  /**
+   * Scroll the thread to one of the boss's messages. One rect read for the
+   * clicked row (no measuring while hovering / scrolling), `scrollTo` on the
+   * thread itself (never `scrollIntoView`, which can scroll ancestors), and the
+   * landing row flashes once the smooth scroll settles.
+   */
+  const jumpToMessage = useCallback((messageId: number): void => {
+    const el = threadRef.current;
+    if (!el) return;
+    const row = el.querySelector<HTMLElement>(
+      `[data-message-id="${messageId}"]`,
+    );
+    if (!row) return;
+    const maxScroll = Math.max(el.scrollHeight - el.clientHeight, 0);
+    const target = Math.min(
+      Math.max(
+        row.getBoundingClientRect().top -
+          el.getBoundingClientRect().top +
+          el.scrollTop -
+          MY_JUMP_TOP_GAP,
+        0,
+      ),
+      maxScroll,
+    );
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (Math.abs(target - el.scrollTop) <= 1) {
+      // Nothing to scroll (already there): still show where it is.
+      flashRow(row);
+      return;
+    }
+    // Following the live tail must not fight the jump: the follow effect re-pins
+    // on every `messages` change, so `pinned` is cleared *before* scrolling (a
+    // programmatic scroll emits `scroll`, which re-syncs it from the position).
+    pinnedRef.current = false;
+    if (selectedIdRef.current !== null) {
+      chatScrollStore.set(selectedIdRef.current, {
+        scrollTop: target,
+        pinned: false,
+      });
+    }
+    el.scrollTo({ top: target, behavior: reduceMotion ? "auto" : "smooth" });
+    if (reduceMotion) return;
+    // Flash on arrival rather than on click, otherwise the ring can finish
+    // before the target is on screen. `scrollend` is the accurate signal; the
+    // timer is the fallback for the (rare) case it never fires.
+    let done = false;
+    let timer = 0;
+    const flashOnArrival = (): void => {
+      if (done) return;
+      done = true;
+      el.removeEventListener("scrollend", flashOnArrival);
+      window.clearTimeout(timer);
+      flashRow(row);
+    };
+    el.addEventListener("scrollend", flashOnArrival);
+    timer = window.setTimeout(flashOnArrival, FLASH_MS);
   }, []);
 
   const handleSend = useCallback(
@@ -1051,25 +1172,44 @@ export function ChatModule(): React.JSX.Element {
           </span>
         )}
       </div>
-      <div className="imb-thread" ref={threadRef} onScroll={handleThreadScroll}>
-        {visibleMessages.map((message, index) => (
-          <Fragment key={`${message.chatId}-${message.id}`}>
-            {shouldShowTimeSeparator(visibleMessages[index - 1], message) && (
-              <TimeSeparator secs={message.createdAt} />
-            )}
-            <MessageItem
-              message={message}
-              onAnswered={() => void loadMessages(message.chatId)}
-              askAnswer={pairing.answerByAskId.get(message.id)}
-            />
-          </Fragment>
-        ))}
-        {selectedRunStatus !== undefined && (
-          // Reserved, fixed-height slot: it is present for the whole run, so
-          // toggling the compaction text never shifts the messages above it.
-          <div className="imb-run-status" role="status">
-            {selectedRunStatus.compacting ? t("Compacting…") : ""}
-          </div>
+      {/* The thread is the scroll container, so the floating "my messages"
+          control lives in this positioning wrapper instead of inside it (an
+          absolute child of the scroller would scroll away with the messages). */}
+      <div className="imb-chat-thread-wrap">
+        <div
+          className={cls(
+            "imb-thread",
+            myMessages.length > 0 && "imb-has-my-jump",
+          )}
+          ref={threadRef}
+          onScroll={handleThreadScroll}
+        >
+          {visibleMessages.map((message, index) => (
+            <Fragment key={`${message.chatId}-${message.id}`}>
+              {shouldShowTimeSeparator(visibleMessages[index - 1], message) && (
+                <TimeSeparator secs={message.createdAt} />
+              )}
+              <MessageItem
+                message={message}
+                onAnswered={() => void loadMessages(message.chatId)}
+                askAnswer={pairing.answerByAskId.get(message.id)}
+              />
+            </Fragment>
+          ))}
+          {selectedRunStatus !== undefined && (
+            // Reserved, fixed-height slot: it is present for the whole run, so
+            // toggling the compaction text never shifts the messages above it.
+            <div className="imb-run-status" role="status">
+              {selectedRunStatus.compacting ? t("Compacting…") : ""}
+            </div>
+          )}
+        </div>
+        {myMessages.length > 0 && (
+          <MyMessageJump
+            threadRef={threadRef}
+            entries={myMessages}
+            onSelect={jumpToMessage}
+          />
         )}
       </div>
       <ChatInputBar

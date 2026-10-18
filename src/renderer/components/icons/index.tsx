@@ -234,6 +234,20 @@ export function IconChevronUp(props: IconProps): React.JSX.Element {
   );
 }
 
+/** Bulleted list (used by the root-chat "my messages" jump). */
+export function IconList(props: IconProps): React.JSX.Element {
+  return (
+    <svg {...base(props)} strokeWidth={1.8}>
+      <path d="M9 6h11" />
+      <path d="M9 12h11" />
+      <path d="M9 18h11" />
+      <path d="M4.5 6h.01" />
+      <path d="M4.5 12h.01" />
+      <path d="M4.5 18h.01" />
+    </svg>
+  );
+}
+
 /** "Open" affordance: an arrow leaving its box (used by the image card). */
 export function IconOpen(props: IconProps): React.JSX.Element {
   return (
