@@ -1,11 +1,15 @@
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@shared/constants/paged";
 import {
   CURATED_PROVIDERS,
+  DEFAULT_MODEL_INPUT_TYPES,
+  isModelInputType,
+  MODEL_INPUT_TYPES,
   PROVIDER_API_TYPES,
 } from "@shared/constants/providers";
 import type {
   AuthFile,
   ModelsFile,
+  ModelInputSpec,
   ModelSpec,
   PageQuery,
   PageResult,
@@ -59,12 +63,14 @@ export async function listProviders(): Promise<ProviderInfo[]> {
       authType: stored.authType,
       keyHint: stored.authType === "api_key" ? maskKey(stored.key) : null,
       modelIds: [],
+      models: [],
     });
   }
 
   for (const [id, spec] of Object.entries(custom)) {
     if (!SAFE_ID_RE.test(id)) continue; // skip anything unreadable
     const stored = readStoredCredential(auth[id]);
+    const models = toInfoModels(spec.models);
     infos.push({
       id,
       kind: "custom",
@@ -74,7 +80,8 @@ export async function listProviders(): Promise<ProviderInfo[]> {
         spec.api && PROVIDER_API_TYPES.includes(spec.api)
           ? spec.api
           : undefined,
-      modelIds: (spec.models ?? []).map((m) => m.id),
+      modelIds: models.map((model) => model.id),
+      models,
       hasKey: stored !== null,
       authType: stored?.authType ?? null,
       keyHint: stored?.authType === "api_key" ? maskKey(stored.key) : null,
@@ -171,7 +178,7 @@ export async function upsertProvider(input: ProviderUpsert): Promise<void> {
     models.providers[id] = {
       baseUrl: validateBaseUrl(input.baseUrl),
       api: apiType,
-      models: toModelSpecs(validateModelIds(input.modelIds)),
+      models: toModelSpecs(validateModels(input.models)),
     };
   }
 
@@ -332,17 +339,79 @@ function validateProviderId(id: unknown): string {
   return id;
 }
 
-function validateModelIds(modelIds: string[] | undefined): string[] {
-  if (!Array.isArray(modelIds) || modelIds.length === 0) {
+/** Cap on the models accepted in one custom provider (defensive limit). */
+const MAX_MODELS_PER_PROVIDER = 256;
+
+/**
+ * Validate + normalize the model list of a custom provider.
+ *
+ * Rejects (throws) rather than coercing: an invalid `input` value would make
+ * Pi reject the WHOLE `models.json` schema and hide every custom provider's
+ * models, so a dirty value must never reach the file.
+ */
+function validateModels(models: unknown): ModelInputSpec[] {
+  if (!Array.isArray(models) || models.length === 0) {
     throw new Error("At least one model id is required.");
   }
-  if (modelIds.length > 256) throw new Error("Too many model ids.");
-  for (const mid of modelIds) {
-    if (typeof mid !== "string" || !MODEL_ID_RE.test(mid) || mid.length > 256) {
-      throw new Error(`Invalid model id: ${String(mid).slice(0, 32)}`);
-    }
+  if (models.length > MAX_MODELS_PER_PROVIDER) {
+    throw new Error("Too many model ids.");
   }
-  return [...new Set(modelIds)];
+  const specs: ModelInputSpec[] = [];
+  const seen = new Set<string>();
+  for (const raw of models as unknown[]) {
+    const id = validateModelId((raw as { id?: unknown } | null)?.id);
+    // De-duplicate defensively (the form already rejects duplicates); the
+    // first declaration wins so a repeated id can never flip its input types.
+    if (seen.has(id)) continue;
+    seen.add(id);
+    specs.push({
+      id,
+      input: validateModelInputs(
+        (raw as { input?: unknown } | null)?.input,
+        id,
+      ),
+    });
+  }
+  return specs;
+}
+
+function validateModelId(id: unknown): string {
+  if (typeof id !== "string" || !MODEL_ID_RE.test(id) || id.length > 256) {
+    throw new Error(`Invalid model id: ${String(id).slice(0, 32)}`);
+  }
+  return id;
+}
+
+/**
+ * `input` is a closed set owned by Pi's schema. Missing/empty means the default
+ * (text only); anything outside `MODEL_INPUT_TYPES` is an error.
+ */
+function validateModelInputs(
+  input: unknown,
+  modelId: string,
+): ModelInputSpec["input"] {
+  if (input === undefined || input === null) {
+    return [...DEFAULT_MODEL_INPUT_TYPES];
+  }
+  if (!Array.isArray(input)) {
+    throw new Error(`Invalid input types for model ${modelId}.`);
+  }
+  const allowed = new Set<ModelInputSpec["input"][number]>();
+  for (const raw of input as unknown[]) {
+    if (!isModelInputType(raw)) {
+      throw new Error(
+        `Unsupported input type for model ${modelId}: ${String(raw).slice(0, 24)}. Allowed: ${MODEL_INPUT_TYPES.join(", ")}.`,
+      );
+    }
+    allowed.add(raw);
+  }
+  if (allowed.size === 0) {
+    throw new Error(
+      `At least one input type is required for model ${modelId}.`,
+    );
+  }
+  // Canonical order keeps the persisted file stable across selection orders.
+  return MODEL_INPUT_TYPES.filter((type) => allowed.has(type));
 }
 
 function validateApiKey(key: string | undefined): string | undefined {
@@ -368,18 +437,44 @@ function validateBaseUrl(url: string | undefined): string {
   }
 }
 
-function toModelSpecs(ids: string[]): ModelSpec[] {
-  // Sensible generic defaults; cost/context numbers can be refined later once
-  // per-model metadata handling lands with runtime integration.
-  return ids.map((id) => ({
+function toModelSpecs(models: ModelInputSpec[]): ModelSpec[] {
+  // Cost/context numbers keep their generic defaults; only `input` is user
+  // owned today. `name` mirrors the id (the form has no display-name field).
+  return models.map(({ id, input }) => ({
     id,
     name: id,
     reasoning: false,
-    input: ["text"],
+    input: [...input],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 128_000,
     maxTokens: 8192,
   }));
+}
+
+/**
+ * Read side: expose every stored model with its declared input types, falling
+ * back to the default when the entry is missing/unreadable. Pure projection —
+ * a bad value is never written back to `models.json`.
+ */
+function toInfoModels(models: ModelSpec[] | undefined): ModelInputSpec[] {
+  if (!Array.isArray(models)) return [];
+  const infos: ModelInputSpec[] = [];
+  const seen = new Set<string>();
+  for (const model of models) {
+    const id = typeof model?.id === "string" ? model.id : "";
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const declared = Array.isArray(model.input)
+      ? MODEL_INPUT_TYPES.filter((type) =>
+          (model.input as readonly unknown[]).includes(type),
+        )
+      : [];
+    infos.push({
+      id,
+      input: declared.length > 0 ? declared : [...DEFAULT_MODEL_INPUT_TYPES],
+    });
+  }
+  return infos;
 }
 
 function maskKey(key: string | undefined): string | null {

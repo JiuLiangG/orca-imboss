@@ -77,3 +77,27 @@ export const PROVIDER_API_TYPES = [
   "anthropic-messages",
   "google-generative-ai",
 ] as const;
+
+/**
+ * Input (modality) capabilities a model can declare (`models.json` `input`).
+ *
+ * This list is NOT a product choice: Pi validates `models.json` against a
+ * TypeBox schema whose `input` is exactly `("text" | "image")[]`, and a single
+ * unknown value invalidates the WHOLE file (every custom provider's models
+ * disappear from the runtime). Keep it in lockstep with the SDK — verify in
+ * `pi-coding-agent/dist/core/model-config.js` (`ModelDefinitionSchema`) before
+ * adding a value. Audio / video / PDF are not supported by the SDK today.
+ */
+export const MODEL_INPUT_TYPES = ["text", "image"] as const;
+
+/** Fallback for models that declare no (or unreadable) input types. */
+export const DEFAULT_MODEL_INPUT_TYPES: readonly ModelInputType[] = ["text"];
+
+export type ModelInputType = (typeof MODEL_INPUT_TYPES)[number];
+
+export function isModelInputType(value: unknown): value is ModelInputType {
+  return (
+    typeof value === "string" &&
+    (MODEL_INPUT_TYPES as readonly string[]).includes(value)
+  );
+}

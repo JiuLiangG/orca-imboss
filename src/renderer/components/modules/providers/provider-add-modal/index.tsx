@@ -16,8 +16,8 @@ import { Select } from "../../../select";
 import {
   EMPTY_PROVIDER_CONFIG,
   isHttpUrl,
-  parseModelIds,
   ProviderConfigFields,
+  resolveProviderModels,
   type ProviderConfigFormValue,
 } from "../provider-config-fields";
 import { SubscriptionLogin } from "../subscription-login";
@@ -69,7 +69,7 @@ export function ProviderAddModal({
       input = { id: builtinId, kind: "built-in", apiKey: key };
     } else {
       const baseUrl = config.baseUrl.trim();
-      const ids = parseModelIds(config.modelIds);
+      const resolved = resolveProviderModels(config);
       if (!customId.trim()) {
         setError(t("Please enter a provider ID."));
         return;
@@ -82,8 +82,8 @@ export function ProviderAddModal({
         setError(t("Base URL must be a valid http(s) URL."));
         return;
       }
-      if (ids.length === 0) {
-        setError(t("At least one model ID is required."));
+      if (resolved.error !== null) {
+        setError(resolved.error);
         return;
       }
       if (!key) {
@@ -95,7 +95,7 @@ export function ProviderAddModal({
         kind: "custom",
         baseUrl,
         apiType: config.apiType,
-        modelIds: ids,
+        models: resolved.models,
         apiKey: key,
       };
     }

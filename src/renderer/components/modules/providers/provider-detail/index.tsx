@@ -10,9 +10,9 @@ import { PasswordField } from "../../../password-field";
 import { PasswordInput } from "../../../password-input";
 import {
   isHttpUrl,
-  parseModelIds,
   ProviderConfigFields,
   providerConfigToForm,
+  resolveProviderModels,
   type ProviderConfigFormValue,
 } from "../provider-config-fields";
 import { SubscriptionLogin } from "../subscription-login";
@@ -95,7 +95,7 @@ export function ProviderDetail({
       input = { id: provider.id, kind: "built-in", apiKey: key };
     } else {
       const baseUrl = config.baseUrl.trim();
-      const modelIds = parseModelIds(config.modelIds);
+      const resolved = resolveProviderModels(config);
       if (!baseUrl) {
         setError(t("Please enter a base URL."));
         return;
@@ -104,8 +104,8 @@ export function ProviderDetail({
         setError(t("Base URL must be a valid http(s) URL."));
         return;
       }
-      if (modelIds.length === 0) {
-        setError(t("At least one model ID is required."));
+      if (resolved.error !== null) {
+        setError(resolved.error);
         return;
       }
       input = {
@@ -113,7 +113,7 @@ export function ProviderDetail({
         kind: "custom",
         baseUrl,
         apiType: config.apiType,
-        modelIds,
+        models: resolved.models,
         ...(key.length > 0 ? { apiKey: key } : {}),
       };
     }
@@ -127,7 +127,10 @@ export function ProviderDetail({
       setConfig((prev) => ({
         ...prev,
         baseUrl: input.baseUrl ?? prev.baseUrl,
-        modelIds: input.modelIds ? input.modelIds.join("\n") : prev.modelIds,
+        // Reflect what was persisted (trimmed ids, normalized input types) and
+        // clear the staging textarea — it was merged into the list.
+        modelIds: "",
+        models: input.models ?? prev.models,
       }));
       setApiKey("");
       setDirty(false);

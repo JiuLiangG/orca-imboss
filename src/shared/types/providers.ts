@@ -1,7 +1,18 @@
 import { PROVIDER_API_TYPES } from "@shared/constants/providers";
+import type { ModelInputType } from "@shared/constants/providers";
 import type { ThinkingLevel } from "@shared/constants/thinking";
 
 export type ProviderApiType = (typeof PROVIDER_API_TYPES)[number];
+
+/**
+ * One custom model as edited in the provider form: its id plus the input
+ * (modality) capabilities it declares. `input` is restricted to Pi's schema
+ * values (see `MODEL_INPUT_TYPES`), never free text.
+ */
+export interface ModelInputSpec {
+  id: string;
+  input: ModelInputType[];
+}
 
 /** Safe-to-render provider description (API keys are never included raw). */
 export interface ProviderInfo {
@@ -10,7 +21,10 @@ export interface ProviderInfo {
   label: string;
   baseUrl?: string;
   apiType?: ProviderApiType;
+  /** Model ids, derived from `models` (kept for list rows / older callers). */
   modelIds: string[];
+  /** One entry per model, including its declared input types. */
+  models: ModelInputSpec[];
   hasKey: boolean;
   /**
    * How the stored credential authenticates. `null` when a custom provider
@@ -53,7 +67,8 @@ export interface ProviderUpsert {
   label?: string;
   baseUrl?: string;
   apiType?: ProviderApiType;
-  modelIds?: string[];
+  /** Required for custom providers: one entry per model id + its input types. */
+  models?: ModelInputSpec[];
   /** Omit to keep an existing key unchanged on update. */
   apiKey?: string;
 }
@@ -74,7 +89,7 @@ export interface ModelSpec {
   id: string;
   name: string;
   reasoning: boolean;
-  input: string[];
+  input: ModelInputType[];
   cost: {
     input: number;
     output: number;

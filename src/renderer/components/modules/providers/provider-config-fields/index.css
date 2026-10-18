@@ -4,3 +4,71 @@
   gap: 8px;
   margin-top: 8px;
 }
+
+/* Model row list: one row per model id + its input-type multi-select. */
+.imb-model-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--imb-space-2);
+}
+
+.imb-model-row {
+  display: flex;
+  align-items: center;
+  gap: var(--imb-space-2);
+}
+
+.imb-model-row .imb-model-row-id {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 6px 10px;
+}
+
+/* The multi-select trigger has its own 38px height; keep the row compact. */
+.imb-model-row .imb-model-row-input {
+  flex: 0 0 150px;
+}
+
+.imb-model-row .imb-model-row-input .imb-ms-trigger {
+  min-height: 36px;
+  font-size: var(--imb-text-sm);
+}
+
+.imb-model-rows-empty {
+  margin: 0;
+  color: var(--imb-muted);
+  font-size: var(--imb-text-sm);
+}
+
+.imb-model-add-row {
+  display: flex;
+  align-items: center;
+}
+
+.imb-model-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: var(--imb-radius-md);
+  background: transparent;
+  color: var(--imb-accent);
+  font: inherit;
+  font-size: var(--imb-text-sm);
+  cursor: pointer;
+  transition:
+    background var(--imb-motion-fast) var(--imb-ease-standard),
+    color var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-model-add-btn:hover {
+  background: var(--imb-accent-soft);
+  color: var(--imb-accent-active);
+}
+
+.imb-model-add-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+}
