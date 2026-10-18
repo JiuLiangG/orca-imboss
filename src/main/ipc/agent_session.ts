@@ -1,5 +1,10 @@
 import { ipcMain } from "electron";
-import { bind, interruptChat, unbind } from "../agent/session-queue";
+import {
+  bind,
+  interruptChat,
+  interruptTurn,
+  unbind,
+} from "../agent/session-queue";
 import { assertInteger } from "./helpers";
 
 /**
@@ -41,5 +46,17 @@ export function registerAgentSessionHandlers(): void {
     "agentSession:interruptChat",
     (_event, chatId: unknown): Promise<number> =>
       interruptChat(assertInteger(chatId, "chat id")),
+  );
+
+  // Interrupt the **current turn** of exactly one `(employee, chat)` session
+  // (the agent-session view's button). Queued messages are kept and the session
+  // stays alive. Returns whether a streaming run was actually interrupted.
+  ipcMain.handle(
+    "agentSession:interruptTurn",
+    (_event, employeeId: unknown, chatId: unknown): Promise<boolean> =>
+      interruptTurn(
+        assertInteger(employeeId, "employee id"),
+        assertInteger(chatId, "chat id"),
+      ),
   );
 }

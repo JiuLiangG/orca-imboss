@@ -3,6 +3,7 @@ import type { AgentSessionViewEntry } from "@shared/types";
 import { resolve } from "path";
 import { getAgentSessionsDir } from "../data-dir";
 import { getSession } from "../db/sessions";
+import { INTERRUPT_MARKER } from "./interrupt-marker";
 import { loadPiSdk } from "./pi-sdk";
 import { formatToolArgsDetail, summarizeToolArgs } from "./tool-args";
 
@@ -61,6 +62,13 @@ function projectEntries(entries: SessionEntry[]): AgentSessionViewEntry[] {
       if (summary.length > 0) {
         out.push({ kind: "compaction", id: entry.id, summary });
       }
+      continue;
+    }
+    if (entry.type === "custom" && entry.customType === INTERRUPT_MARKER) {
+      // The app's own "turn interrupted here" marker: a durable custom entry that
+      // never reaches the model. Projected as a separator, positioned exactly
+      // where the aborted turn was cut (entries are appended in run order).
+      out.push({ kind: "interrupted", id: entry.id });
       continue;
     }
     if (entry.type !== "message") continue;

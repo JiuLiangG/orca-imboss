@@ -1,8 +1,5 @@
 import { t } from "@shared/l10n";
-import { useRef, useState } from "react";
-import { Button } from "../../../button";
-import { IconHalt } from "../../../icons";
-import { Popover } from "../../../popover";
+import { HaltButton as HaltButtonBase } from "../../../halt-button";
 import type { Placement } from "../../../tooltip/position";
 import "./index.css";
 
@@ -14,83 +11,29 @@ export interface HaltButtonProps {
 }
 
 /**
- * Icon-only "Halt" affordance shared by the `chat` and `progress` cards.
+ * Icon-only "Halt" affordance for the `chat` and `progress` cards: interrupts
+ * **every** agent session belonging to the linked task group.
  *
  * Rendered as the **last child of the message row**, outside the card bubble,
  * and taken out of flow (see `.imb-halt`): absolutely positioned just right of
  * the bubble and vertically centred, so the bubble's width/geometry is identical
- * to when no button is present.
+ * to when no button is present. Behaviour (confirm popup, busy state, failure
+ * logging) comes from the shared `halt-button` component; this wrapper only
+ * supplies the card semantics and the overlay class.
  *
- * Clicking it opens a small confirmation popup anchored to the button; on
- * confirm it interrupts every agent session belonging to the linked task group
- * (its non-assistant employee participants plus the assistant's root
- * orchestration session). A card has no error surface, so a failed interrupt is
- * only logged (matching the module's convention). Always shown — no run-state
- * signal is tracked.
+ * Always shown — no run-state signal is tracked.
  */
 export function HaltButton({
   chatId,
   placement = "left",
 }: HaltButtonProps): React.JSX.Element {
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const label = t("Halt");
-
-  const close = (): void => {
-    // Never close mid-flight; the request settles and closes on its own.
-    if (!busy) setOpen(false);
-  };
-
-  const confirm = async (): Promise<void> => {
-    setBusy(true);
-    try {
-      await imb.agentSession.interruptChat(chatId);
-    } catch (err) {
-      console.error(`[halt] failed to interrupt chat ${chatId}:`, err);
-    } finally {
-      setBusy(false);
-      setOpen(false);
-    }
-  };
-
   return (
-    <>
-      <button
-        ref={triggerRef}
-        type="button"
-        className="imb-halt"
-        aria-label={label}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        title={label}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <IconHalt />
-      </button>
-      <Popover
-        open={open}
-        anchorRef={triggerRef}
-        placement={placement}
-        onClose={close}
-      >
-        <p className="imb-halt-confirm-text">
-          {t("Confirm interrupting this task group chat's sessions?")}
-        </p>
-        <div className="imb-halt-confirm-actions">
-          <Button variant="secondary" size="sm" onClick={close} disabled={busy}>
-            {t("Cancel")}
-          </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            onClick={() => void confirm()}
-            loading={busy}
-          >
-            {label}
-          </Button>
-        </div>
-      </Popover>
-    </>
+    <HaltButtonBase
+      className="imb-halt"
+      placement={placement}
+      label={t("Halt")}
+      confirmText={t("Confirm interrupting this task group chat's sessions?")}
+      onInterrupt={() => imb.agentSession.interruptChat(chatId)}
+    />
   );
 }

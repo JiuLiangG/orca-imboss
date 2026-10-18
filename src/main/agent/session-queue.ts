@@ -8,6 +8,7 @@ import { errorEvent, sendEventTo, toStreamEvent } from "./agent-events";
 import { getAgentEnvironment } from "./environment";
 import type { AgentSession as AppAgentSession } from "./session";
 import { ensureSessionFile } from "./session-files";
+import { takeUndelivered, userMessageText } from "./steer-ledger";
 
 /**
  * App-level serialized queue per `{employeeId}/{chatId}`.
@@ -53,6 +54,18 @@ interface QueueState {
   idleTimer?: NodeJS.Timeout;
   /** Windows that bound this key (receive its streamed events). */
   boundSenders: Set<WebContents>;
+  /**
+   * Texts this app successfully handed to the **current** run as steering
+   * messages, in hand-over order. Reset at the start of every run, so it only
+   * ever describes the in-flight one. See `steer-ledger.ts` for why it exists.
+   */
+  pendingSteers: string[];
+  /**
+   * Texts of the current run's `user` messages that Pi actually persisted
+   * (observed through `message_end`). Reset with `pendingSteers`; the difference
+   * between the two is what an interrupt re-queues.
+   */
+  deliveredSteers: string[];
   /** Set by lifecycle teardown so an in-flight drain stops cleanly. */
   disposed: boolean;
 }
@@ -97,6 +110,9 @@ export async function deliver(
   if (opts?.mode === "steer" && state.busy && state.session?.isStreaming) {
     try {
       await state.session.steer(text);
+      // The hand-over succeeded: record it so an interrupt can tell whether this
+      // text ever reached the transcript (see `steer-ledger.ts`).
+      state.pendingSteers.push(text);
       return;
     } catch (err) {
       // A rejected steer must never lose the already-persisted message: fall
@@ -239,6 +255,116 @@ export async function interruptChat(chatId: number): Promise<number> {
 }
 
 /**
+ * Interrupt the **current turn** of one `(employee, chat)` session — the
+ * per-session counterpart of `interruptChat`, used by the read-only
+ * agent-session view.
+ *
+ * Deliberately different from `interruptChat`:
+ * - only this one session is touched (no whole-chat sweep and no redirect to
+ *   the assistant's root orchestration session);
+ * - the session is **not** torn down and its pending work is **kept**: the app
+ *   queue is left intact, only Pi's internal steering / follow-up queue is
+ *   drained — and its texts are **re-queued** rather than thrown away (see
+ *   below). Everything already queued still runs once the aborted turn settles;
+ * - the aborted turn itself is **not** rolled back: whatever the model already
+ *   produced and read stays in its context (the boss's explicit decision), so
+ *   the `read_cursors` bookkeeping of `imb_read_chat` keeps matching what the
+ *   model has actually seen;
+ * - nothing is written into any chat. The only record is a marker entry in the
+ *   session transcript (`session.markInterrupted()`), drawn by the read-only
+ *   view as the「已中断」separator.
+ *
+ * ## Why the steer handling is not just `abort()`
+ *
+ * A steer handed over before the interrupt can be in three states (full reasoning
+ * in `steer-ledger.ts`); one of them — handed to Pi, not yet persisted, run
+ * aborted — loses the boss's message silently. So:
+ *
+ * 1. snapshot the app's ledger of texts handed to this run,
+ * 2. `clearQueue()` **before** `abort()`: that is Pi's own record of the texts
+ *    not yet injected (its RPC contract is to clear before aborting, otherwise
+ *    the aborted turn would immediately continue with them),
+ * 3. abort, then wait (bounded) for the run to settle — Pi still emits
+ *    `message_end` during teardown, and those events are what mark a steer as
+ *    already persisted,
+ * 4. re-queue only `handedOver - delivered`, keeping their original order, and
+ *    let `drain()` run them next (identical texts are counted per copy, never
+ *    merged).
+ * 5. append the「已中断」marker **after** all of that, so it lands at the exact
+ *    cut point and never becomes part of an earlier position.
+ *
+ * Why the queue keeps draining afterwards: `drain()` awaits `session.prompt()`,
+ * which awaits the whole Pi run. Aborting settles that run (the agent loop closes
+ * the assistant message with `stopReason: "aborted"` and the run lifecycle
+ * resolves instead of rethrowing), so the `while` loop in `drain()` simply picks
+ * up the next queued text — the re-queued steers included. Only when the drain
+ * loop already finished (the abort landed after the run ended) does the interrupt
+ * have to start it itself.
+ *
+ * Returns `false` (harmless no-op) when the key has no live session or is not
+ * streaming, i.e. clicking the button on an idle session does nothing at all — no
+ * marker, no re-queue.
+ */
+export async function interruptTurn(
+  employeeId: number,
+  chatId: number,
+): Promise<boolean> {
+  const state = states.get(keyFor(employeeId, chatId));
+  if (!state || state.disposed) return false;
+  const session = state.session;
+  if (!session?.isStreaming) return false;
+  // Hold the *arrays*, not copies: a steer handed over while the abort is still
+  // in flight would be dropped by the dying run, so it must be accounted for
+  // too. `drain()` replaces both arrays when a new run starts, which is exactly
+  // the point where a late steer stops belonging to this run.
+  const pending = state.pendingSteers;
+  const delivered = state.deliveredSteers;
+  try {
+    const cleared = session.clearQueue();
+    await session.abort();
+    await session.waitForRunSettled();
+    const requeue = takeUndelivered(
+      [pending, cleared.steering, cleared.followUp],
+      delivered,
+    );
+    // This run is over; nothing may be counted twice for a later interrupt.
+    pending.length = 0;
+    delivered.length = 0;
+    // Marker last: it must sit at the exact cut point of the transcript.
+    session.markInterrupted();
+    prependToQueue(state, requeue);
+    console.log(
+      `[session-queue] interrupted the current turn of ${employeeId} in chat ${chatId}: ` +
+        `re-queued ${requeue.length} steered message${requeue.length === 1 ? "" : "s"}`,
+    );
+    return true;
+  } catch (err) {
+    console.error(
+      `[session-queue] failed to interrupt the current turn of ${employeeId} in chat ${chatId}:`,
+      err instanceof Error ? err.message : err,
+    );
+    return false;
+  }
+}
+
+/**
+ * Put texts at the **front** of the app queue and make sure they get drained.
+ *
+ * Re-queued steers keep their relative order and run before anything that was
+ * already waiting, matching the order the boss sent them in. A drain already in
+ * flight picks them up on its next iteration; otherwise one is started here
+ * (the interrupt may land after the run it stopped had already finished).
+ */
+function prependToQueue(state: QueueState, texts: string[]): void {
+  if (texts.length === 0) return;
+  state.queue.unshift(...texts);
+  clearIdleTimer(state);
+  if (state.busy) return;
+  state.busy = true;
+  void drain(state);
+}
+
+/**
  * Append an `interrupted` notice into the task group's root chat after a Halt,
  * so the assistant can later know the boss halted the group. System message
  * (no unread bump, no beep) and **never wakes any agent** — the boss stopped
@@ -312,6 +438,9 @@ async function drain(state: QueueState): Promise<void> {
           await disposeSessionOf(state);
           break;
         }
+        // A new run starts: the steer ledger describes exactly this run only.
+        state.pendingSteers = [];
+        state.deliveredSteers = [];
         await state.session?.prompt(text);
       } catch (err) {
         emitError(state, err);
@@ -372,6 +501,8 @@ function getOrCreateState(employeeId: number, chatId: number): QueueState {
       busy: false,
       queue: [],
       boundSenders: new Set(),
+      pendingSteers: [],
+      deliveredSteers: [],
       disposed: false,
     };
     states.set(key, state);
@@ -442,8 +573,21 @@ async function disposeSessionOf(state: QueueState): Promise<void> {
   }
 }
 
-/** Forward a raw Pi event to this key's bound windows (whitelisted DTOs). */
+/**
+ * Forward a raw Pi event to this key's bound windows (whitelisted DTOs).
+ *
+ * Also the one place that observes **which steered messages Pi persisted**: every
+ * `message_end` for a `user` message means that text is now part of the
+ * transcript (and was therefore seen by the model). Recorded only while a run is
+ * in flight — the ledger is per run.
+ */
 function forwardEvent(state: QueueState, event: AgentSessionEvent): void {
+  if (event.type === "message_end") {
+    const message = event.message as { role?: unknown; content?: unknown };
+    if (message?.role === "user" && state.pendingSteers.length > 0) {
+      state.deliveredSteers.push(userMessageText(message.content));
+    }
+  }
   const dto = toStreamEvent(event);
   if (dto) {
     sendEventTo(state.boundSenders, state.employeeId, state.chatId, dto);

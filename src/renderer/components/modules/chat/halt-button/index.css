@@ -42,15 +42,3 @@
   outline: none;
   box-shadow: var(--imb-focus-ring);
 }
-
-/* Confirmation popup content (anchored by `Popover`). */
-.imb-halt-confirm-text {
-  margin: 0 0 var(--imb-space-3);
-  color: var(--imb-fg);
-}
-
-.imb-halt-confirm-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--imb-space-2);
-}

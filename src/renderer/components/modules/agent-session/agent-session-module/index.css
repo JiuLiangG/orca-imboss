@@ -8,6 +8,64 @@
   line-height: 1.25;
 }
 
+/* Header action: interrupt the current turn of this session.
+   `margin-left: auto` pins it to the header's right edge (`.imb-chat-header` has
+   no `justify-content` and `.imb-session-heading` is not `flex: 1`). Icon +
+   text, muted until hovered, where it picks up the danger tint shared with the
+   card Halt. Always rendered — an idle session's interrupt is a no-op. */
+.imb-session-interrupt {
+  flex: none;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--imb-space-2);
+  height: 28px;
+  padding: 0 var(--imb-space-3);
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-pill);
+  background: var(--imb-surface);
+  color: var(--imb-fg-2);
+  font-family: inherit;
+  font-size: var(--imb-text-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--imb-motion-fast) var(--imb-ease-standard),
+    border-color var(--imb-motion-fast) var(--imb-ease-standard),
+    color var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-session-interrupt svg {
+  width: 15px;
+  height: 15px;
+}
+
+.imb-session-interrupt:hover {
+  background: color-mix(in oklch, var(--imb-danger) 14%, transparent);
+  border-color: color-mix(in oklch, var(--imb-danger) 40%, var(--imb-border));
+  color: var(--imb-danger);
+}
+
+.imb-session-interrupt:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+}
+
+/* The request is in flight (there is no confirmation step, so the button itself
+   is the only feedback): dim it and drop the hover affordance. */
+.imb-session-interrupt:disabled,
+.imb-session-interrupt[aria-busy="true"] {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.imb-session-interrupt:disabled:hover,
+.imb-session-interrupt[aria-busy="true"]:hover {
+  background: var(--imb-surface);
+  border-color: var(--imb-border);
+  color: var(--imb-fg-2);
+}
+
 .imb-session-subtitle {
   color: var(--imb-muted);
   font-size: var(--imb-text-sm);
@@ -278,6 +336,15 @@ button.imb-session-tool-head:hover {
 .imb-session-divider-label {
   flex: none;
   white-space: nowrap;
+}
+
+.imb-session-divider-interrupted {
+  color: color-mix(in oklch, var(--imb-warn) 60%, var(--imb-fg));
+}
+
+.imb-session-divider-interrupted::before,
+.imb-session-divider-interrupted::after {
+  background: color-mix(in oklch, currentColor 80%, transparent);
 }
 
 /* Compaction marker. */

@@ -1,0 +1,15 @@
+/* Shared confirm surface of the interrupt ("Halt") button. The trigger button's
+   own look/placement is owned by each caller (a card overlay next to a bubble,
+   a labelled chip in the agent-session header), so only the popup content lives
+   here. */
+
+.imb-halt-confirm-text {
+  margin: 0 0 var(--imb-space-3);
+  color: var(--imb-fg);
+}
+
+.imb-halt-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--imb-space-2);
+}

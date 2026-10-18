@@ -59,6 +59,15 @@ export type AgentSessionViewEntry =
       status: "running" | "ok" | "error";
     }
   | {
+      /**
+       * A turn the boss interrupted. Drawn as a system separator where the aborted
+       * turn was cut (backed by a Pi custom entry, so it survives a restart and is
+       * never part of the model's context).
+       */
+      kind: "interrupted";
+      id: string;
+    }
+  | {
       /** A context-compaction marker (summary text only). */
       kind: "compaction";
       id: string;

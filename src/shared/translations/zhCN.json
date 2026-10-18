@@ -218,6 +218,8 @@
   "Indigo": "靛蓝",
   "Input tokens": "输入 Token",
   "Integrations": "集成",
+  "Interrupt current turn": "中断当前回合",
+  "Interrupted": "已中断",
   "Keep the WeChat app on your phone ready to scan QR codes.": "准备好手机上的微信以便扫码。",
   "KEY=value": "KEY=value",
   "Last checked at ${time}": "上次检查：${time}",

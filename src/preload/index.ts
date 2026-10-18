@@ -420,6 +420,18 @@ const api = {
         "agentSession:interruptChat",
         chatId,
       ) as Promise<number>,
+    /**
+     * Interrupt the **current turn** of one `(employee, chat)` session (the
+     * agent-session view's button). Queued messages are kept and the session
+     * stays alive. Returns whether a streaming run was actually interrupted;
+     * `false` is the harmless no-op when the session is idle.
+     */
+    interruptTurn: (employeeId: number, chatId: number) =>
+      ipcRenderer.invoke(
+        "agentSession:interruptTurn",
+        employeeId,
+        chatId,
+      ) as Promise<boolean>,
     onEvent: (cb: (payload: AgentStreamPayload) => void) =>
       on<AgentStreamPayload>("agentSession:event", cb),
   },

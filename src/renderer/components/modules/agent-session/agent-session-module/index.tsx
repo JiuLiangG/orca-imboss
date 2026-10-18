@@ -17,8 +17,9 @@ import { cls } from "reactutils";
 import { useApp } from "../../../../app-store";
 import { ModuleView } from "../../../app-shell";
 import { EmployeeAvatar } from "../../../employee-avatar";
+import { HaltButton } from "../../../halt-button";
 import { IconButton } from "../../../icon-button";
-import { IconChevronDown, IconChevronUp } from "../../../icons";
+import { IconChevronDown, IconChevronUp, IconHalt } from "../../../icons";
 import { Markdown } from "../../../markdown";
 import { useMentionResolver } from "../../../markdown/use-mention";
 import "../../chat/thread.css";
@@ -141,6 +142,8 @@ export function AgentSessionModule({
   const employee = data.employees.items.find((e) => e.id === employeeId);
   const employeeName = employee?.name ?? t("Unnamed");
   const chatTitle = session?.chatTitle ?? t("Conversation");
+  /** Label of the header's interrupt action (also its accessible name). */
+  const interruptLabel = t("Interrupt current turn");
   // The transcript shows the raw `@<id>` text the model read; render names but
   // keep it non-interactive (this session's chat may not be where the mentioned
   // employee actually works).
@@ -536,6 +539,18 @@ export function AgentSessionModule({
           <div className="imb-chat-title">{employeeName}</div>
           <div className="imb-session-subtitle">{chatTitle}</div>
         </div>
+        {/* Interrupts the current turn of *this* session only (queued work is
+            kept, the session stays alive). One click, no confirmation: stopping a
+            single turn is cheap and simply talking again resumes the work. */}
+        <HaltButton
+          className="imb-session-interrupt"
+          label={interruptLabel}
+          confirm={false}
+          onInterrupt={() => imb.agentSession.interruptTurn(employeeId, chatId)}
+        >
+          <IconHalt />
+          <span className="imb-session-interrupt-label">{interruptLabel}</span>
+        </HaltButton>
       </div>
       <div
         className={cls(
@@ -606,6 +621,8 @@ function SessionEntry({
       );
     case "thinking":
       return <ThinkingBlock text={entry.text} streaming={false} />;
+    case "interrupted":
+      return <InterruptedDivider />;
     case "tool":
       return (
         <ToolBlock
@@ -623,6 +640,28 @@ function SessionEntry({
         />
       );
   }
+}
+
+/**
+ * Separator for a turn the boss interrupted. Structurally identical to
+ * `SessionDivider` (same muted line + centered label) and only tinted with the
+ * danger colour, so it reads as one of the app's system separators.
+ *
+ * Deliberately **not** a jump anchor (no `data-session-divider`): the prev/next
+ * buttons walk the "new messages" batch dividers only. No timestamp either — the
+ * marker is a boundary, not an event log line.
+ */
+function InterruptedDivider(): React.JSX.Element {
+  const label = t("Interrupted");
+  return (
+    <div
+      className="imb-session-divider imb-session-divider-interrupted"
+      role="separator"
+      aria-label={label}
+    >
+      <span className="imb-session-divider-label">{label}</span>
+    </div>
+  );
 }
 
 /**

@@ -42,6 +42,7 @@ import {
 } from "./builtin-skills";
 import { createTeamToolDefinitions } from "./builtin-tools";
 import { buildEmployeeSystemPrompt } from "./employee-prompt";
+import { INTERRUPT_MARKER } from "./interrupt-marker";
 import { toMcpServerEntries } from "./mcp";
 import { getModelRuntime, resolveModel } from "./model-runtime";
 import { loadPiSdk, type PiSdk } from "./pi-sdk";
@@ -80,6 +81,13 @@ type PiModel = NonNullable<ReturnType<ModelRuntime["getModel"]>>;
 
 /** Listener receiving every raw Pi session event. */
 export type AgentSessionEventListener = (event: AgentSessionEvent) => void;
+
+/**
+ * Upper bound for `waitForRunSettled`. `abort()` already waits for the agent to
+ * become idle, so this only has to cover the run's own teardown; the bound keeps
+ * a wedged run from hanging an interrupt forever.
+ */
+const RUN_SETTLE_TIMEOUT_MS = 5_000;
 
 /**
  * Canonical description of everything that shapes a built Pi session. Hashed
@@ -140,6 +148,8 @@ export class AgentSession {
   private _disposed = false;
   private _piSession: PiAgentSession | undefined;
   private _signature: string | undefined;
+  /** The in-flight `prompt()` run, so an interrupt can wait for its teardown. */
+  private _run: Promise<void> | null = null;
 
   constructor(
     private readonly env: AgentEnvironment,
@@ -183,7 +193,44 @@ export class AgentSession {
     if (!this._piSession) {
       throw new Error("Agent session was not prepared.");
     }
-    await this._piSession.prompt(message);
+    // Remembered so `waitForRunSettled()` can await the *whole* run (including
+    // Pi's teardown after an abort). Set after `prepare()`: preparing may dispose
+    // and rebuild the Pi session, so an earlier promise would belong to a
+    // discarded run.
+    const run = this._piSession.prompt(message);
+    this._run = run;
+    try {
+      await run;
+    } finally {
+      if (this._run === run) this._run = null;
+    }
+  }
+
+  /**
+   * Wait (bounded) until the in-flight run has **fully** settled — i.e. until Pi
+   * has stopped emitting events for it.
+   *
+   * `abort()` only waits for the agent to become *idle*; the run's own teardown
+   * (pending-message flush, `agent_settled`) can still emit `message_end` events
+   * afterwards. An interrupt uses those events to tell an already-persisted
+   * steered message from a lost one, so it must not account for them too early.
+   * Never throws (a failed run is the queue's business) and never waits longer
+   * than `timeoutMs`.
+   */
+  async waitForRunSettled(timeoutMs = RUN_SETTLE_TIMEOUT_MS): Promise<void> {
+    const run = this._run;
+    if (!run) return;
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, timeoutMs);
+      void run
+        .catch(() => {
+          // The queue reports run failures; settling only needs to know it ended.
+        })
+        .then(() => {
+          clearTimeout(timer);
+          resolve();
+        });
+    });
   }
 
   /**
@@ -235,6 +282,34 @@ export class AgentSession {
   /** Whether the underlying Pi session is actively processing a run. */
   get isStreaming(): boolean {
     return this._piSession?.isStreaming ?? false;
+  }
+
+  /**
+   * Persist an app-level "the boss interrupted this turn here" marker in the
+   * session transcript.
+   *
+   * Uses a Pi **custom entry** (`type: "custom"`, `customType: INTERRUPT_MARKER`),
+   * which by construction never participates in the model's context — it is
+   * display/state data only. Appending it *advances the session leaf*, so it also
+   * marks the exact position in the transcript where the turn was cut, which is
+   * what the read-only view draws a separator for. Durable: the entry lives in
+   * the session JSONL, so it survives idle disposal, session rebuilds and app
+   * restarts.
+   *
+   * Best-effort: a failure only logs. An interrupt must never fail (or look
+   * failed) because the marker could not be written.
+   */
+  markInterrupted(): void {
+    const session = this._piSession;
+    if (!session) return;
+    try {
+      session.sessionManager.appendCustomEntry(INTERRUPT_MARKER);
+    } catch (err) {
+      console.error(
+        "[agent-session] failed to append the interrupt marker:",
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
 
   /** Dispose the Pi session and close MCP connections. Idempotent. */
