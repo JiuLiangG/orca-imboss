@@ -8,10 +8,30 @@
  */
 export type AgentSessionViewEntry =
   | {
-      /** A user prompt delivered to the session (including wake prompts). */
+      /**
+       * A prompt delivered to the session by a human (composer, integrations,
+       * cron job content). Internal wake prompts are `kind: "wake"` instead.
+       */
       kind: "user";
       id: string;
       text: string;
+    }
+  | {
+      /**
+       * An internal "you have new messages" wake prompt.
+       *
+       * Never user-authored and never rendered as a user bubble: the view draws
+       * it as a batch separator (one per batch of processed messages). The
+       * original prompt text is intentionally not carried over.
+       */
+      kind: "wake";
+      id: string;
+      /**
+       * Chat the wake points at (the `… in chat <id>` variant, used when the
+       * assistant is woken in its root session for a task group chat).
+       * Informational only — the view does not resolve a title for it.
+       */
+      targetChatId?: number;
     }
   | {
       /** Assistant free-form text. */

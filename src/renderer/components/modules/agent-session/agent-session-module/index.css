@@ -20,6 +20,56 @@
   user-select: text;
 }
 
+/* Make room under the transcript while the floating jump control is shown, so
+   its buttons (2 × 32px + 8px gap, offset 20px from the bottom) never cover the
+   tail of the last message — most messages are right-aligned, exactly where the
+   control sits. Scrolling to the bottom therefore leaves the last message fully
+   readable above the buttons. */
+.imb-session-thread.imb-has-jumps {
+  padding-bottom: calc(var(--imb-space-5) + 72px + var(--imb-space-4));
+}
+
+/* Floating "previous / next new message" control, fixed to the bottom-right of
+   the content pane (this module is portaled into `.imb-contentpane`, which is
+   flush with the window's right and bottom edges). z-index sits above thread
+   content but below modals (40) / menus (50) / toasts (60). */
+.imb-session-jumps {
+  position: fixed;
+  right: var(--imb-space-5);
+  bottom: var(--imb-space-5);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: var(--imb-space-2);
+}
+
+/* `IconButton` already owns geometry, hover, disabled and focus-visible
+   behaviour; this only adds the raised surface that makes the button readable
+   above the transcript. Both classes are named so the selector beats the
+   component's own `.imb-icon-btn` base rule regardless of import order. */
+.imb-icon-btn.imb-session-jump {
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-pill);
+  background: var(--imb-surface);
+  color: var(--imb-fg-2);
+  box-shadow: var(--imb-elev-raised);
+}
+
+/* Opaque hover tint on purpose: the button floats over scrolling text, so a
+   translucent `--imb-fg-soft` (what `.imb-icon-btn` uses) would show it. */
+.imb-icon-btn.imb-session-jump:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--imb-fg) 8%, var(--imb-surface));
+  color: var(--imb-fg);
+}
+
+.imb-icon-btn.imb-session-jump:focus-visible {
+  box-shadow: var(--imb-focus-ring);
+}
+
+.imb-icon-btn.imb-session-jump:disabled {
+  opacity: 0.45;
+}
+
 /* User prompt delivered to the session (task text / wake prompt). */
 .imb-session-user {
   flex: none;
@@ -202,6 +252,34 @@ button.imb-session-tool-head:hover {
   overflow: auto;
 }
 
+/* Batch separator: one per internal wake prompt ("you have new messages").
+   A muted line with the label centered; the two pseudo-elements are the rule
+   halves so the label never needs a background. */
+.imb-session-divider {
+  flex: none;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: var(--imb-space-2);
+  margin: var(--imb-space-4) 0 0;
+  color: var(--imb-accent);
+  font-size: var(--imb-text-xs);
+  user-select: none;
+}
+
+.imb-session-divider::before,
+.imb-session-divider::after {
+  content: "";
+  flex: 1 1 0;
+  height: 1px;
+  background: var(--imb-accent);
+}
+
+.imb-session-divider-label {
+  flex: none;
+  white-space: nowrap;
+}
+
 /* Compaction marker. */
 .imb-session-compaction {
   flex: none;
@@ -231,6 +309,7 @@ button.imb-session-tool-head:hover {
 }
 
 @keyframes imb-session-pulse {
+
   0%,
   100% {
     opacity: 1;

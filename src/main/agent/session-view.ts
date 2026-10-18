@@ -13,8 +13,9 @@ import { formatToolArgsDetail, summarizeToolArgs } from "./tool-args";
  * Deliberately lossy: system messages, tool results, images and usage data
  * never leave the main process. User prompts, assistant text and thinking, tool
  * names with a capped argument summary/detail, and compaction summaries are
- * returned. Runs are linear in this app, so raw append order is the transcript
- * order (`getEntries()`).
+ * returned. Internal wake prompts are reduced to a bare `wake` separator (no
+ * text) so the view can draw one batch boundary per wake. Runs are linear in
+ * this app, so raw append order is the transcript order (`getEntries()`).
  */
 
 /** Upper bound for a single text/thinking/summary block (defensive). */
@@ -73,9 +74,23 @@ function projectEntries(entries: SessionEntry[]): AgentSessionViewEntry[] {
     switch (message.role) {
       case "user": {
         const text = extractUserText(message.content);
-        if (text.length > 0 && !isInternalWakePrompt(text)) {
-          out.push({ kind: "user", id: entry.id, text: cap(text) });
+        if (text.length === 0) break;
+        const wake = classifyWakePrompt(text);
+        if (wake !== null) {
+          // One separator per batch boundary: two adjacent wakes (nothing
+          // rendered between them) collapse into a single marker.
+          if (out.length === 0 || out[out.length - 1].kind !== "wake") {
+            const separator: Extract<AgentSessionViewEntry, { kind: "wake" }> =
+              {
+                kind: "wake",
+                id: entry.id,
+              };
+            if (wake.chatId !== undefined) separator.targetChatId = wake.chatId;
+            out.push(separator);
+          }
+          break;
         }
+        out.push({ kind: "user", id: entry.id, text: cap(text) });
         break;
       }
       case "assistant":
@@ -187,13 +202,23 @@ function cap(text: string): string {
 }
 
 /**
- * Internal synthetic wake prompts (e.g. readChatPrompt / READ_CHAT_PROMPT)
- * injected by the orchestrator to wake agents to read chats.
- * These are background dispatcher triggers, never user-authored messages,
- * and are omitted from the user-facing transcript.
+ * Recognise an internal synthetic wake prompt (READ_CHAT_PROMPT /
+ * `readChatPrompt(chatId)`), injected by the orchestrator to wake an agent to
+ * read a chat. These are background dispatcher triggers, never user-authored
+ * messages, so they are projected as a batch separator instead of a user turn.
+ *
+ * Returns `null` for anything else. `chatId` is set only for the
+ * `… in chat <id>` variant; `Number.isSafeInteger` guards a malformed prompt
+ * (only reachable if a stored session were tampered with).
  */
-function isInternalWakePrompt(text: string): boolean {
-  return /^You have new messages in (?:chat \d+|this chat)\./i.test(text.trim());
+function classifyWakePrompt(text: string): { chatId?: number } | null {
+  const match = /^You have new messages in (?:chat (\d+)|this chat)\./i.exec(
+    text.trim(),
+  );
+  if (!match) return null;
+  if (match[1] === undefined) return {};
+  const chatId = Number(match[1]);
+  return Number.isSafeInteger(chatId) ? { chatId } : {};
 }
 
 /**

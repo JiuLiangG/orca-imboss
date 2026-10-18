@@ -4,12 +4,21 @@ import type {
   AgentStreamEvent,
   AgentStreamPayload,
 } from "@shared/types";
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import { cls } from "reactutils";
 import { useApp } from "../../../../app-store";
 import { ModuleView } from "../../../app-shell";
 import { EmployeeAvatar } from "../../../employee-avatar";
-import { IconChevronDown } from "../../../icons";
+import { IconButton } from "../../../icon-button";
+import { IconChevronDown, IconChevronUp } from "../../../icons";
 import { Markdown } from "../../../markdown";
 import { useMentionResolver } from "../../../markdown/use-mention";
 import "../../chat/thread.css";
@@ -45,12 +54,35 @@ interface LiveState {
 const REFRESH_DELAY = 150;
 /** Distance from the bottom (px) still considered "pinned" for auto-scroll. */
 const PIN_THRESHOLD = 32;
+/** Gap (px) kept between the viewport top and a divider a jump lands on. */
+const JUMP_TOP_GAP = 16;
+/** Scroll-offset tolerance (px) used to decide which divider is "nearest". */
+const JUMP_EPSILON = 1;
+/** Clamp a content-space scroll offset to the thread's reachable range. */
+function clampScrollTop(top: number, maxScroll: number): number {
+  return Math.min(Math.max(top, 0), maxScroll);
+}
 
 interface SessionScroll {
   scrollTop: number;
   pinned: boolean;
 }
 const sessionScrollStore = new Map<string, SessionScroll>();
+
+/** Measured jump anchors (one per rendered wake divider). */
+interface JumpAnchors {
+  /** `scrollHeight` the measurement belongs to; the cache key. */
+  scrollHeight: number;
+  /** `scrollTop` values that put each divider at the top anchor line. */
+  tops: number[];
+}
+
+/** Which jump buttons can do something at the current scroll position. */
+interface JumpAvailability {
+  prev: boolean;
+  next: boolean;
+}
+const NO_JUMPS: JumpAvailability = { prev: false, next: false };
 
 /**
  * Read-only view of one `(employee, chat)` agent session.
@@ -79,6 +111,11 @@ export function AgentSessionModule({
   const sessionKeyStr = `${employeeId}/${chatId}`;
   const threadRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
+  /** Cached jump anchors; re-measured when `scrollHeight` moves. */
+  const anchorsRef = useRef<JumpAnchors | null>(null);
+  const [jump, setJump] = useState<JumpAvailability>(NO_JUMPS);
+  /** Mirror of `jump` so scroll handling can compare without re-rendering. */
+  const jumpRef = useRef<JumpAvailability>(NO_JUMPS);
   const restoreScrollRef = useRef<{ key: string; scrollTop: number } | null>(
     null,
   );
@@ -117,9 +154,14 @@ export function AgentSessionModule({
       const next = await imb.sessions.entries(employeeId, chatId);
       if (disposedRef.current) return;
       setEntries(next);
-      // The projection now contains any just-persisted message; drop the
-      // tentative live tail so nothing is rendered twice.
-      if (liveRef.current === liveAtRequest) liveRef.current = null;
+      // The projection now contains every persisted message, so a live tail
+      // that already ended (`message_end`) is a duplicate and is dropped. A
+      // tail that is still streaming is *not* in the projection yet, so it is
+      // kept — dropping it would erase already-streamed blocks until the next
+      // delta recreated them. (Refreshes can land mid-stream, e.g. one
+      // scheduled by `turn_start`.)
+      const live = liveRef.current;
+      if (live === liveAtRequest && live?.finalized) liveRef.current = null;
       setError(null);
       bump();
     } catch (err) {
@@ -292,6 +334,7 @@ export function AgentSessionModule({
           }
           scheduleRefresh();
           break;
+        case "turn_start":
         case "agent_start":
         case "compaction_end":
         case "agent_end":
@@ -318,6 +361,132 @@ export function AgentSessionModule({
     return off;
   }, [handleEvent]);
 
+  // --- Jump to previous / next "new message" divider -------------------------
+  /**
+   * Measure the scroll position of every rendered wake divider, in the scroll
+   * container's content space.
+   *
+   * Two deliberate choices:
+   * - Position comes from rects relative to the thread, **not** `offsetTop`:
+   *   `.imb-app` is `position: relative`, so a divider's `offsetParent` is not
+   *   the thread and its `offsetTop` carries the header/titlebar offset.
+   * - Cached by `scrollHeight`, which changes whenever anything above a divider
+   *   resizes (a message streamed, a thinking block toggled, an image loaded).
+   *
+   * `force` re-measures even when `scrollHeight` is unchanged; the click handler
+   * always passes it so a jump can never use a stale measurement.
+   */
+  const readAnchors = useCallback((force = false): JumpAnchors | null => {
+    const el = threadRef.current;
+    if (el === null) return null;
+    const cached = anchorsRef.current;
+    if (!force && cached !== null && cached.scrollHeight === el.scrollHeight) {
+      return cached;
+    }
+    const threadRect = el.getBoundingClientRect();
+    const tops: number[] = [];
+    el.querySelectorAll<HTMLElement>("[data-session-divider]").forEach(
+      (node) => {
+        const rect = node.getBoundingClientRect();
+        tops.push(rect.top - threadRect.top + el.scrollTop - JUMP_TOP_GAP);
+      },
+    );
+    const measured: JumpAnchors = { scrollHeight: el.scrollHeight, tops };
+    anchorsRef.current = measured;
+    return measured;
+  }, []);
+
+  /**
+   * Which jump buttons can do something from the current scroll position?
+   *
+   * Each direction is actionable when it can move the view at all:
+   * - "previous" = a divider above the viewport's top anchor line, **or** any
+   *   room above (`scrollTop > 0`) — pressing it again then goes to the very
+   *   top of the transcript;
+   * - "next" = a divider below it, **or** any room below — pressing it again
+   *   then goes to the very bottom, including while pinned/following.
+   * Only a direction with nowhere left to go is disabled.
+   *
+   * Divider targets are clamped to the reachable range, so a divider that cannot
+   * be brought to the anchor line (it is closer to the end than one viewport)
+   * never leaves a button enabled that could not move the view.
+   */
+  const computeJump = useCallback((): JumpAvailability => {
+    const el = threadRef.current;
+    const anchors = readAnchors();
+    if (el === null || anchors === null) return NO_JUMPS;
+    const scrollTop = el.scrollTop;
+    const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
+    let hasPrev = false;
+    let hasNext = false;
+    for (const raw of anchors.tops) {
+      const top = clampScrollTop(raw, maxScroll);
+      if (top < scrollTop - JUMP_EPSILON) hasPrev = true;
+      else if (top > scrollTop + JUMP_EPSILON) hasNext = true;
+    }
+    return {
+      prev: hasPrev || scrollTop > JUMP_EPSILON,
+      next: hasNext || maxScroll - scrollTop > JUMP_EPSILON,
+    };
+  }, [readAnchors]);
+
+  /** Recompute availability; re-render only when it actually changed. */
+  const syncJump = useCallback((): void => {
+    const next = computeJump();
+    const current = jumpRef.current;
+    if (current.prev === next.prev && current.next === next.next) return;
+    jumpRef.current = next;
+    setJump(next);
+  }, [computeJump]);
+
+  /** Scroll to the nearest "new message" divider, or to the very top/bottom. */
+  const jumpTo = useCallback(
+    (direction: "prev" | "next"): void => {
+      const el = threadRef.current;
+      const anchors = readAnchors(true);
+      if (el === null || anchors === null) return;
+      const scrollTop = el.scrollTop;
+      const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
+      const targets = anchors.tops.map((raw) => clampScrollTop(raw, maxScroll));
+      const nearest =
+        direction === "next"
+          ? targets.find((top) => top > scrollTop + JUMP_EPSILON)
+          : targets.findLast((top) => top < scrollTop - JUMP_EPSILON);
+      // No divider left in that direction: the same button keeps going to the
+      // very end of the transcript (top for "previous", bottom for "next").
+      // Those edges get no `JUMP_TOP_GAP` — that gap is divider alignment only.
+      const target = nearest ?? (direction === "next" ? maxScroll : 0);
+      // Already there (the button should be disabled in that case): do nothing
+      // rather than start a pointless scroll.
+      if (Math.abs(target - scrollTop) <= JUMP_EPSILON) return;
+      // Following the live tail must not fight the jump: the follow effect runs
+      // on every streamed delta, so `pinned` is cleared *before* scrolling and
+      // the stored position is made to agree with it. Nothing re-pins manually:
+      // when the jump lands at the bottom, `handleScroll` restores `pinned` from
+      // the real position, which is exactly the desired behaviour.
+      pinnedRef.current = false;
+      sessionScrollStore.set(sessionKeyStr, { scrollTop, pinned: false });
+      // `scrollTo` on the thread itself — never `scrollIntoView`, which would
+      // also scroll ancestors.
+      const reduceMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      el.scrollTo({
+        top: target,
+        behavior: reduceMotion ? "auto" : "smooth",
+      });
+    },
+    [readAnchors, sessionKeyStr],
+  );
+
+  // Re-measure when the projected content changes (dividers added/removed) and
+  // seed the button state. Pure scroll-position changes are handled by
+  // `handleScroll`, which every programmatic scroll also triggers.
+  useLayoutEffect(() => {
+    readAnchors(true);
+    syncJump();
+  }, [entries, loading, readAnchors, syncJump]);
+
   // Auto-scroll to the newest content while pinned, or restore saved scroll position.
   useEffect(() => {
     const el = threadRef.current;
@@ -341,12 +510,21 @@ export function AgentSessionModule({
       scrollTop: el.scrollTop,
       pinned,
     });
-  }, [sessionKeyStr]);
+    syncJump();
+  }, [sessionKeyStr, syncJump]);
 
   const live = liveRef.current;
   const liveBlocks = live
     ? live.blocks.filter((b): b is LiveBlock => b !== undefined)
     : [];
+
+  // One divider per wake entry, minus a leading one (a batch boundary above the
+  // first entry has nothing to separate, so `SessionEntry` skips it). Derived
+  // from the projection, never from the DOM.
+  const dividerCount = useMemo(() => {
+    const wakes = entries.filter((entry) => entry.kind === "wake").length;
+    return entries[0]?.kind === "wake" ? wakes - 1 : wakes;
+  }, [entries]);
 
   const content = (
     <>
@@ -360,7 +538,10 @@ export function AgentSessionModule({
         </div>
       </div>
       <div
-        className="imb-thread imb-session-thread"
+        className={cls(
+          "imb-thread imb-session-thread",
+          dividerCount > 0 && "imb-has-jumps",
+        )}
         ref={threadRef}
         onScroll={handleScroll}
       >
@@ -370,10 +551,11 @@ export function AgentSessionModule({
           </div>
         ) : (
           <>
-            {entries.map((entry) => (
+            {entries.map((entry, index) => (
               <SessionEntry
                 key={entry.id}
                 entry={entry}
+                first={index === 0}
                 resolveMention={resolveMention}
               />
             ))}
@@ -387,6 +569,9 @@ export function AgentSessionModule({
           </>
         )}
       </div>
+      {dividerCount > 0 && (
+        <SessionJumpButtons availability={jump} onJump={jumpTo} />
+      )}
       {error !== null && (
         <p className="imb-error-text imb-chat-error">{error}</p>
       )}
@@ -399,12 +584,18 @@ export function AgentSessionModule({
 /** Render one projected history entry. */
 function SessionEntry({
   entry,
+  first,
   resolveMention,
 }: {
   entry: AgentSessionViewEntry;
+  /** True for the first rendered entry (some markers are skipped there). */
+  first: boolean;
   resolveMention: (id: number) => string | null;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   switch (entry.kind) {
+    case "wake":
+      // A batch boundary above the first entry has nothing to separate.
+      return first ? null : <SessionDivider />;
     case "user":
       return <div className="imb-session-user">{entry.text}</div>;
     case "text":
@@ -432,6 +623,72 @@ function SessionEntry({
         />
       );
   }
+}
+
+/**
+ * Batch separator: a muted line with a centered label, drawn where an internal
+ * "you have new messages" wake prompt sits in the session. One divider per
+ * batch of processed messages (see `session-view.ts`).
+ *
+ * `data-session-divider` is the jump-anchor hook read by `readAnchors`
+ * (`.imb-session-jumps` buttons); it is not used for styling.
+ */
+function SessionDivider(): React.JSX.Element {
+  const label = t("New messages");
+  return (
+    <div
+      className="imb-session-divider"
+      role="separator"
+      aria-label={label}
+      data-session-divider=""
+    >
+      <span className="imb-session-divider-label">{label}</span>
+    </div>
+  );
+}
+
+/**
+ * Floating "previous / next new message" control, fixed to the bottom-right of
+ * the content pane (this view has no composer, and it is portaled into
+ * `.imb-contentpane`, which is flush with the window edge).
+ *
+ * The up arrow sits above the down arrow. Each button first walks the wake
+ * dividers, and once there is none left in that direction it keeps going to the
+ * very top / bottom of the transcript. A direction is only disabled when the
+ * view is already at that edge and no divider remains; the whole control is
+ * only rendered when the session has at least one divider.
+ */
+function SessionJumpButtons({
+  availability,
+  onJump,
+}: {
+  availability: JumpAvailability;
+  onJump: (direction: "prev" | "next") => void;
+}): React.JSX.Element {
+  return (
+    <div className="imb-session-jumps">
+      <IconButton
+        className="imb-session-jump"
+        label={t("Previous new message")}
+        size={16}
+        boxSize={32}
+        disabled={!availability.prev}
+        onClick={() => onJump("prev")}
+      >
+        <IconChevronUp />
+      </IconButton>
+      <IconButton
+        className="imb-session-jump"
+        label={t("Next new message")}
+        size={16}
+        boxSize={32}
+        disabled={!availability.next}
+        onClick={() => onJump("next")}
+      >
+        <IconChevronDown />
+      </IconButton>
+    </div>
+  );
 }
 
 /** Render one reconstructed live block. */

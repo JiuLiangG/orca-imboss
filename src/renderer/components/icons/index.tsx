@@ -225,6 +225,15 @@ export function IconChevronDown(props: IconProps): React.JSX.Element {
   );
 }
 
+/** Mirror of `IconChevronDown` (used by the session "previous message" jump). */
+export function IconChevronUp(props: IconProps): React.JSX.Element {
+  return (
+    <svg {...base(props)} strokeWidth={1.8}>
+      <path d="M6 15l6-6 6 6" />
+    </svg>
+  );
+}
+
 /** "Open" affordance: an arrow leaving its box (used by the image card). */
 export function IconOpen(props: IconProps): React.JSX.Element {
   return (
