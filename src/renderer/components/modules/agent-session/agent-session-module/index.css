@@ -74,6 +74,18 @@
   white-space: nowrap;
 }
 
+/* Thread + floating jump control share one positioned wrapper, so the control
+   sits just above the composer (its height is variable) instead of at a fixed
+   distance from the window's bottom edge. */
+.imb-session-thread-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The transcript itself still scrolls and fills the wrapper. */
 .imb-session-thread {
   user-select: text;
 }
@@ -87,12 +99,12 @@
   padding-bottom: calc(var(--imb-space-5) + 72px + var(--imb-space-4));
 }
 
-/* Floating "previous / next new message" control, fixed to the bottom-right of
-   the content pane (this module is portaled into `.imb-contentpane`, which is
-   flush with the window's right and bottom edges). z-index sits above thread
-   content but below modals (40) / menus (50) / toasts (60). */
+/* Floating "previous / next new message" control, positioned inside the
+   thread wrapper: bottom-right of the transcript, above the composer, never on
+   top of it. z-index sits above thread content but below modals (40) / menus
+   (50) / toasts (60). */
 .imb-session-jumps {
-  position: fixed;
+  position: absolute;
   right: var(--imb-space-5);
   bottom: var(--imb-space-5);
   z-index: 5;
@@ -376,7 +388,6 @@ button.imb-session-tool-head:hover {
 }
 
 @keyframes imb-session-pulse {
-
   0%,
   100% {
     opacity: 1;
@@ -385,4 +396,135 @@ button.imb-session-tool-head:hover {
   50% {
     opacity: 0.3;
   }
+}
+
+/* --- Composer -------------------------------------------------------------
+   The composer reuses the chat composer's card/textarea/send-button classes
+   (imported by `session-composer`), so only the view-specific pieces live here.
+   `.imb-chat-input-wrap` is a `flex: none` block child of the content pane. */
+
+/* One row: input left, send button right. `align-items: flex-end` keeps the
+   button on the input's last line when a multi-line draft grows the textarea. */
+.imb-session-composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--imb-space-2);
+  min-width: 0;
+  padding-right: 8px;
+}
+
+/* The shared chat textarea is `width: 100%`, which would push the button out of
+   the row; make it the flexible child and let it shrink in a narrow pane.
+
+   Taller than the chat composer's field (one line + 10/6px padding ≈ 38px): this
+   is the view's main affordance, so it gets room to breathe — one line +
+   symmetric 18px padding ≈ 59px. `field-sizing: content` still grows it line by
+   line up to the shared `max-height: 50cqh`. The selector is one class heavier
+   than the shared `.imb-textarea.imb-chat-input-textarea` rule so the paddings
+   win regardless of stylesheet order. */
+.imb-session-composer-row .imb-textarea.imb-chat-input-textarea {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  min-height: 59px;
+  padding: 18px 12px;
+}
+
+/* `margin-bottom` lifts the 36px button off the row's bottom edge, so with the
+   single-line field (≈59px) it reads as vertically centred, and with a tall
+   multi-line draft it settles at the bottom-right (Telegram-style inset). */
+.imb-session-composer-row .imb-session-composer-send {
+  flex: none;
+  margin-bottom: 10px;
+}
+
+/* A rejected send (invalid request only — run failures arrive as events). */
+.imb-session-composer-error {
+  margin: 0;
+  padding: 8px 12px 0;
+  color: var(--imb-danger);
+  font-size: var(--imb-text-sm);
+  line-height: var(--imb-leading-body);
+  word-break: break-word;
+}
+
+/* --- Messages sent from the composer that the transcript cannot show yet --- */
+
+.imb-session-pending {
+  flex: none;
+  align-self: flex-end;
+  max-width: 82%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+/* The boss's own bubble, dimmed until Pi persists it. `max-width: 100%`
+   because the wrapper already caps the row at the thread's bubble width. */
+.imb-session-pending-bubble {
+  max-width: 100%;
+  opacity: 0.72;
+}
+
+.imb-session-pending-bubble.imb-is-unconfirmed {
+  opacity: 0.5;
+  border: 1px dashed var(--imb-danger);
+}
+
+.imb-session-pending-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--imb-space-2);
+  padding-right: 2px;
+  color: var(--imb-muted);
+  font-size: var(--imb-text-sm);
+  line-height: 1.3;
+}
+
+.imb-session-pending-hint.imb-is-unconfirmed {
+  color: var(--imb-danger);
+}
+
+.imb-session-pending-dismiss {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--imb-radius-pill);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.imb-session-pending-dismiss:hover {
+  opacity: 1;
+  background: color-mix(in oklch, var(--imb-fg) 8%, transparent);
+}
+
+.imb-session-pending-dismiss:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+}
+
+/* Load/run error: in flow above the composer. The shared `.imb-chat-error` is a
+   fixed toast, which would sit on top of the composer in this view. */
+.imb-session-error {
+  flex: none;
+  margin: 0;
+  padding: var(--imb-space-2) var(--imb-space-5);
+  border-top: 1px solid
+    color-mix(in oklch, var(--imb-danger) 40%, var(--imb-border));
+  background: color-mix(in oklch, var(--imb-danger) 12%, var(--imb-surface));
+  color: var(--imb-danger);
+  font-size: var(--imb-text-sm);
+  line-height: var(--imb-leading-body);
+  word-break: break-word;
 }

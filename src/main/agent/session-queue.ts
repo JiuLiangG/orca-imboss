@@ -1,6 +1,10 @@
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { ASSISTANT_ID } from "@shared/constants/employees";
 import { readChatPrompt } from "@shared/constants/prompts";
+import type {
+  AgentSessionDeliveryMode,
+  AgentSessionRunState,
+} from "@shared/types";
 import type { WebContents } from "electron";
 import * as dbChats from "../db/chats";
 import * as dbMessages from "../db/messages";
@@ -90,17 +94,18 @@ export interface DeliverOptions {
 /**
  * Schedule a message for an agent session, serialized per (employee, chat).
  *
- * Returns immediately (fire-and-forget): if a run for the key is already in
- * flight the message is queued, otherwise a run is started and the queue is
- * drained in order. With `opts.mode === "steer"` a message that arrives while
- * the run is actively streaming is injected into that run instead of queued.
+ * Returns once the routing decision is made (never waits for the run): the
+ * returned mode tells the caller how the text was handed over — `"steer"` when
+ * it went into the live Pi run, `"queued"` when it joined the serialized queue.
+ * With `opts.mode === "steer"` a message that arrives while the run is actively
+ * streaming is injected into that run instead of queued.
  */
 export async function deliver(
   employeeId: number,
   chatId: number,
   text: string,
   opts?: DeliverOptions,
-): Promise<void> {
+): Promise<AgentSessionDeliveryMode> {
   const state = getOrCreateState(employeeId, chatId);
   clearIdleTimer(state);
   // Mid-run user message: steer the live Pi run so it is seen at the next turn
@@ -113,7 +118,7 @@ export async function deliver(
       // The hand-over succeeded: record it so an interrupt can tell whether this
       // text ever reached the transcript (see `steer-ledger.ts`).
       state.pendingSteers.push(text);
-      return;
+      return "steer";
     } catch (err) {
       // A rejected steer must never lose the already-persisted message: fall
       // back to the serialized queue.
@@ -124,9 +129,28 @@ export async function deliver(
     }
   }
   state.queue.push(text);
-  if (state.busy) return;
+  if (state.busy) return "queued";
   state.busy = true;
   void drain(state);
+  return "queued";
+}
+
+/**
+ * Snapshot of one session's run state for the agent-session view's labels
+ * (`Send` vs `Interject`, interrupt chip enabled/disabled).
+ *
+ * Read-only and side-effect free: it never creates a queue state or a Pi
+ * session, because opening/labelling the view must not build anything. Purely
+ * cosmetic — `deliver()` re-checks the live session before steering, and
+ * `interruptTurn()` has the exact same `isStreaming` gate.
+ */
+export function readRunState(
+  employeeId: number,
+  chatId: number,
+): AgentSessionRunState {
+  const state = states.get(keyFor(employeeId, chatId));
+  if (!state || state.disposed) return { streaming: false };
+  return { streaming: state.session?.isStreaming ?? false };
 }
 
 /**

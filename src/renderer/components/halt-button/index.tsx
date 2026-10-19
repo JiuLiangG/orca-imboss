@@ -36,6 +36,12 @@ export interface HaltButtonProps {
   /** Side the confirmation popup opens on (flips once when it would overflow). */
   placement?: Placement;
   /**
+   * Disables the trigger entirely. Used where the interrupt has nothing to act
+   * on (the agent-session view's chip while its session is idle), so the control
+   * states honestly instead of being a silent no-op.
+   */
+  disabled?: boolean;
+  /**
    * Class of the trigger button. Placement/geometry deliberately live in the
    * caller's CSS: a card renders it as an absolute overlay next to a bubble,
    * the session view as a labelled chip in a header.
@@ -64,11 +70,17 @@ export function HaltButton({
   label = t("Halt"),
   placement = "left",
   className,
+  disabled = false,
   children,
 }: HaltButtonProps): React.JSX.Element {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // A confirmation popover can stay open while its request is in flight, so only
+  // an explicit `disabled` blocks a confirmed trigger; the immediate variant is
+  // also blocked while busy (there is no popup to keep open).
+  const triggerDisabled = disabled || (!confirm && busy);
 
   const close = (): void => {
     // Never close mid-flight; the request settles and closes on its own.
@@ -94,10 +106,10 @@ export function HaltButton({
         type="button"
         className={className}
         aria-label={label}
+        disabled={triggerDisabled}
         {...(confirm
           ? { "aria-haspopup": "dialog", "aria-expanded": open }
-          : {})}
-        {...(confirm ? {} : { "aria-busy": busy, disabled: busy })}
+          : { "aria-busy": busy })}
         title={label}
         onClick={confirm ? () => setOpen((value) => !value) : () => void run()}
       >

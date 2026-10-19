@@ -198,6 +198,11 @@ export const appStore = proxy({
   // Session-only: deliberately not persisted.
   chatDrafts: {} as Record<number, ChatDraft>,
 
+  // Composer drafts of the agent-session view, keyed by `"<employee>/<chat>"`
+  // (the session identity, see `sessionKey`). Text only: that composer has no
+  // attachments. Session-only, like `chatDrafts`.
+  sessionDrafts: {} as Record<string, string>,
+
   // Root chat currently selected in the chat module. Distinct from
   // `activeChatId` (an opened *group* chat). Written by `ChatModule` so the
   // selection survives a module switch; session-only.
@@ -747,6 +752,21 @@ export const appStore = proxy({
   clearChatDraft(chatId: number): void {
     revokeDraftUrls(appStore.chatDrafts[chatId]);
     delete appStore.chatDrafts[chatId];
+  },
+  // --- Agent-session composer drafts (session-only, per session key) ---------
+  /**
+   * Store one agent-session composer's text. An empty text deletes the entry so
+   * the map only ever holds real drafts (the composer reads `?? ""`).
+   */
+  setSessionDraftText(key: string, text: string): void {
+    if (text.length === 0) {
+      delete appStore.sessionDrafts[key];
+      return;
+    }
+    appStore.sessionDrafts[key] = text;
+  },
+  clearSessionDraft(key: string): void {
+    delete appStore.sessionDrafts[key];
   },
   setActiveRootChat(chatId: number | null): void {
     appStore.activeRootChatId = chatId;

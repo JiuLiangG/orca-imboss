@@ -1,5 +1,6 @@
 import { t } from "@shared/l10n";
 import type {
+  AgentSessionDeliveryMode,
   AgentSessionViewEntry,
   AgentStreamEvent,
   AgentStreamPayload,
@@ -22,6 +23,7 @@ import { IconButton } from "../../../icon-button";
 import { IconChevronDown, IconChevronUp, IconHalt } from "../../../icons";
 import { Markdown } from "../../../markdown";
 import { useMentionResolver } from "../../../markdown/use-mention";
+import { SessionComposer } from "../session-composer";
 import "../../chat/thread.css";
 import "./index.css";
 
@@ -51,8 +53,16 @@ interface LiveState {
   blocks: Array<LiveBlock | undefined>;
 }
 
-/** Delay (ms) before re-reading the persisted session after a change event. */
+/**
+ * Delay (ms) before re-reading the persisted session after a change event.
+ */
 const REFRESH_DELAY = 150;
+/**
+ * Text prefix length used to match a pending send against the projection: the
+ * projection caps one block at 32 000 chars, so a longer message must be
+ * compared on the same prefix to ever match.
+ */
+const PENDING_MATCH_LENGTH = 32_000;
 /** Distance from the bottom (px) still considered "pinned" for auto-scroll. */
 const PIN_THRESHOLD = 32;
 /** Gap (px) kept between the viewport top and a divider a jump lands on. */
@@ -70,6 +80,29 @@ interface SessionScroll {
 }
 const sessionScrollStore = new Map<string, SessionScroll>();
 
+/**
+ * A message this composer sent into the session that the transcript does not
+ * show yet.
+ *
+ * A steer is only persisted by Pi at the next turn boundary, and (by the boss's
+ * decision) nothing is written to the conversation either — so this row is the
+ * only feedback that the text exists. It is dropped once the projection
+ * contains it, and marked `unconfirmed` when a run ends after it was sent
+ * without it ever appearing (Pi persists a steer before its next LLM call, so
+ * that combination means the hand-over was lost).
+ */
+interface PendingSend {
+  /** Stable React key. */
+  id: number;
+  text: string;
+  /** How the main process routed it (copy only). */
+  mode: AgentSessionDeliveryMode;
+  /** `runEndSeq` when it was sent; a later run end without a match = lost. */
+  runEndSeqAtSend: number;
+  /** No longer expected to arrive: shown as unconfirmed, dismissable. */
+  unconfirmed?: boolean;
+}
+
 /** Measured jump anchors (one per rendered wake divider). */
 interface JumpAnchors {
   /** `scrollHeight` the measurement belongs to; the cache key. */
@@ -84,6 +117,61 @@ interface JumpAvailability {
   next: boolean;
 }
 const NO_JUMPS: JumpAvailability = { prev: false, next: false };
+
+/** Comparison key for matching a sent text against a projected user entry. */
+function pendingKey(text: string): string {
+  return text.trim().slice(0, PENDING_MATCH_LENGTH);
+}
+
+/**
+ * Reconcile the "sent, not yet visible" rows against a freshly loaded
+ * projection.
+ *
+ * Matching is by trimmed text and **count-based**: sending the same text twice
+ * is legitimately two entries, so each pending copy consumes one projection
+ * entry (and copies beyond the available count stay pending). A **steered** row
+ * that never matches is marked `unconfirmed` once a run has ended after it was
+ * sent; it is never auto-removed, so a genuinely lost message cannot silently
+ * look delivered. A **queued** row is exempt: it sits in the app queue behind
+ * the current run, so an earlier run ending says nothing about it (it keeps
+ * showing "queued" until it is persisted, e.g. right after an interrupt).
+ */
+function reconcilePending(
+  pending: PendingSend[],
+  entries: AgentSessionViewEntry[],
+  runEndSeq: number,
+): PendingSend[] {
+  if (pending.length === 0) return pending;
+  const counts = new Map<string, number>();
+  for (const entry of entries) {
+    if (entry.kind !== "user") continue;
+    const key = pendingKey(entry.text);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  let changed = false;
+  const next: PendingSend[] = [];
+  for (const item of pending) {
+    const key = pendingKey(item.text);
+    const seen = counts.get(key) ?? 0;
+    if (seen > 0) {
+      // This copy is in the transcript now: drop the placeholder.
+      counts.set(key, seen - 1);
+      changed = true;
+      continue;
+    }
+    if (
+      item.mode === "steer" &&
+      item.unconfirmed !== true &&
+      runEndSeq > item.runEndSeqAtSend
+    ) {
+      changed = true;
+      next.push({ ...item, unconfirmed: true });
+      continue;
+    }
+    next.push(item);
+  }
+  return changed ? next : pending;
+}
 
 /**
  * Read-only view of one `(employee, chat)` agent session.
@@ -103,6 +191,23 @@ export function AgentSessionModule({
   const [entries, setEntries] = useState<AgentSessionViewEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Error reported by the run itself (`error` stream event). Kept apart from
+   * `error` (read failures) because a successful refresh clears the latter —
+   * otherwise a run failure would vanish ~150 ms after the `agent_end` that
+   * schedules the next read.
+   */
+  const [runError, setRunError] = useState<string | null>(null);
+  /** Cosmetic run state: a run is streaming, so a send would be a steer. */
+  const [streaming, setStreaming] = useState(false);
+  /** Texts sent from the composer that the transcript does not show yet. */
+  const [pending, setPending] = useState<PendingSend[]>([]);
+  const pendingSeqRef = useRef(0);
+  /**
+   * Bumped on every run end. A pending send that is older than this and still
+   * absent from the projection can no longer arrive (see `reconcilePending`).
+   */
+  const runEndSeqRef = useRef(0);
 
   const liveRef = useRef<LiveState | null>(null);
   const liveSeqRef = useRef(0);
@@ -157,6 +262,9 @@ export function AgentSessionModule({
       const next = await imb.sessions.entries(employeeId, chatId);
       if (disposedRef.current) return;
       setEntries(next);
+      // A send that has now appeared in the transcript no longer needs its
+      // placeholder; one that still cannot appear is marked unconfirmed.
+      setPending((prev) => reconcilePending(prev, next, runEndSeqRef.current));
       // The projection now contains every persisted message, so a live tail
       // that already ended (`message_end`) is a duplicate and is dropped. A
       // tail that is still streaming is *not* in the projection yet, so it is
@@ -337,10 +445,30 @@ export function AgentSessionModule({
           }
           scheduleRefresh();
           break;
-        case "turn_start":
         case "agent_start":
-        case "compaction_end":
+          setStreaming(true);
+          scheduleRefresh();
+          break;
         case "agent_end":
+          // A retry keeps the run alive; any other end means Pi stopped
+          // streaming, so the composer is a plain prompt again and a steered
+          // text can no longer be persisted afterwards.
+          if (!event.willRetry) {
+            runEndSeqRef.current += 1;
+            setStreaming(false);
+          }
+          scheduleRefresh();
+          break;
+        case "error":
+          // A failed run would otherwise be invisible in this view: the queue
+          // reports it only as an event. It also ends the run, so a steered
+          // text that never showed up cannot arrive later.
+          setRunError(event.message);
+          setStreaming(false);
+          runEndSeqRef.current += 1;
+          break;
+        case "turn_start":
+        case "compaction_end":
           scheduleRefresh();
           break;
         default:
@@ -363,6 +491,53 @@ export function AgentSessionModule({
     const off = imb.agentSession.onEvent(handleEvent);
     return off;
   }, [handleEvent]);
+
+  // Seed the run state: a session opened *while* it is streaming never emitted
+  // an `agent_start` for this window, so without this snapshot the composer
+  // would claim "Send" and the interrupt chip would be disabled. Cosmetic only
+  // (routing is decided main-side), so a failure is ignored.
+  useEffect(() => {
+    let cancelled = false;
+    void imb.agentSession
+      .state(employeeId, chatId)
+      .then((state) => {
+        if (!cancelled) setStreaming(state.streaming);
+      })
+      .catch(() => {
+        // Labels only — never surface this.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [employeeId, chatId]);
+
+  /**
+   * Record a send that the transcript cannot show yet (nothing is written to
+   * the conversation and Pi persists a steer only at the next turn boundary),
+   * and pin the thread so the placeholder is visible.
+   */
+  const handleSent = useCallback(
+    (text: string, mode: AgentSessionDeliveryMode): void => {
+      pendingSeqRef.current += 1;
+      const item: PendingSend = {
+        id: pendingSeqRef.current,
+        text,
+        mode,
+        runEndSeqAtSend: runEndSeqRef.current,
+      };
+      setPending((prev) => [...prev, item]);
+      // A new send supersedes the previous run failure (there is exactly one
+      // banner and no dismiss affordance, matching the chat module's error).
+      setRunError(null);
+      pinnedRef.current = true;
+    },
+    [],
+  );
+
+  /** Drop one placeholder (the boss decided it is not coming back). */
+  const dismissPending = useCallback((id: number): void => {
+    setPending((prev) => prev.filter((item) => item.id !== id));
+  }, []);
 
   // --- Jump to previous / next "new message" divider -------------------------
   /**
@@ -490,7 +665,9 @@ export function AgentSessionModule({
     syncJump();
   }, [entries, loading, readAnchors, syncJump]);
 
-  // Auto-scroll to the newest content while pinned, or restore saved scroll position.
+  // Auto-scroll to the newest content while pinned, or restore saved scroll
+  // position. `pending` participates because a just-sent placeholder is new
+  // content at the bottom, even though no entry arrived.
   useEffect(() => {
     const el = threadRef.current;
     if (!el) return;
@@ -501,7 +678,7 @@ export function AgentSessionModule({
       return;
     }
     if (pinnedRef.current) el.scrollTop = el.scrollHeight;
-  }, [entries, version, loading, sessionKeyStr]);
+  }, [entries, version, loading, sessionKeyStr, pending]);
 
   const handleScroll = useCallback((): void => {
     const el = threadRef.current;
@@ -541,55 +718,89 @@ export function AgentSessionModule({
         </div>
         {/* Interrupts the current turn of *this* session only (queued work is
             kept, the session stays alive). One click, no confirmation: stopping a
-            single turn is cheap and simply talking again resumes the work. */}
+            single turn is cheap and simply talking again resumes the work.
+            Disabled while the session is idle — `interruptTurn` is a no-op then,
+            and a greyed chip states that honestly.
+
+            Deliberately independent from the composer's send/interject button:
+            steer keeps the running turn, interrupt throws it away, so the
+            destructive action must not share the highest-traffic control. */}
         <HaltButton
           className="imb-session-interrupt"
           label={interruptLabel}
           confirm={false}
+          disabled={!streaming}
           onInterrupt={() => imb.agentSession.interruptTurn(employeeId, chatId)}
         >
           <IconHalt />
           <span className="imb-session-interrupt-label">{interruptLabel}</span>
         </HaltButton>
       </div>
-      <div
-        className={cls(
-          "imb-thread imb-session-thread",
-          dividerCount > 0 && "imb-has-jumps",
-        )}
-        ref={threadRef}
-        onScroll={handleScroll}
-      >
-        {!loading && entries.length === 0 && liveBlocks.length === 0 ? (
-          <div className="imb-chat-empty-detail">
-            {t("No session content yet")}
-          </div>
-        ) : (
-          <>
-            {entries.map((entry, index) => (
-              <SessionEntry
-                key={entry.id}
-                entry={entry}
-                first={index === 0}
-                resolveMention={resolveMention}
-              />
-            ))}
-            {liveBlocks.map((block) => (
-              <LiveBlockView
-                key={block.key}
-                block={block}
-                resolveMention={resolveMention}
-              />
-            ))}
-          </>
+      {/* The thread and the floating jump control share a positioned wrapper so
+          the control can sit above the composer without a fixed offset. */}
+      <div className="imb-session-thread-wrap">
+        <div
+          className={cls(
+            "imb-thread imb-session-thread",
+            dividerCount > 0 && "imb-has-jumps",
+          )}
+          ref={threadRef}
+          onScroll={handleScroll}
+        >
+          {!loading &&
+          entries.length === 0 &&
+          liveBlocks.length === 0 &&
+          pending.length === 0 ? (
+            <div className="imb-chat-empty-detail">
+              {t("No session content yet")}
+            </div>
+          ) : (
+            <>
+              {entries.map((entry, index) => (
+                <SessionEntry
+                  key={entry.id}
+                  entry={entry}
+                  first={index === 0}
+                  resolveMention={resolveMention}
+                />
+              ))}
+              {liveBlocks.map((block) => (
+                <LiveBlockView
+                  key={block.key}
+                  block={block}
+                  resolveMention={resolveMention}
+                />
+              ))}
+            </>
+          )}
+          {pending.map((item) => (
+            <PendingSendRow
+              key={item.id}
+              item={item}
+              onDismiss={dismissPending}
+            />
+          ))}
+        </div>
+        {dividerCount > 0 && (
+          <SessionJumpButtons availability={jump} onJump={jumpTo} />
         )}
       </div>
-      {dividerCount > 0 && (
-        <SessionJumpButtons availability={jump} onJump={jumpTo} />
-      )}
-      {error !== null && (
-        <p className="imb-error-text imb-chat-error">{error}</p>
-      )}
+      {error !== null || runError !== null ? (
+        // In flow, above the composer: the shared `.imb-chat-error` is a fixed
+        // toast that would land on top of the composer here.
+        <p className="imb-error-text imb-session-error" role="alert">
+          {error ?? runError}
+        </p>
+      ) : null}
+      {/* The view's only write affordance — injects into this very session
+          (nothing is written to the conversation). */}
+      <SessionComposer
+        employeeId={employeeId}
+        chatId={chatId}
+        employeeName={employeeName}
+        streaming={streaming}
+        onSent={handleSent}
+      />
     </>
   );
 
@@ -640,6 +851,60 @@ function SessionEntry({
         />
       );
   }
+}
+
+/**
+ * Placeholder for a message sent from the composer that the transcript cannot
+ * show yet: nothing is written to the conversation (by design) and Pi persists
+ * a steer only at the next turn boundary, so without this row a successful send
+ * would look like nothing happened.
+ *
+ * Styled as the boss's own bubble but dimmed, with a status line below it:
+ * routed-as-interjection, queued, or unconfirmed (dismissable only — the app
+ * never silently pretends a lost steer was delivered).
+ */
+function PendingSendRow({
+  item,
+  onDismiss,
+}: {
+  item: PendingSend;
+  onDismiss: (id: number) => void;
+}): React.JSX.Element {
+  const label = item.unconfirmed
+    ? t("Not confirmed — the agent may not have received this")
+    : item.mode === "steer"
+      ? t("Interjected — handled after the current turn")
+      : t("Queued — handled as soon as the agent is free");
+  const dismissLabel = t("Dismiss");
+  return (
+    <div className="imb-session-pending">
+      <div
+        className={cls(
+          "imb-session-user imb-session-pending-bubble",
+          item.unconfirmed && "imb-is-unconfirmed",
+        )}
+      >
+        {item.text}
+      </div>
+      <div
+        className={cls(
+          "imb-session-pending-hint",
+          item.unconfirmed && "imb-is-unconfirmed",
+        )}
+      >
+        <span>{label}</span>
+        <button
+          type="button"
+          className="imb-session-pending-dismiss"
+          aria-label={dismissLabel}
+          title={dismissLabel}
+          onClick={() => onDismiss(item.id)}
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  );
 }
 
 /**

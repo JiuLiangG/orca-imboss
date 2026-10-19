@@ -80,3 +80,30 @@ export interface AgentSessionView {
   chatId: number;
   entries: AgentSessionViewEntry[];
 }
+
+/**
+ * How the main process routed a composer send from the agent-session view.
+ *
+ * `"steer"`: the session was streaming, so the text was handed to the live Pi
+ * run and is seen after the current assistant turn. `"queued"`: the session was
+ * not streaming, so the text joins (or starts) the app-level serialized queue.
+ */
+export type AgentSessionDeliveryMode = "steer" | "queued";
+
+/** Result of `agentSession:send` (the session view's composer). */
+export interface AgentSessionSendResult {
+  /** Authoritative routing decided by the main process, for user feedback. */
+  mode: AgentSessionDeliveryMode;
+}
+
+/**
+ * Cosmetic run-state snapshot of one `(employee, chat)` session, so the view
+ * can label its controls ("Send" vs "Interject") and enable the interrupt chip.
+ *
+ * Never used to decide delivery: `deliver()` re-checks the live session
+ * (`busy && isStreaming`), so a stale snapshot only affects labels.
+ */
+export interface AgentSessionRunState {
+  /** A Pi run is actively streaming — a steer or an interrupt can land now. */
+  streaming: boolean;
+}

@@ -1,5 +1,7 @@
 import { DEFAULT_LOCALE } from "@shared/constants/locales";
 import type {
+  AgentSessionRunState,
+  AgentSessionSendResult,
   AgentSessionViewEntry,
   AgentStreamPayload,
   BackupInfo,
@@ -432,6 +434,28 @@ const api = {
         employeeId,
         chatId,
       ) as Promise<boolean>,
+    /**
+     * Send a message into exactly one `(employee, chat)` agent session (the
+     * session view's composer). The main process decides between steering the
+     * live run and queueing; nothing is written to the conversation.
+     */
+    send: (employeeId: number, chatId: number, text: string) =>
+      ipcRenderer.invoke(
+        "agentSession:send",
+        employeeId,
+        chatId,
+        text,
+      ) as Promise<AgentSessionSendResult>,
+    /**
+     * Cosmetic run state of one session (labels + the interrupt chip's enabled
+     * state). Not authoritative for routing: `send` re-checks it main-side.
+     */
+    state: (employeeId: number, chatId: number) =>
+      ipcRenderer.invoke(
+        "agentSession:state",
+        employeeId,
+        chatId,
+      ) as Promise<AgentSessionRunState>,
     onEvent: (cb: (payload: AgentStreamPayload) => void) =>
       on<AgentStreamPayload>("agentSession:event", cb),
   },
