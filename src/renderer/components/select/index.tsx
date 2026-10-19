@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { cls } from "reactutils";
 import { useDropdownPosition } from "../../hooks/use-dropdown-position";
 import { useEscapeKey } from "../../hooks/use-escape-key";
+import { usePopupLayer } from "../../hooks/use-popup-layer";
 import { IconChevronDown } from "../icons";
 import "./index.css";
 
@@ -125,6 +126,9 @@ export function Select({
   }, [open, positionPanel]);
 
   useEscapeKey(closePanel, open);
+  // Leave Escape / the focus order to this panel while it is open, even when it
+  // was opened from inside a `Modal` (its panel is portaled outside the dialog).
+  usePopupLayer(open);
 
   function onTriggerKeyDown(event: React.KeyboardEvent): void {
     if (disabled) return;

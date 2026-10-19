@@ -976,6 +976,32 @@ export const appStore = proxy({
   },
 
   /**
+   * Close every opened group chat and agent session (Nav 「Close all」).
+   *
+   * Deliberately not a loop of `closeChat`/`closeSession`: those activate a
+   * neighbour and switch the module per entry, whereas the whole list is gone
+   * here in one synchronous update. Closing is view-only — drafts
+   * (`chatDrafts` / `sessionDrafts`), unread counts, pins and running agent
+   * sessions (their runs continue in main; the view merely unbinds) are
+   * untouched — so no confirmation is required.
+   */
+  closeAllOpenedItems(): void {
+    if (appStore.openedItems.length === 0) return;
+    appStore.openedItems.splice(0, appStore.openedItems.length);
+    // Both active pointers now refer to entries that no longer exist.
+    appStore.activeChatId = null;
+    appStore.activeSessionKey = null;
+    // Only these two modules display an opened entry; elsewhere the current
+    // view is unrelated and must stay.
+    if (
+      appStore.module === "group-chat" ||
+      appStore.module === "agent-session"
+    ) {
+      appStore.module = "chat";
+    }
+  },
+
+  /**
    * Apply a new combined Nav order (drag-and-drop). Session-only, so nothing is
    * persisted. Unknown/duplicate keys are ignored and any omitted entry is kept
    * (appended) so the live set always matches the rendered order.

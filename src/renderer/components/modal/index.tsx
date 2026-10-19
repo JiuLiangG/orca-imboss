@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cls } from "reactutils";
+import { hasOpenPopupLayer } from "../../popup-layer";
 import "./index.css";
 
 export interface ModalProps {
@@ -56,6 +57,11 @@ export function Modal({
     first?.focus({ preventScroll: true });
 
     const onKeyDown = (event: KeyboardEvent): void => {
+      // A select / multi-select / context-menu panel opened from this dialog is
+      // portaled to `document.body`, so it lives outside `dialogRef`. While one
+      // is open it owns Escape (close the panel, not the dialog) and the focus
+      // order — trapping Tab against `dialogRef` would yank focus away from it.
+      if (hasOpenPopupLayer()) return;
       if (event.key === "Escape") {
         event.stopPropagation();
         onCloseRef.current();

@@ -5,6 +5,7 @@ import { cls } from "reactutils";
 import { useClickOutside } from "../../hooks/use-click-outside";
 import { useDropdownPosition } from "../../hooks/use-dropdown-position";
 import { useEscapeKey } from "../../hooks/use-escape-key";
+import { usePopupLayer } from "../../hooks/use-popup-layer";
 import { IconChevronDown, IconSearch, IconX } from "../icons";
 import "./index.css";
 
@@ -111,6 +112,9 @@ export function MultiSelect({
   );
   useClickOutside(outsideRefs, closePanel, open);
   useEscapeKey(closePanel, open);
+  // Leave Escape / the focus order to this panel while it is open, even when it
+  // was opened from inside a `Modal` (its panel is portaled outside the dialog).
+  usePopupLayer(open);
 
   // Reposition the portaled panel if the viewport scrolls/resizes while open.
   useEffect(() => {
@@ -218,11 +222,7 @@ export function MultiSelect({
 
   return (
     <div
-      className={cls(
-        "imb-ms",
-        className,
-        showClear && "imb-ms-has-clear",
-      )}
+      className={cls("imb-ms", className, showClear && "imb-ms-has-clear")}
       ref={rootRef}
     >
       <button
@@ -309,7 +309,13 @@ export function MultiSelect({
                 />
               </div>
             )}
-            {showEmpty && <div className="imb-ms-empty">{emptyHint}</div>}
+            {showEmpty && (
+              <div className="imb-ms-empty">
+                {/* A filtered-out list is not the same as an unconfigured one:
+                    `emptyHint` talks about the installation, not the query. */}
+                {filterText.length > 0 ? t("No matches") : emptyHint}
+              </div>
+            )}
             {filtered.map((option, index) => {
               const checked = selectedSet.has(option.value);
               const locked = !checked && atCap;

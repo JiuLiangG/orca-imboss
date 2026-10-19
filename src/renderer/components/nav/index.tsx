@@ -26,7 +26,11 @@ import {
   type AppModule,
 } from "../../app-store";
 import { BrandLogo } from "../brand-logo";
-import { ContextMenu, type ContextMenuState } from "../context-menu";
+import {
+  ContextMenu,
+  type ContextMenuItem,
+  type ContextMenuState,
+} from "../context-menu";
 import { EmployeeAvatar } from "../employee-avatar";
 import { GroupAvatar } from "../group-avatar";
 import {
@@ -89,6 +93,23 @@ const NAV_ITEMS: NavItem[] = [
 export interface NavProps {
   collapsed: boolean;
   onToggle: () => void;
+}
+
+/**
+ * Menu of an opened Nav entry: close this entry, or every opened group chat and
+ * agent session at once (both Nav menus offer the same "Close all", so the
+ * action never depends on which kind was right-clicked).
+ */
+function closeMenuItems(onCloseOne: () => void): ContextMenuItem[] {
+  return [
+    { key: "close", label: t("Close"), onSelect: onCloseOne },
+    { divider: true, key: "close-all-divider" },
+    {
+      key: "close-all",
+      label: t("Close all"),
+      onSelect: () => appStore.closeAllOpenedItems(),
+    },
+  ];
 }
 
 /** Read-only shape of an opened chat (valtio snapshots are deeply readonly). */
@@ -245,13 +266,9 @@ export function Nav({ collapsed, onToggle }: NavProps): React.JSX.Element {
                               setCtxMenu({
                                 x: e.clientX,
                                 y: e.clientY,
-                                items: [
-                                  {
-                                    key: "close",
-                                    label: t("Close"),
-                                    onSelect: () => appStore.closeChat(item.id),
-                                  },
-                                ],
+                                items: closeMenuItems(() =>
+                                  appStore.closeChat(item.id),
+                                ),
                               });
                             }}
                           />
@@ -280,13 +297,9 @@ export function Nav({ collapsed, onToggle }: NavProps): React.JSX.Element {
                             setCtxMenu({
                               x: e.clientX,
                               y: e.clientY,
-                              items: [
-                                {
-                                  key: "close",
-                                  label: t("Close"),
-                                  onSelect: () => appStore.closeSession(key),
-                                },
-                              ],
+                              items: closeMenuItems(() =>
+                                appStore.closeSession(key),
+                              ),
                             });
                           }}
                         />

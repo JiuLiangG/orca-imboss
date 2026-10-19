@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { cls } from "reactutils";
 import { useClickOutside } from "../../hooks/use-click-outside";
 import { useEscapeKey } from "../../hooks/use-escape-key";
+import { usePopupLayer } from "../../hooks/use-popup-layer";
 import {
   computeAnchoredPosition,
   type Align,
@@ -120,6 +121,9 @@ export function ContextMenu({
 
   useClickOutside(ref, onClose, state !== null);
   useEscapeKey(onClose, state !== null);
+  // The menu is portaled to `document.body`, so an enclosing `Modal` must not
+  // close on the Escape that dismisses it (see `popup-layer.ts`).
+  usePopupLayer(state !== null);
 
   if (!state) return null;
   const { left, top } = adjusted ?? { left: state.x ?? 0, top: state.y ?? 0 };

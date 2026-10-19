@@ -321,6 +321,8 @@ export function EmployeeDetail({
               options={mcpOptions}
               placeholder={t("Select MCP")}
               emptyHint={t("No MCP configured")}
+              searchable
+              searchPlaceholder={t("Search MCP")}
               onChange={(mcp) => scheduleSave({ ...form, mcp })}
             />
           </Field>
@@ -332,6 +334,8 @@ export function EmployeeDetail({
             options={skillOptions}
             placeholder={t("Select skills")}
             emptyHint={t("No skills installed")}
+            searchable
+            searchPlaceholder={t("Search skills")}
             onChange={(skills) => scheduleSave({ ...form, skills })}
           />
         </Field>
