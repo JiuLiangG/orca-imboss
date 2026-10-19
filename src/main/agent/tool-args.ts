@@ -32,6 +32,9 @@ const LARGE_FIELDS = new Set([
   "systemPrompt",
   "prompt",
   "instructions",
+  // A redirect posted by `imb_interrupt` can be a whole brief; it must not crowd
+  // out the employee/chat ids that identify the call.
+  "instruction",
 ]);
 
 /** Keys that usually identify what a call acted on (shown first). */
@@ -174,9 +177,29 @@ function summarizeKnown(
     }
     case "imb_remove_cronjob":
       return text(record.id);
+    case "imb_get_employee_stat":
+      return employeeAndChat(record);
+    case "imb_interrupt": {
+      const target = employeeAndChat(record);
+      const instruction = text(record.instruction);
+      const suffix = instruction ? `${instruction.length} chars` : "";
+      return [target, suffix].filter((part) => part.length > 0).join(" · ");
+    }
     default:
       return null;
   }
+}
+
+/** `employee <id> · chat <id>` for the tools that act on one session pair. */
+function employeeAndChat(record: Record<string, unknown>): string {
+  const employeeId = text(record.employeeId);
+  const chatId = text(record.chatId);
+  return [
+    employeeId ? `employee ${employeeId}` : "",
+    chatId ? `chat ${chatId}` : "",
+  ]
+    .filter((part) => part.length > 0)
+    .join(" · ");
 }
 
 /** `path` / `file_path` with an optional `:start-end` line range. */

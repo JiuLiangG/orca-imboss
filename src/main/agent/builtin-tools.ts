@@ -46,7 +46,15 @@ import {
 import { readMcpServers } from "../mcp-store";
 import { notifyUnread, sendToRenderer } from "../notifications";
 import { materializeSessionFile, sessionPathFor } from "./session-files";
-import { wakeAgent } from "./session-queue";
+import {
+  interruptTurnDiscardingQueue,
+  readSessionActivity,
+  wakeAgent,
+} from "./session-queue";
+import {
+  buildEmployeeAgentStat,
+  readLastAssistantMessage,
+} from "./session-stat";
 import { listSkills } from "./skills";
 
 /**
@@ -61,15 +69,17 @@ import { listSkills } from "./skills";
  * The tool set is role-based: the assistant (employee id 0) gets the
  * orchestration tools (`imb_set_employees`, `imb_create_chat`,
  * `imb_add_participant`, `imb_list_employees`, `imb_toolset`, `imb_notify`,
- * `imb_progress`, `imb_ask`) plus `imb_send_message` and `imb_read_chat`; a
- * participant gets
+ * `imb_progress`, `imb_ask`, `imb_get_employee_stat`, `imb_interrupt`) plus
+ * `imb_send_message` and `imb_read_chat`; a participant gets
  * `imb_send_message` and `imb_read_chat`, plus `imb_set_cronjob` and/or
  * `imb_remove_cronjob` and/or `imb_generate_image` when the employee opted in
  * via their "Linked MCP" list. The assistant gets those three tools
  * unconditionally: its `mcp` list is immutable, so it can never be gated the
  * way employees are.
- * `imb_progress` and `imb_ask` are assistant-only: employees exchange questions
- * and answers as plain text messages. All agent runs are serialized per
+ * `imb_progress`, `imb_ask`, `imb_get_employee_stat` and `imb_interrupt` are
+ * assistant-only: employees exchange questions and answers as plain text
+ * messages, and only the assistant supervises and redirects them. All agent
+ * runs are serialized per
  * (employee, chat) via the session queue.
  * `createTeamToolDefinitions` captures the calling agent's identity so
  * `imb_read_chat` knows who is reading and internal sends know who is sending.
@@ -1225,19 +1235,299 @@ function askTool(env: AgentEnvironment): AnyPiTool {
 }
 
 /**
+ * `imb_get_employee_stat` — assistant-only: what is one employee session doing
+ * **right now**?
+ *
+ * The boss needs to tell "stuck" from "still working", so every field describes
+ * the present: `running` (a Pi run is streaming), `queued` (pending prompts,
+ * informational only — future work, never part of "the last message"), and the
+ * employee's last agent message. While the session is running, that message is
+ * always the **current turn's** in-flight one (`streaming: true`, partial output,
+ * no timestamp) — even when nothing readable has been produced yet, and never a
+ * persisted message standing in for it. The last persisted message is then only
+ * offered as `previousAgentMessage` for comparison.
+ *
+ * A message in flight has no timestamp, so `progress` carries the timing: how
+ * long this run has lasted, how long ago the last observable activity was, and
+ * — the case that motivated it — which tool call it is stuck in and for how
+ * long (`activeTool`, oldest still-open call, with its truncated arguments). A
+ * long tool that reports no partial results legitimately shows
+ * `lastProgressAgeSeconds == activeTool.ageSeconds`: silence, not necessarily a
+ * hang. All times are whole seconds computed here, and `progress` is omitted
+ * entirely when nothing is running.
+ *
+ * Read-only and side-effect free: it never creates a queue state or a Pi
+ * session (see `readSessionActivity`), and a corrupt/missing session file
+ * degrades to "no output yet" instead of an error.
+ */
+function employeeStatTool(callingEmployeeId: number): AnyPiTool {
+  return {
+    name: "imb_get_employee_stat",
+    label: "Employee status",
+    description:
+      "Report the current state of one employee's agent session (one `(employeeId, chatId)` pair; " +
+      "both are required). Returns `running` (the employee is streaming a response right now), " +
+      "`queued` (prompts waiting to run — background only, it never affects `lastAgentMessage`) " +
+      "and `lastAgentMessage`. While `running`, `lastAgentMessage` always describes the turn " +
+      "being produced right now: `streaming: true`, partial `text`, `at`/`ageSeconds` null — " +
+      "possibly still empty (nothing readable yet, e.g. a tool is executing), never a finished " +
+      "message standing in for it; the last finished message is then given separately as " +
+      "`previousAgentMessage`. When not running, `lastAgentMessage` is the last finished message " +
+      "with its `ageSeconds`. `toolCalls` lists the tool names in that message (no arguments). " +
+      "`text` is capped by `maxChars`; `chars`/`truncated` tell whether it was cut. While " +
+      "running, `progress` times the run: `runAgeSeconds` (since the run started), " +
+      "`lastProgressAgeSeconds` + `lastProgressKind` (how long ago, and what, the last observable " +
+      "activity was: a token, a message/turn boundary, a tool start/update/end, a retry wait), " +
+      "`activeTool` (the oldest tool call that has not finished: `name`, `ageSeconds`, and its " +
+      "already-truncated `args` — the model's own input arguments as one line of JSON, cut at " +
+      "~1000 chars with `argsTruncated: true`, `null` when unserializable; they may contain " +
+      "sensitive values or long bodies and are never the complete call), and `toolCallsThisRun`. " +
+      "A tool that reports no partial results leaves `lastProgressAgeSeconds == " +
+      "activeTool.ageSeconds`, which is silence rather than proof of a hang. Use it to tell a " +
+      "stuck employee from one that is still working.",
+    promptSnippet: "check an employee's current state",
+    parameters: Type.Object({
+      employeeId: Type.Integer({
+        minimum: 0,
+        description: "The employee to inspect; `0` is the assistant itself.",
+      }),
+      chatId: Type.Integer({
+        minimum: 1,
+        description:
+          "The chat of the session to inspect — one session per employee and chat.",
+      }),
+      maxChars: Type.Optional(
+        Type.Integer({
+          minimum: STAT_MIN_TEXT_CHARS,
+          maximum: STAT_MAX_TEXT_CHARS,
+          description: `Cap for \`text\` (default ${STAT_DEFAULT_TEXT_CHARS}).`,
+        }),
+      ),
+    }),
+    execute: async (_toolCallId, params) => {
+      const input = params as {
+        employeeId: number;
+        chatId: number;
+        maxChars?: number;
+      };
+      assertAssistantCaller(callingEmployeeId);
+      assertStatTarget(input.employeeId, input.chatId);
+      const chat = dbChats.getChat(input.chatId);
+      // `assertStatTarget` already proved the chat exists; re-read for the title.
+      const activity = readSessionActivity(input.employeeId, input.chatId);
+      const persisted = await readLastAssistantMessage(
+        input.employeeId,
+        input.chatId,
+      );
+      return toolResult(
+        buildEmployeeAgentStat({
+          employeeId: input.employeeId,
+          chatId: input.chatId,
+          chatTitle: chat?.title ?? "",
+          sessionExists:
+            dbSessions.getSession(input.employeeId, input.chatId) !== null,
+          activity,
+          persisted,
+          maxChars: clampMaxChars(input.maxChars),
+        }),
+      );
+    },
+  };
+}
+
+/**
+ * Defense in depth for the assistant-only orchestration tools.
+ *
+ * The real gate is registration in `createTeamToolDefinitions` (only the
+ * `isAssistant` branch pushes these), so a mismatch only happens when a session
+ * still carries a stale tool list. Failing loudly beats a participant silently
+ * probing or interrupting its colleagues. Same pattern as
+ * `performGenerateImage`'s marker re-check.
+ */
+function assertAssistantCaller(employeeId: number): void {
+  if (employeeId !== ASSISTANT_ID) {
+    throw new Error("This tool is only available to the assistant.");
+  }
+}
+
+/** Default `text` cap of `imb_get_employee_stat`. */
+const STAT_DEFAULT_TEXT_CHARS = 2000;
+/** Hard cap for the same text (the model may ask for more, never for less). */
+const STAT_MAX_TEXT_CHARS = 8000;
+const STAT_MIN_TEXT_CHARS = 200;
+
+/** Clamp the requested text cap into the supported range. */
+function clampMaxChars(requested: number | undefined): number {
+  if (requested === undefined || !Number.isFinite(requested)) {
+    return STAT_DEFAULT_TEXT_CHARS;
+  }
+  return Math.min(
+    STAT_MAX_TEXT_CHARS,
+    Math.max(STAT_MIN_TEXT_CHARS, Math.trunc(requested)),
+  );
+}
+
+/**
+ * Validate a stat target the same way the deliver path does, so the model gets
+ * a correctable error instead of an empty, misleading snapshot:
+ * the employee must exist, and a non-assistant employee must actually be a
+ * participant of the chat. The assistant has no session in a task group chat
+ * (it runs in the chat's root chat — see `wakeAgent`), so asking for it is a
+ * caller mistake worth reporting.
+ */
+function assertStatTarget(employeeId: number, chatId: number): void {
+  if (!getEmployee(employeeId)) {
+    throw new Error(`Employee ${employeeId} does not exist.`);
+  }
+  const chat = dbChats.getChat(chatId);
+  if (!chat) throw new Error(`Chat ${chatId} does not exist.`);
+  if (employeeId === ASSISTANT_ID) {
+    if (dbChats.getRootChatId(chatId) !== chatId) {
+      throw new Error(
+        "Employee 0 (the assistant) only has a session in its root chat.",
+      );
+    }
+    return;
+  }
+  if (!chat.participants.includes(employeeId)) {
+    throw new Error(
+      `Employee ${employeeId} is not a participant of chat ${chatId}.`,
+    );
+  }
+}
+
+/**
+ * `imb_interrupt` — assistant-only: stop one employee's current turn **and**
+ * give it new instructions in one step.
+ *
+ * Deliberately a composition of existing primitives instead of a new interrupt
+ * path:
+ * 1. the `instruction` is posted as an ordinary `text` message from the
+ *    assistant — the app's existing "assign work as a chat message" semantics,
+ *    so the redirect has a durable, reviewable record in the task group and the
+ *    employee's next `imb_read_chat` sees it;
+ * 2. `interruptTurnDiscardingQueue(employeeId, chatId)` aborts the in-flight
+ *    run (clearing Pi's internal queues first, marking the cut point in the
+ *    transcript) **and discards everything that was still pending for that
+ *    session** — the app-level queue and the undelivered steered texts. That is
+ *    the difference from the view's interrupt chip and from the Halt button,
+ *    both of which keep their own existing semantics: after a redirect the
+ *    employee must only see the new instruction, not resume the old queue;
+ * 3. `wakeAgent(...)` wakes the employee with the standard read-chat prompt so
+ *    it picks up the instruction immediately.
+ *
+ * An employee that was not running is not an error: the instruction is then
+ * simply delivered and the call reports `interrupted: false`. Nothing here
+ * targets the assistant itself — aborting your own session mid-tool would drop
+ * the tool result — so `employeeId: 0` is rejected.
+ */
+function interruptTool(
+  env: AgentEnvironment,
+  callingEmployeeId: number,
+): AnyPiTool {
+  return {
+    name: "imb_interrupt",
+    label: "Interrupt and redirect",
+    description:
+      "Interrupt one employee's current processing and hand it a new instruction in a single step. " +
+      "The `instruction` is posted into `chatId` as a normal message from the assistant, the " +
+      "employee's in-flight turn is aborted, and the employee is woken to read the new instruction. " +
+      "Everything that was still pending for that session is **discarded** — queued prompts and " +
+      "undelivered steered messages do not run afterwards, so after the call the employee only sees " +
+      "your instruction: re-assign anything you still want done. Returns `interrupted: false` (not " +
+      "an error) when the employee was not running: the pending work is still discarded, the " +
+      "instruction is delivered and the employee is woken. Check `imb_get_employee_stat` first to " +
+      "be sure an interrupt is warranted; never interrupt the assistant itself (id 0).",
+    promptSnippet: "interrupt an employee and redirect it",
+    parameters: Type.Object({
+      employeeId: Type.Integer({
+        minimum: 1,
+        description: "The employee to interrupt (never `0`).",
+      }),
+      chatId: Type.Integer({
+        minimum: 1,
+        description: "The chat whose agent session is interrupted.",
+      }),
+      instruction: Type.String({
+        minLength: 1,
+        maxLength: 100000,
+        description:
+          "The new instruction, posted into the chat as the assistant's message. Make it self-contained.",
+      }),
+    }),
+    execute: async (_toolCallId, params) => {
+      const input = params as {
+        employeeId: number;
+        chatId: number;
+        instruction: string;
+      };
+      assertAssistantCaller(callingEmployeeId);
+      if (input.employeeId === ASSISTANT_ID) {
+        throw new Error(
+          "You cannot interrupt yourself: aborting your own session would drop this tool call's result.",
+        );
+      }
+      assertActiveEmployee(input.employeeId);
+      const chat = dbChats.getChat(input.chatId);
+      if (!chat) throw new Error(`Chat ${input.chatId} does not exist.`);
+      if (!chat.participants.includes(input.employeeId)) {
+        throw new Error(
+          `Employee ${input.employeeId} is not a participant of chat ${input.chatId}.`,
+        );
+      }
+      if (input.instruction.trim().length === 0) {
+        throw new Error("`instruction` must not be empty.");
+      }
+
+      // 1. The instruction lands first: the interrupted run can then never end
+      //    with the employee having nothing new to read, and the fresh run sees
+      //    it through its read cursor.
+      const message = await performSendMessage(env, {
+        senderEmployeeId: ASSISTANT_ID,
+        chatId: input.chatId,
+        kind: "text",
+        content: input.instruction,
+      });
+      // 2. Abort the in-flight turn of exactly this (employee, chat) session and
+      //    discard the work still pending for it: a redirect must not be
+      //    followed by the old queue. (The view's chip and the Halt button keep
+      //    their own, unchanged semantics.)
+      const interrupted = await interruptTurnDiscardingQueue(
+        input.employeeId,
+        input.chatId,
+      );
+      // 3. Wake the employee in its own session (queue: never steer the new
+      //    instruction into a run that is being replaced). This is the only
+      //    pending input the session has left.
+      await wakeAgent(input.employeeId, input.chatId, READ_CHAT_PROMPT, {
+        mode: "queue",
+      });
+      return toolResult({
+        employeeId: input.employeeId,
+        chatId: input.chatId,
+        messageId: message.id,
+        interrupted,
+      });
+    },
+  };
+}
+
+/**
  * Build the role-based tool set for the calling agent.
  *
  * - Assistant (id 0): orchestration tools — `imb_set_employees`,
  *   `imb_create_chat`, `imb_add_participant`, `imb_read_chat`,
  *   `imb_list_employees`, `imb_toolset`, `imb_notify`, `imb_progress`,
- *   `imb_ask`; plus `imb_send_message`, the cron tools and `imb_generate_image`
+ *   `imb_ask`, `imb_get_employee_stat`, `imb_interrupt`; plus
+ *   `imb_send_message`, the cron tools and `imb_generate_image`
  *   (never gated: the assistant's `mcp` list is immutable).
  * - Participant employee: `imb_send_message`, `imb_read_chat`; plus
  *   `imb_set_cronjob` / `imb_remove_cronjob` / `imb_generate_image` when the
  *   corresponding opt-in marker is present in `mcp` (the image tool also
  *   needs `IMAGE_GENERATION_ENABLED`). Employees have no structured
  *   ask/answer tools — they exchange questions and answers as plain text
- *   messages.
+ *   messages — and no supervision tools: status probing and interrupting are
+ *   the assistant's alone.
  */
 /**
  * `imb_generate_image` — generate a picture and show it in the chat.
@@ -1367,6 +1657,13 @@ export function createTeamToolDefinitions(
     // `imb_ask` is assistant-only (it asks the boss); employees exchange
     // questions and answers as plain text messages.
     tools.push(askTool(env));
+    // Status + intervention are assistant-only orchestration tools: they are how
+    // the assistant sees what an employee is doing right now and aborts its
+    // current turn to redirect it. Employees must never get them — this
+    // `isAssistant` branch is the single registration point, and both tools
+    // re-check the caller defensively (see `assertAssistantCaller`).
+    tools.push(employeeStatTool(employeeId));
+    tools.push(interruptTool(env, employeeId));
     tools.push(setCronjobTool(employeeId));
     tools.push(removeCronjobTool(employeeId));
   } else {

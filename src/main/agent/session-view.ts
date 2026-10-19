@@ -38,27 +38,41 @@ export async function readSessionView(
   employeeId: number,
   chatId: number,
 ): Promise<AgentSessionViewEntry[]> {
+  return projectEntries(await readSessionEntries(employeeId, chatId));
+}
+
+/**
+ * Read the raw entries of the persisted `(employee, chat)` Pi session — the
+ * shared front half of every session reader (this projection and
+ * `readLastAssistantMessage` in `session-stat.ts`).
+ *
+ * Returns an empty list instead of throwing: a missing/corrupt/zero-byte
+ * session file, an unknown pair and a path outside the session store all
+ * degrade to "nothing persisted". Callers never need their own guard.
+ */
+export async function readSessionEntries(
+  employeeId: number,
+  chatId: number,
+): Promise<SessionEntry[]> {
   const record = getSession(employeeId, chatId);
   if (!record || !isInsideSessionsDir(record.session)) return [];
 
-  let entries: SessionEntry[];
   try {
     const pi = await loadPiSdk();
     const manager = pi.SessionManager.open(
       record.session,
       getAgentSessionsDir(),
     );
-    entries = manager.getEntries();
+    return manager.getEntries();
   } catch (err) {
-    // A missing/corrupt/zero-byte session file must degrade to an empty view,
-    // never break the renderer request.
+    // A missing/corrupt/zero-byte session file must degrade to an empty read,
+    // never break the renderer request or a status probe.
     console.error(
       `[session-view] failed to read session for ${employeeId} in chat ${chatId}:`,
       err instanceof Error ? err.message : err,
     );
     return [];
   }
-  return projectEntries(entries);
 }
 
 /** Map raw session entries to the renderer DTO list. */
@@ -91,7 +105,7 @@ function projectEntries(entries: SessionEntry[]): AgentSessionViewEntry[] {
     };
     switch (message.role) {
       case "user": {
-        const text = extractUserText(message.content);
+        const text = extractTextContent(message.content);
         if (text.length === 0) break;
         const wake = classifyWakePrompt(text);
         if (wake !== null) {
@@ -269,8 +283,12 @@ function applyToolResult(
   tool.status = isError === true ? "error" : "ok";
 }
 
-/** Flatten a user message's content to plain text (text blocks only). */
-function extractUserText(content: unknown): string {
+/**
+ * Flatten a message's `content` to its text blocks joined with a newline — the
+ * app's one text extractor (user messages, assistant stats). String content is
+ * returned verbatim; anything else contributes only `type: "text"` blocks.
+ */
+export function extractTextContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   const parts: string[] = [];

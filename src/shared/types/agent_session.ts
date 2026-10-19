@@ -107,3 +107,149 @@ export interface AgentSessionRunState {
   /** A Pi run is actively streaming — a steer or an interrupt can land now. */
   streaming: boolean;
 }
+
+/**
+ * One agent message as reported to the assistant by `imb_get_employee_stat`.
+ *
+ * Deliberately lossy, like every other projection: assistant text blocks only
+ * (never thinking, never tool arguments, never tool results).
+ */
+export interface AgentMessageStat {
+  /** Assistant text blocks joined with a newline, capped by the caller. */
+  text: string;
+  /** Length of the **full** text before the cap, so a cap is visible. */
+  chars: number;
+  truncated: boolean;
+  /** Names of the tool calls in this message (identity only, no arguments). */
+  toolCalls: string[];
+  /**
+   * `true`: this is the **in-flight** assistant message of a streaming run and
+   * has not been persisted yet — `at`/`ageSeconds` are `null` and the text is
+   * the partial output produced so far. `false`: a message read from the
+   * session transcript. A streaming message with an empty `text` and no
+   * `toolCalls` means the current turn has produced nothing readable yet
+   * (between turns while a tool executes, or before the first token).
+   */
+  streaming: boolean;
+  /** ISO timestamp of the persisted entry (`null` for in-flight content). */
+  at: string | null;
+  /** Whole seconds since `at` (`null` for in-flight content). */
+  ageSeconds: number | null;
+}
+
+/**
+ * Current state of exactly one `(employee, chat)` agent session — the payload
+ * of the assistant-only `imb_get_employee_stat` tool.
+ *
+ * Describes what the session is doing **now**: `running` is the authoritative
+ * signal, `queued` is background information only (pending prompts that have
+ * not started) and never influences which message is considered "the last".
+ */
+export interface EmployeeAgentStat {
+  employeeId: number;
+  chatId: number;
+  chatTitle: string;
+  /** A persisted session exists for this pair (row + file inside the store). */
+  sessionExists: boolean;
+  /** A Pi run is streaming right now. */
+  running: boolean;
+  /** Prompts waiting in the app-level queue (informational only). */
+  queued: number;
+  /**
+   * The employee's last agent message, always describing the **current** state:
+   * while `running` it is the **in-flight** message of the current turn
+   * (`streaming: true`, partial output — possibly still empty), otherwise the
+   * last assistant message of the transcript (`streaming: false`). `null` only
+   * when the session is not running and has produced no agent output at all.
+   */
+  lastAgentMessage: AgentMessageStat | null;
+  /**
+   * Present only while `running`: the last **persisted** assistant message, for
+   * comparison. Never a substitute for `lastAgentMessage` — it is history, not
+   * what the employee is producing now.
+   */
+  previousAgentMessage?: AgentMessageStat;
+  /**
+   * Present only while `running`: how the current run is progressing in time.
+   * This is what separates "still working" from "wedged inside a tool" —
+   * `lastAgentMessage` carries no timestamp while a message is in flight.
+   *
+   * All ages are whole seconds, computed main-side at read time (the model never
+   * has to know the clock). Omitted entirely when no run in-flight is observed
+   * (no progress data is invented).
+   */
+  progress?: AgentProgressStat;
+}
+
+/**
+ * The kinds of observable progress of a run, in the order they typically occur.
+ *
+ * Fixed vocabulary so the model can branch on it:
+ * - `run_start`: the run began (nothing produced yet);
+ * - `turn_start`: a new turn of the run began;
+ * - `message_start` / `token`: the assistant is writing (a streaming delta
+ *   arrived — text, thinking or a tool-call delta);
+ * - `message_end`: an assistant message finished and is persisted;
+ * - `tool_start` / `tool_update` / `tool_end`: a tool call started, reported
+ *   partial results, or finished;
+ * - `retry_wait`: the app is waiting for an automatic model retry.
+ *
+ * Most tools (`bash`, `read`, `write`, …) never report partial results, so a
+ * long tool legitimately parks at `tool_start` — see `activeTool`.
+ */
+export type AgentProgressKind =
+  | "run_start"
+  | "turn_start"
+  | "message_start"
+  | "token"
+  | "message_end"
+  | "tool_start"
+  | "tool_update"
+  | "tool_end"
+  | "retry_wait";
+
+/** The tool call the run is currently blocked in. */
+export interface AgentActiveToolStat {
+  /** Tool name (e.g. `bash`, `read`, `imb_send_message`). */
+  name: string;
+  /** Whole seconds since this call started executing. */
+  ageSeconds: number;
+  /**
+   * The call's **input arguments**, serialized to one line of JSON and
+   * truncated to a fixed budget (~1000 chars), or `null` when they could not be
+   * serialized.
+   *
+   * These are the model's own tool arguments: they may contain sensitive values
+   * (URLs with tokens, file paths, secrets inside a command) or long bodies, and
+   * they are **never complete** — see `argsTruncated`. Do not treat them as a
+   * faithful record of the call.
+   */
+  args: string | null;
+  /** `true` when `args` was cut at the character budget. */
+  argsTruncated: boolean;
+}
+
+/**
+ * Time information about the run in flight — present only while `running`.
+ *
+ * Answering "is it wedged inside a tool, and for how long?" is the whole point:
+ * `activeTool.ageSeconds` is the age of the oldest call that has not finished,
+ * and `lastProgressAgeSeconds` is how long ago the last observable activity was
+ * (a token, a tool boundary, a retry note). A long tool that reports no partial
+ * results leaves both values equal — that is expected, not a bug.
+ */
+export interface AgentProgressStat {
+  /** Whole seconds since this run started. */
+  runAgeSeconds: number;
+  /** Whole seconds since the last observable progress of this run. */
+  lastProgressAgeSeconds: number;
+  /** What that last observable progress was. */
+  lastProgressKind: AgentProgressKind;
+  /**
+   * Present while at least one tool call of this run has not finished: the
+   * **oldest** open call (the run cannot advance past it).
+   */
+  activeTool?: AgentActiveToolStat;
+  /** Tool calls started in this run (distinguishes one slow call from a loop). */
+  toolCallsThisRun: number;
+}
