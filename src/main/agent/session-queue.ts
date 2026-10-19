@@ -12,6 +12,7 @@ import { errorEvent, sendEventTo, toStreamEvent } from "./agent-events";
 import { getAgentEnvironment } from "./environment";
 import type { AgentSession as AppAgentSession } from "./session";
 import { ensureSessionFile } from "./session-files";
+import { projectLiveAssistant } from "./session-view";
 import { takeUndelivered, userMessageText } from "./steer-ledger";
 
 /**
@@ -70,6 +71,15 @@ interface QueueState {
    * between the two is what an interrupt re-queues.
    */
   deliveredSteers: string[];
+  /**
+   * True when the last event forwarded to the bound windows was a
+   * `message_end`, i.e. the last assistant message is already persisted and Pi
+   * state may still hold it as `streamingMessage`.
+   *
+   * A window binding at that moment must **not** receive it as a live seed: the
+   * projection already contains it, so the seed would render it twice.
+   */
+  lastForwardedWasMessageEnd: boolean;
   /** Set by lifecycle teardown so an in-flight drain stops cleanly. */
   disposed: boolean;
 }
@@ -191,6 +201,14 @@ export async function wakeAgent(
  * cheap, and a run already in flight (cron / other entries) is still observed
  * because events are forwarded to `boundSenders`, independent of whether this
  * call created the session.
+ *
+ * A window that binds **mid-run** also receives one `live_seed`: the in-flight
+ * assistant message as it looks right now. Without it, everything that streamed
+ * before the bind (e.g. while the user was on another page — the view unbinds
+ * on unmount) could never be rendered again, because the token-level stream
+ * only carries deltas and the message is not persisted until `message_end`.
+ * The seed is computed synchronously here, from live Pi state, so it is exactly
+ * the state at bind time; every later event is strictly newer.
  */
 export function bind(
   employeeId: number,
@@ -199,6 +217,7 @@ export function bind(
 ): void {
   const state = getOrCreateState(employeeId, chatId);
   clearIdleTimer(state);
+  sendLiveSeed(state, sender);
   if (state.boundSenders.has(sender)) return;
   state.boundSenders.add(sender);
   const onDestroyed = (): void => {
@@ -206,6 +225,37 @@ export function bind(
     unbind(employeeId, chatId, sender);
   };
   sender.once("destroyed", onDestroyed);
+}
+
+/**
+ * Push the currently streaming assistant message to one window (best effort).
+ *
+ * Skipped when nothing is streaming, when the in-flight message is already
+ * persisted, or when Pi exposes no partial message. A failure only logs: a lost
+ * seed degrades to the previous behaviour (the tail arrives with the next
+ * delta), it must never break `bind`.
+ */
+function sendLiveSeed(state: QueueState, sender: WebContents): void {
+  const session = state.session;
+  if (!state.busy || state.disposed || !session?.isStreaming) return;
+  if (state.lastForwardedWasMessageEnd) return;
+  try {
+    const partial = session.streamingAssistant;
+    if (!partial) return;
+    const blocks = projectLiveAssistant(
+      partial.content,
+      partial.pendingToolCalls,
+    );
+    sendEventTo(new Set([sender]), state.employeeId, state.chatId, {
+      type: "live_seed",
+      blocks,
+    });
+  } catch (err) {
+    console.error(
+      `[session-queue] failed to build the live seed for ${state.employeeId} in chat ${state.chatId}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
 }
 
 /** Remove a window's binding; drop the entry once fully idle. */
@@ -527,6 +577,7 @@ function getOrCreateState(employeeId: number, chatId: number): QueueState {
       boundSenders: new Set(),
       pendingSteers: [],
       deliveredSteers: [],
+      lastForwardedWasMessageEnd: false,
       disposed: false,
     };
     states.set(key, state);
@@ -611,6 +662,15 @@ function forwardEvent(state: QueueState, event: AgentSessionEvent): void {
     if (message?.role === "user" && state.pendingSteers.length > 0) {
       state.deliveredSteers.push(userMessageText(message.content));
     }
+    // Only an assistant `message_end` means the last streamed message is now
+    // part of the transcript (a user message is persisted before its answer) —
+    // see `QueueState.lastForwardedWasMessageEnd`.
+    state.lastForwardedWasMessageEnd = message?.role !== "user";
+  } else if (
+    event.type === "message_start" ||
+    event.type === "message_update"
+  ) {
+    state.lastForwardedWasMessageEnd = false;
   }
   const dto = toStreamEvent(event);
   if (dto) {

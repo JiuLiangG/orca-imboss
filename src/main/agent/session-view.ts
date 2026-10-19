@@ -1,5 +1,9 @@
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
-import type { AgentSessionViewEntry } from "@shared/types";
+import type {
+  AgentSessionLiveBlock,
+  AgentSessionLiveBlockEntry,
+  AgentSessionViewEntry,
+} from "@shared/types";
 import { resolve } from "path";
 import { getAgentSessionsDir } from "../data-dir";
 import { getSession } from "../db/sessions";
@@ -13,14 +17,21 @@ import { formatToolArgsDetail, summarizeToolArgs } from "./tool-args";
  *
  * Deliberately lossy: system messages, tool results, images and usage data
  * never leave the main process. User prompts, assistant text and thinking, tool
- * names with a capped argument summary/detail, and compaction summaries are
- * returned. Internal wake prompts are reduced to a bare `wake` separator (no
- * text) so the view can draw one batch boundary per wake. Runs are linear in
- * this app, so raw append order is the transcript order (`getEntries()`).
+ * names with a compact argument summary/detail, and compaction summaries are
+ * returned **in full** (no length truncation of text/thinking/summary blocks —
+ * the boss's explicit requirement; only tool-argument formatting caps its own
+ * one-line summary/expandable detail, see `tool-args.ts`). Internal wake
+ * prompts are reduced to a bare `wake` separator (no text) so the view can draw
+ * one batch boundary per wake. Runs are linear in this app, so raw append order
+ * is the transcript order (`getEntries()`).
  */
 
-/** Upper bound for a single text/thinking/summary block (defensive). */
-const MAX_TEXT = 32_000;
+/**
+ * Upper bound for the number of blocks one live seed may carry (defensive): a
+ * runaway single message must not turn a `bind` into a multi-megabyte push.
+ * This bounds the block **count** only; each block's text is sent in full.
+ */
+const MAX_LIVE_BLOCKS = 200;
 
 /** Read + project the session for `(employeeId, chatId)`. Never throws. */
 export async function readSessionView(
@@ -58,9 +69,8 @@ function projectEntries(entries: SessionEntry[]): AgentSessionViewEntry[] {
 
   for (const entry of entries) {
     if (entry.type === "compaction") {
-      const summary = cap(entry.summary);
-      if (summary.length > 0) {
-        out.push({ kind: "compaction", id: entry.id, summary });
+      if (entry.summary.length > 0) {
+        out.push({ kind: "compaction", id: entry.id, summary: entry.summary });
       }
       continue;
     }
@@ -98,7 +108,7 @@ function projectEntries(entries: SessionEntry[]): AgentSessionViewEntry[] {
           }
           break;
         }
-        out.push({ kind: "user", id: entry.id, text: cap(text) });
+        out.push({ kind: "user", id: entry.id, text });
         break;
       }
       case "assistant":
@@ -124,56 +134,124 @@ function projectAssistant(
 ): void {
   if (typeof content === "string") {
     if (content.length > 0) {
-      out.push({ kind: "text", id: entryId, text: cap(content) });
+      out.push({ kind: "text", id: entryId, text: content });
     }
     return;
   }
   if (!Array.isArray(content)) return;
 
-  content.forEach((block, index) => {
-    if (block === null || typeof block !== "object") return;
-    const b = block as {
-      type?: unknown;
-      text?: unknown;
-      thinking?: unknown;
-      id?: unknown;
-      name?: unknown;
-      arguments?: unknown;
-    };
-    if (b.type === "text" && typeof b.text === "string" && b.text.length > 0) {
-      out.push({ kind: "text", id: `${entryId}:t${index}`, text: cap(b.text) });
-      return;
+  content.forEach((raw, index) => {
+    const block = projectAssistantBlock(entryId, raw, index);
+    if (block === null) return;
+    if (block.kind === "tool") {
+      // Resolved later by the matching toolResult (see `applyToolResult`).
+      toolIndex.set(block.toolCallId ?? `${entryId}:c${index}`, out.length);
     }
-    if (
-      b.type === "thinking" &&
-      typeof b.thinking === "string" &&
-      b.thinking.length > 0
-    ) {
-      out.push({
-        kind: "thinking",
-        id: `${entryId}:k${index}`,
-        text: cap(b.thinking),
-      });
-      return;
-    }
-    if (b.type === "toolCall" && typeof b.name === "string") {
-      const toolCallId = typeof b.id === "string" ? b.id : undefined;
-      toolIndex.set(toolCallId ?? `${entryId}:c${index}`, out.length);
-      const tool: Extract<AgentSessionViewEntry, { kind: "tool" }> = {
-        kind: "tool",
-        id: `${entryId}:c${index}`,
-        ...(toolCallId !== undefined ? { toolCallId } : {}),
-        name: b.name,
-        argsSummary: summarizeToolArgs(b.name, b.arguments),
-        // Flipped to ok/error when the matching toolResult is reached; a
-        // session read mid-run legitimately leaves it "running".
-        status: "running",
-      };
-      const detail = formatToolArgsDetail(b.arguments);
-      if (detail !== undefined) tool.argsDetail = detail;
-      out.push(tool);
-    }
+    out.push(block);
   });
+}
+
+/**
+ * Project the **in-flight** assistant message of a streaming session into the
+ * block shapes the persisted history uses, each tagged with its content index
+ * (the same index the token-level `message_update` stream reports).
+ *
+ * Same whitelist as the history projection: text, thinking and tool-call
+ * identity plus a capped argument summary — tool results never leave the main
+ * process. A tool call still in `pendingToolCalls` is reported as `running`;
+ * any other call in the message already has its result (`ok`).
+ */
+export function projectLiveAssistant(
+  content: unknown,
+  pendingToolCalls?: ReadonlySet<string>,
+): AgentSessionLiveBlock[] {
+  const blocks: AgentSessionLiveBlock[] = [];
+  if (typeof content === "string") {
+    if (content.length > 0) {
+      blocks.push({
+        index: 0,
+        block: { kind: "text", id: "live", text: content },
+      });
+    }
+    return blocks;
+  }
+  if (!Array.isArray(content)) return blocks;
+
+  const bounded = Math.min(content.length, MAX_LIVE_BLOCKS);
+  for (let index = 0; index < bounded; index += 1) {
+    const block = projectAssistantBlock("live", content[index], index);
+    if (block === null) continue;
+    if (block.kind === "tool") {
+      block.status = isToolCallPending(block.toolCallId, pendingToolCalls)
+        ? "running"
+        : "ok";
+    }
+    blocks.push({ index, block });
+  }
+  return blocks;
+}
+
+/** Whether a seeded tool call is still executing (defaults to "settled"). */
+function isToolCallPending(
+  toolCallId: string | undefined,
+  pendingToolCalls: ReadonlySet<string> | undefined,
+): boolean {
+  if (toolCallId === undefined || !pendingToolCalls) return false;
+  return pendingToolCalls.has(toolCallId);
+}
+
+/**
+ * Project one assistant content block, or `null` when the app deliberately does
+ * not expose it (images, unknown types, empty text/thinking).
+ *
+ * `index` is the block's position in the assistant message's content array; it
+ * is only used to build stable ids.
+ */
+function projectAssistantBlock(
+  entryId: string,
+  block: unknown,
+  index: number,
+): AgentSessionLiveBlockEntry | null {
+  if (block === null || typeof block !== "object") return null;
+  const b = block as {
+    type?: unknown;
+    text?: unknown;
+    thinking?: unknown;
+    id?: unknown;
+    name?: unknown;
+    arguments?: unknown;
+  };
+  if (b.type === "text" && typeof b.text === "string" && b.text.length > 0) {
+    return { kind: "text", id: `${entryId}:t${index}`, text: b.text };
+  }
+  if (
+    b.type === "thinking" &&
+    typeof b.thinking === "string" &&
+    b.thinking.length > 0
+  ) {
+    return {
+      kind: "thinking",
+      id: `${entryId}:k${index}`,
+      text: b.thinking,
+    };
+  }
+  if (b.type === "toolCall" && typeof b.name === "string") {
+    const toolCallId = typeof b.id === "string" ? b.id : undefined;
+    const tool: AgentSessionLiveBlockEntry = {
+      kind: "tool",
+      id: `${entryId}:c${index}`,
+      ...(toolCallId !== undefined ? { toolCallId } : {}),
+      name: b.name,
+      argsSummary: summarizeToolArgs(b.name, b.arguments),
+      // Flipped to ok/error when the matching toolResult is reached; a
+      // session read mid-run legitimately leaves it "running".
+      status: "running",
+    };
+    const detail = formatToolArgsDetail(b.arguments);
+    if (detail !== undefined) tool.argsDetail = detail;
+    return tool;
+  }
+  return null;
 }
 
 /** Resolve a persisted toolResult against its tool block. */
@@ -202,11 +280,6 @@ function extractUserText(content: unknown): string {
     if (b.type === "text" && typeof b.text === "string") parts.push(b.text);
   }
   return parts.join("\n");
-}
-
-/** Cap a block's text so one huge message can never blow up the payload. */
-function cap(text: string): string {
-  return text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT)}\n…` : text;
 }
 
 /**

@@ -2,6 +2,13 @@ import { t } from "@shared/l10n";
 import type { Message } from "@shared/types";
 import { useEffect, useMemo, useState } from "react";
 import { cls } from "reactutils";
+import {
+  clearAskDraft,
+  pruneAskDraft,
+  readAskDraft,
+  setAskDraftSelection,
+  setAskDraftText,
+} from "../../../../ask-draft";
 import { EmployeeAvatar } from "../../../employee-avatar";
 import { Markdown } from "../../../markdown";
 import { type AnswerItem, parseAnswer } from "../ask-answer";
@@ -61,16 +68,26 @@ export function AskCard({
   timeLabel,
 }: AskCardProps): React.JSX.Element {
   const self = message.senderEmployeeId === null;
-  const payload = parseAsk(message.content);
+  // Memoised so the question set keeps its identity across re-renders (the
+  // draft reconciliation effect depends on it).
+  const payload = useMemo(() => parseAsk(message.content), [message.content]);
   const persisted = useMemo(
     () => (answer ? parseAnswer(answer.content) : null),
     [answer],
   );
+  // Unsubmitted input is written through to `ask-draft` on every edit: a page or
+  // chat switch unmounts the whole module, so only that store survives.
   const [selectedByQuestion, setSelectedByQuestion] = useState<
     Record<string, string[]>
-  >(() => (persisted ? seedSelected(persisted.answers) : {}));
+  >(() => {
+    if (persisted) return seedSelected(persisted.answers);
+    return seedDraftSelected(readAskDraft(message.id)?.selected);
+  });
   const [textByQuestion, setTextByQuestion] = useState<Record<string, string>>(
-    () => (persisted ? seedText(persisted.answers) : {}),
+    () => {
+      if (persisted) return seedText(persisted.answers);
+      return seedDraftText(readAskDraft(message.id)?.text);
+    },
   );
   const [submitted, setSubmitted] = useState(persisted !== null);
   const [submitting, setSubmitting] = useState(false);
@@ -82,7 +99,20 @@ export function AskCard({
     setSelectedByQuestion(seedSelected(persisted.answers));
     setTextByQuestion(seedText(persisted.answers));
     setSubmitted(true);
-  }, [persisted]);
+    // An answered card has no draft any more: a retained one would be a ghost
+    // from the moment before the answer landed (e.g. a submit followed by a
+    // reload that arrived before the store was cleared).
+    clearAskDraft(message.id);
+  }, [persisted, message.id]);
+
+  // Drop retained answers to questions this payload no longer declares.
+  useEffect(() => {
+    if (!payload) return;
+    pruneAskDraft(
+      message.id,
+      new Set(payload.questions.map((question) => question.id)),
+    );
+  }, [message.id, payload]);
 
   if (!payload) {
     return (
@@ -104,6 +134,27 @@ export function AskCard({
     );
   }
 
+  /**
+   * Record the chosen options of one question — in the card (instant feedback)
+   * and in the retained draft (survives an unmount). No-ops once the card is
+   * answered or read-only, mirroring the disabled inputs.
+   */
+  const applySelection = (questionId: string, selected: string[]): void => {
+    if (submitted || readonly) return;
+    setSelectedByQuestion((previous) => ({
+      ...previous,
+      [questionId]: selected,
+    }));
+    setAskDraftSelection(message.id, message.chatId, questionId, selected);
+  };
+
+  /** Record the free-form text of one question (card + retained draft). */
+  const applyText = (questionId: string, text: string): void => {
+    if (submitted || readonly) return;
+    setTextByQuestion((previous) => ({ ...previous, [questionId]: text }));
+    setAskDraftText(message.id, message.chatId, questionId, text);
+  };
+
   const handleSubmit = async (): Promise<void> => {
     if (submitted || submitting) return;
     const answers = buildAnswers(
@@ -120,8 +171,11 @@ export function AskCard({
     try {
       await imb.messages.answer(message.chatId, message.id, { answers });
       setSubmitted(true);
+      // The answer is persisted now: the draft has become the answer message.
+      clearAskDraft(message.id);
       onAnswered();
     } catch (err) {
+      // Keep the draft: a failed submit must not lose what was typed.
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSubmitting(false);
@@ -153,9 +207,7 @@ export function AskCard({
                 className="imb-ask-free"
                 value={textByQuestion[q.id] ?? ""}
                 disabled={submitted || readonly}
-                onChange={(e) =>
-                  setTextByQuestion((p) => ({ ...p, [q.id]: e.target.value }))
-                }
+                onChange={(e) => applyText(q.id, e.target.value)}
                 placeholder={t("Type your answer")}
               />
             ) : q.type === "single" ? (
@@ -168,8 +220,8 @@ export function AskCard({
                       checked={selectedByQuestion[q.id]?.includes(opt) ?? false}
                       disabled={submitted || readonly}
                       onChange={() => {
-                        setSelectedByQuestion((p) => ({ ...p, [q.id]: [opt] }));
-                        setTextByQuestion((p) => ({ ...p, [q.id]: "" }));
+                        applySelection(q.id, [opt]);
+                        applyText(q.id, "");
                       }}
                     />
                     <span>
@@ -186,11 +238,8 @@ export function AskCard({
                   value={textByQuestion[q.id] ?? ""}
                   disabled={submitted || readonly}
                   onChange={(e) => {
-                    setTextByQuestion((p) => ({
-                      ...p,
-                      [q.id]: e.target.value,
-                    }));
-                    setSelectedByQuestion((p) => ({ ...p, [q.id]: [] }));
+                    applyText(q.id, e.target.value);
+                    applySelection(q.id, []);
                   }}
                   placeholder={t("Other (type a free-form answer)")}
                 />
@@ -203,15 +252,15 @@ export function AskCard({
                       type="checkbox"
                       checked={selectedByQuestion[q.id]?.includes(opt) ?? false}
                       disabled={submitted || readonly}
-                      onChange={() =>
-                        setSelectedByQuestion((p) => {
-                          const cur = p[q.id] ?? [];
-                          const next = cur.includes(opt)
-                            ? cur.filter((x) => x !== opt)
-                            : [...cur, opt];
-                          return { ...p, [q.id]: next };
-                        })
-                      }
+                      onChange={() => {
+                        const current = selectedByQuestion[q.id] ?? [];
+                        applySelection(
+                          q.id,
+                          current.includes(opt)
+                            ? current.filter((option) => option !== opt)
+                            : [...current, opt],
+                        );
+                      }}
                     />
                     <span>
                       <Markdown
@@ -226,9 +275,7 @@ export function AskCard({
                   className="imb-ask-other"
                   value={textByQuestion[q.id] ?? ""}
                   disabled={submitted || readonly}
-                  onChange={(e) =>
-                    setTextByQuestion((p) => ({ ...p, [q.id]: e.target.value }))
-                  }
+                  onChange={(e) => applyText(q.id, e.target.value)}
                   placeholder={t("Other (type a free-form answer)")}
                 />
               </div>
@@ -317,6 +364,28 @@ function seedText(answers: AnswerItem[]): Record<string, string> {
     if (item.text !== undefined && item.text.length > 0) {
       result[item.questionId] = item.text;
     }
+  }
+  return result;
+}
+
+/** Seed the free-text state from a retained draft (defensive copies). */
+function seedDraftText(
+  text: Record<string, string> | undefined,
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [questionId, value] of Object.entries(text ?? {})) {
+    if (value.length > 0) result[questionId] = value;
+  }
+  return result;
+}
+
+/** Seed the selected-option state from a retained draft (defensive copies). */
+function seedDraftSelected(
+  selected: Record<string, string[]> | undefined,
+): Record<string, string[]> {
+  const result: Record<string, string[]> = {};
+  for (const [questionId, options] of Object.entries(selected ?? {})) {
+    if (options.length > 0) result[questionId] = [...options];
   }
   return result;
 }

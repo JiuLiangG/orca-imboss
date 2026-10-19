@@ -285,6 +285,28 @@ export class AgentSession {
   }
 
   /**
+   * The **in-flight** assistant message of the current streamed response, with
+   * the tool-call ids still executing. `undefined` when there is no prepared Pi
+   * session or nothing is streaming.
+   *
+   * Display-only: it feeds the session view's "live seed" (see `projectLive
+   * Assistant`), so a window that binds mid-run can render the part of the
+   * message that streamed while it was not listening. It never drives a run and
+   * its content is never forwarded raw — only the whitelisted projection is.
+   */
+  get streamingAssistant():
+    { content: unknown; pendingToolCalls: ReadonlySet<string> } | undefined {
+    const state = this._piSession?.state;
+    const message = state?.streamingMessage as
+      { content?: unknown } | undefined;
+    if (!message) return undefined;
+    return {
+      content: message.content,
+      pendingToolCalls: state?.pendingToolCalls ?? new Set<string>(),
+    };
+  }
+
+  /**
    * Persist an app-level "the boss interrupted this turn here" marker in the
    * session transcript.
    *

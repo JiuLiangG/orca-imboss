@@ -1,5 +1,30 @@
+import type { AgentSessionViewEntry } from "./agent_session";
+
 /** Reason a session compaction was triggered (mirrors the Pi session event). */
 export type CompactionReason = "manual" | "threshold" | "overflow";
+
+/**
+ * A block of the history projection that can also appear in a live message.
+ * Reused verbatim so one renderer branch draws seeded and streamed content.
+ */
+export type AgentSessionLiveBlockEntry = Extract<
+  AgentSessionViewEntry,
+  { kind: "text" | "thinking" | "tool" }
+>;
+
+/**
+ * One block of the currently streaming assistant message, tagged with the
+ * assistant content index the token-level stream also uses (`contentIndex`).
+ *
+ * Sent once per `agentSession:bind` while a run is streaming, so a window that
+ * binds mid-run can render everything it missed before its first delta (see
+ * `projectLiveAssistant` in the main process).
+ */
+export interface AgentSessionLiveBlock {
+  /** Index in the assistant message's `content` array. */
+  index: number;
+  block: AgentSessionLiveBlockEntry;
+}
 
 /**
  * Minimal, structured-cloneable projection of the Pi `AgentSessionEvent`s the
@@ -35,6 +60,13 @@ export type AgentStreamEvent =
   | { type: "agent_end"; willRetry: boolean }
   | { type: "message_start" }
   | { type: "message_end" }
+  /**
+   * The in-flight assistant message as it looks right now. Sent once per bind
+   * (never on the regular stream): the message is not persisted yet, so the
+   * projection cannot supply it, and a window that was not bound while it
+   * streamed would otherwise only ever see its tail.
+   */
+  | { type: "live_seed"; blocks: AgentSessionLiveBlock[] }
   | { type: "turn_start" }
   | { type: "turn_end" }
   | { type: "compaction_start"; reason: CompactionReason }

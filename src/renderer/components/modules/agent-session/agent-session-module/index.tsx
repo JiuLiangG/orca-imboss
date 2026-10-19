@@ -1,6 +1,7 @@
 import { t } from "@shared/l10n";
 import type {
   AgentSessionDeliveryMode,
+  AgentSessionLiveBlock,
   AgentSessionViewEntry,
   AgentStreamEvent,
   AgentStreamPayload,
@@ -58,9 +59,13 @@ interface LiveState {
  */
 const REFRESH_DELAY = 150;
 /**
- * Text prefix length used to match a pending send against the projection: the
- * projection caps one block at 32 000 chars, so a longer message must be
- * compared on the same prefix to ever match.
+ * Text prefix length used to match a pending send against the projection.
+ *
+ * Not a truncation of anything the view displays: both sides are compared on a
+ * bounded prefix so a very long prompt is neither copied in full nor compared
+ * character by character. (It used to mirror the projection's former 32 000-char
+ * text cap, which no longer exists — the comparison is still correct because it
+ * is derived from the same text on both sides.)
  */
 const PENDING_MATCH_LENGTH = 32_000;
 /** Distance from the bottom (px) still considered "pinned" for auto-scroll. */
@@ -326,6 +331,10 @@ export function AgentSessionModule({
         block = { key: `${state.seq}:${index}`, kind, text: "" };
         state.blocks[index] = block;
       }
+      // A block restored from a live seed may be marked finished already; any
+      // new delta means it is still growing (e.g. thinking that was streaming
+      // when the view was remounted), so it must not stay folded.
+      if (block.done) block.done = false;
       return block;
     },
     [],
@@ -408,12 +417,67 @@ export function AgentSessionModule({
     [],
   );
 
+  /**
+   * Seed the live tail with the assistant message that is **already streaming**.
+   *
+   * The main process pushes it once per `bind` (see `sendLiveSeed` in
+   * `session-queue.ts`). It is required because the token stream only carries
+   * deltas and the message is not persisted until `message_end`: without the
+   * seed, everything that streamed while this view was unmounted (page or
+   * session switch — the view unbinds on unmount) could never be rendered again,
+   * so the boss saw the persisted history followed by a gap and then only the
+   * tail.
+   *
+   * Applied only while this view has no live content of its own; a second or
+   * stale seed is ignored (defensive — an applied seed must never duplicate the
+   * text of an already reconstructed message). Blocks are placed by their real
+   * `contentIndex`, so later deltas keep appending to exactly the right block.
+   */
+  const applyLiveSeed = useCallback((blocks: AgentSessionLiveBlock[]): void => {
+    if (blocks.length === 0) return;
+    const current = liveRef.current;
+    if (current !== null && !current.finalized) return;
+    liveSeqRef.current += 1;
+    const state: LiveState = {
+      seq: liveSeqRef.current,
+      finalized: false,
+      blocks: [],
+    };
+    for (const item of blocks) {
+      const block = item.block;
+      if (!Number.isSafeInteger(item.index) || item.index < 0) continue;
+      state.blocks[item.index] = {
+        key: `${state.seq}:${item.index}`,
+        kind: block.kind,
+        // Only text/thinking carry content; a tool block's payload is its args.
+        text: block.kind === "tool" ? "" : block.text,
+        // A restored thinking block is finished by definition; `ensureBlock`
+        // reopens it if it is in fact still streaming.
+        ...(block.kind === "thinking" ? { done: true } : {}),
+        ...(block.kind === "tool"
+          ? {
+              toolCallId: block.toolCallId,
+              name: block.name,
+              argsSummary: block.argsSummary,
+              argsDetail: block.argsDetail,
+              status: block.status,
+            }
+          : {}),
+      };
+    }
+    liveRef.current = state;
+    bump();
+  }, []);
+
   const handleEvent = useCallback(
     (payload: AgentStreamPayload): void => {
       if (payload.employeeId !== employeeId || payload.chatId !== chatId)
         return;
       const event = payload.event;
       switch (event.type) {
+        case "live_seed":
+          applyLiveSeed(event.blocks);
+          break;
         case "message_update":
           applyMessageUpdate(event);
           bump();
@@ -475,22 +539,32 @@ export function AgentSessionModule({
           break;
       }
     },
-    [employeeId, chatId, applyMessageUpdate, applyToolStatus, scheduleRefresh],
+    [
+      employeeId,
+      chatId,
+      applyLiveSeed,
+      applyMessageUpdate,
+      applyToolStatus,
+      scheduleRefresh,
+    ],
   );
 
-  // Bind the session so its events reach this window, and subscribe once to the
-  // global event stream (routing by key). Only the mounted view binds.
+  // Subscribe to the global event stream (routing by key) **before** binding.
+  // `bind` answers with a `live_seed` for a run that is already streaming, and a
+  // listener registered afterwards could miss it.
+  useEffect(() => {
+    const off = imb.agentSession.onEvent(handleEvent);
+    return off;
+  }, [handleEvent]);
+
+  // Bind the session so its events reach this window. Only the mounted view
+  // binds; the seed sent on bind fills in whatever streamed while it was away.
   useEffect(() => {
     void imb.agentSession.bind(employeeId, chatId);
     return () => {
       void imb.agentSession.unbind(employeeId, chatId);
     };
   }, [employeeId, chatId]);
-
-  useEffect(() => {
-    const off = imb.agentSession.onEvent(handleEvent);
-    return off;
-  }, [handleEvent]);
 
   // Seed the run state: a session opened *while* it is streaming never emitted
   // an `agent_start` for this window, so without this snapshot the composer

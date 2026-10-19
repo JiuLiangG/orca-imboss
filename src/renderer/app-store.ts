@@ -18,6 +18,7 @@ import type {
 } from "@shared/types";
 import { createRef } from "react";
 import { proxy, useSnapshot } from "valtio";
+import { clearAskDraftsForChat } from "./ask-draft";
 import {
   revokeDraftUrls,
   type ChatDraft,
@@ -667,6 +668,9 @@ export const appStore = proxy({
   },
   removeChat(id: number): void {
     appStore.clearChatDraft(id);
+    // The conversation's ask messages are cascade-deleted with it, so their
+    // retained (unsubmitted) card drafts can never be shown again.
+    clearAskDraftsForChat(id);
     if (appStore.activeRootChatId === id) {
       appStore.activeRootChatId = null;
     }
