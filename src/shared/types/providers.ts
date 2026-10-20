@@ -35,13 +35,28 @@ export interface ProviderInfo {
   keyHint: string | null;
 }
 
-/** Pushed while a subscription sign-in is waiting on the user. */
-export interface ProviderLoginEvent {
-  type: "device_code";
-  userCode: string;
-  verificationUri: string;
-  expiresInSeconds?: number;
-}
+/**
+ * Pushed while a subscription sign-in is waiting on the user.
+ * `device_code` is xAI. `auth_url` plus `manual_code` is Anthropic's
+ * browser flow: open the page, and paste the code if the loopback
+ * callback does not finish the login.
+ */
+export type ProviderLoginEvent =
+  | {
+      type: "device_code";
+      userCode: string;
+      verificationUri: string;
+      expiresInSeconds?: number;
+    }
+  | {
+      type: "auth_url";
+      verificationUri: string;
+    }
+  | {
+      type: "manual_code";
+      message: string;
+      placeholder?: string;
+    };
 
 /**
  * One usable model from the app's shared ModelRuntime (see main/agent/
