@@ -34,6 +34,7 @@ import { Modal } from "../../../modal";
 import { SearchInput } from "../../../search-input";
 import { Textarea } from "../../../textarea";
 import { Tooltip } from "../../../tooltip";
+import { ImageLightbox } from "../image-lightbox";
 import { displayTitle, previewText } from "../relative-time";
 import "./index.css";
 import { MentionPopup } from "./mention-popup";
@@ -143,6 +144,28 @@ export function ChatInputBar({
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionCaret, setMentionCaret] = useState({ start: 0, end: 0 });
 
+  // Full-screen viewer for the image chips: index within `previewables` (the
+  // draft's image attachments), plus the chip rect the viewer grows out of.
+  const [lightbox, setLightbox] = useState<number | null>(null);
+  const [lightboxOrigin, setLightboxOrigin] = useState<DOMRect | null>(null);
+  /** Chips whose thumbnail failed to decode — they fall back to the file icon. */
+  const [failedPreviews, setFailedPreviews] = useState<ReadonlySet<number>>(
+    () => new Set(),
+  );
+
+  /**
+   * Image chips in draft order. A chip shows a thumbnail (and so can be opened
+   * full screen) exactly when `buildPending` minted a `previewUrl` for it:
+   * folders and conversation references never have one, and neither do plain
+   * files. The viewer's index is a position in *this* list, not an attachment
+   * index, so lookups below always go through the chip's stable `id`.
+   */
+  const previewables = attachments.flatMap((item) =>
+    item.previewUrl && !failedPreviews.has(item.id)
+      ? [{ id: item.id, name: item.attachment.name, src: item.previewUrl }]
+      : [],
+  );
+
   const allEmployees = snap.data.employees.items;
   const filteredEmployees = useMemo(() => {
     if (!mentionOpen) return [];
@@ -173,6 +196,8 @@ export function ChatInputBar({
     setNotice(null);
     setPopupOpen(false);
     setDropActive(false);
+    setLightbox(null);
+    setLightboxOrigin(null);
     if (textareaRef.current) textareaRef.current.value = "";
     textareaRef.current?.focus();
   }, [focusToken, chatId]);
@@ -183,12 +208,24 @@ export function ChatInputBar({
     setNotice(null);
     setPopupOpen(false);
     setDropActive(false);
+    setLightbox(null);
+    setLightboxOrigin(null);
     // Uncontrolled textarea: manually sync the DOM value to this chat's draft
     // (React never rewrites it, so IME composition is never interrupted).
     if (textareaRef.current) {
       textareaRef.current.value = appStore.chatDrafts[chatId]?.text ?? "";
     }
   }, [chatId]);
+
+  // The draft's image chips can shrink under an open viewer (a sent draft has
+  // its object URLs revoked), so drop a viewer whose position no longer exists
+  // rather than leaving it pointing at a dead `blob:` URL.
+  const previewCount = previewables.length;
+  useEffect(() => {
+    setLightbox((value) =>
+      value === null || value < previewCount ? value : null,
+    );
+  }, [previewCount]);
 
   // A file dropped anywhere outside the input bar would otherwise make Chromium
   // navigate the window to it. Neutralize that default globally; the input bar
@@ -758,8 +795,42 @@ export function ChatInputBar({
                   }
                 >
                   <div className="imb-attached-file-thumb">
-                    {item.previewUrl ? (
-                      <img src={item.previewUrl} alt={item.attachment.name} />
+                    {item.previewUrl && !failedPreviews.has(item.id) ? (
+                      // The thumbnail is the viewer's affordance: press it to
+                      // open the picture full screen. The remove button stays a
+                      // sibling (absolutely positioned over the corner), so a
+                      // remove never reaches this click handler.
+                      <button
+                        type="button"
+                        className="imb-attached-file-open"
+                        aria-label={t("Enlarge image")}
+                        title={t("Enlarge image")}
+                        onClick={(event) => {
+                          // The viewer indexes `previewables`, which excludes
+                          // non-image chips — map through the stable chip id.
+                          const at = previewables.findIndex(
+                            (preview) => preview.id === item.id,
+                          );
+                          if (at < 0) return;
+                          setLightboxOrigin(
+                            event.currentTarget.getBoundingClientRect(),
+                          );
+                          setLightbox(at);
+                        }}
+                      >
+                        <img
+                          src={item.previewUrl}
+                          alt={item.attachment.name}
+                          draggable={false}
+                          onError={() =>
+                            setFailedPreviews((prev) => {
+                              const next = new Set(prev);
+                              next.add(item.id);
+                              return next;
+                            })
+                          }
+                        />
+                      </button>
                     ) : (
                       <div className="imb-file-icon-placeholder">
                         {item.attachment.kind === "chat" ? (
@@ -984,6 +1055,21 @@ export function ChatInputBar({
           )}
         </div>
       </Modal>
+      {lightbox !== null && (
+        <ImageLightbox
+          images={previewables.map(({ name, src }) => ({ name, src }))}
+          index={lightbox}
+          origin={lightboxOrigin}
+          onIndexChange={setLightbox}
+          onClose={() => {
+            setLightbox(null);
+            setLightboxOrigin(null);
+            // Hand the caret back to the composer: closing the viewer returns
+            // the boss to typing, not to a dead close button.
+            textareaRef.current?.focus();
+          }}
+        />
+      )}
     </div>
   );
 }

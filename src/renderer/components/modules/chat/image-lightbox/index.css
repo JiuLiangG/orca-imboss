@@ -8,6 +8,9 @@
   display: grid;
   place-items: center;
   padding: 48px 64px;
+  /* A zoomed picture is intentionally larger than the window; clip it here so
+     nothing paints over the app behind the backdrop. */
+  overflow: hidden;
   animation: imb-lightbox-fade var(--imb-motion-base) var(--imb-ease-standard);
 }
 
@@ -32,6 +35,7 @@
 }
 
 .imb-lightbox-image {
+  display: block;
   max-width: 90vw;
   max-height: 80vh;
   object-fit: contain;
@@ -44,6 +48,34 @@
   animation: imb-lightbox-image-fade var(--imb-motion-fast)
     var(--imb-ease-standard);
   -webkit-user-drag: none;
+}
+
+/*
+ * Zoom/pan wrapper around the picture. The transform lives here (not on the
+ * `<img>`) so it never collides with the FLIP open animation, which drives the
+ * image's own inline transform. The wrapper shrink-wraps the picture, so the
+ * zoom origin and the pan bounds are the picture's box.
+ */
+.imb-lightbox-zoom {
+  display: block;
+  line-height: 0;
+  transform-origin: center;
+  will-change: transform;
+  /* Own every touch gesture over the picture (no browser scroll/zoom). */
+  touch-action: none;
+  user-select: none;
+  /* Panning works at any scale, so the picture is always draggable. */
+  cursor: grab;
+}
+
+.imb-lightbox-zoom img {
+  /* The wrapper is the pointer target: presses anywhere on the picture start a
+     pan/pinch, and the image never initiates a native drag. */
+  pointer-events: none;
+}
+
+.imb-lightbox-zoom.imb-lightbox-grabbing {
+  cursor: grabbing;
 }
 
 @keyframes imb-lightbox-image-fade {
@@ -78,6 +110,9 @@
 .imb-lightbox-close,
 .imb-lightbox-nav {
   position: absolute;
+  /* Above the (possibly zoomed) picture: the arrows are the only pointer way to
+     flip between images now that the wheel zooms, so they always stay usable. */
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;

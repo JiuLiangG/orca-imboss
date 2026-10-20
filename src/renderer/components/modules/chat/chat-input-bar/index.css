@@ -64,6 +64,23 @@
   display: block;
 }
 
+/* Thumbnail button: fills the chip so the whole picture is the click target for
+   the full-screen viewer. Reset to a bare element (the chip owns the frame). */
+.imb-attached-file-open {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.imb-attached-file-open:focus-visible {
+  box-shadow: var(--imb-focus-ring);
+  outline: none;
+}
+
 .imb-attached-file-thumb .imb-file-icon-placeholder {
   width: 100%;
   height: 100%;
