@@ -29,6 +29,22 @@ const inFlight = new Set<number>();
 const MAX_PROMPT_MESSAGE_CHARS = 2_000;
 
 /**
+ * Stable routing key for the one-shot title request, scoped to the chat.
+ *
+ * OpenCode (the `opencode`/`opencode-go` providers) requires a stable
+ * `x-opencode-session` header per conversation and rejects requests without it
+ * (400 `MissingSessionID`). Pi's provider only adds that header when the
+ * request options carry a `sessionId`; the agent session always supplies one
+ * (its pi session id), a one-shot `completeSimple` call does not. A
+ * chat-scoped id is stable for the conversation's whole lifetime and needs no
+ * session-file reads, which matters because title generation runs alongside
+ * the first agent turn rather than inside it.
+ */
+function titleSessionId(chatId: number): string {
+  return `imboss-chat-${chatId}`;
+}
+
+/**
  * Generate and store a title for `chatId` from `userMessage` when the chat
  * is untitled. Fire-and-forget: returns immediately, never rejects.
  */
@@ -119,11 +135,20 @@ async function requestTitle(
           },
         ],
       },
-      { signal: controller.signal, maxTokens: 512 },
+      {
+        signal: controller.signal,
+        maxTokens: 512,
+        // Required by OpenCode Go's routing (`x-opencode-session`); ignored by
+        // providers without session support.
+        sessionId: titleSessionId(chatId),
+      },
     );
     if (response.stopReason === "error" || response.stopReason === "aborted") {
+      // `errorMessage` carries the provider's response body (e.g. a 400 from
+      // the routing layer), so log it whenever the provider reported one.
       console.warn(
-        `[title-gen] model call ended with ${response.stopReason} for chat ${chatId}`,
+        `[title-gen] model call ended with ${response.stopReason} for chat ${chatId}` +
+          (response.errorMessage ? `: ${response.errorMessage}` : ""),
       );
       return null;
     }
