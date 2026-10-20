@@ -68,7 +68,7 @@ button.imb-progress-card-title:focus-visible {
   white-space: nowrap;
 }
 
-.imb-progress-row .imb-pname-role {
+.imb-progress-row .imb-pname-task {
   color: var(--imb-muted);
   font-size: var(--imb-text-xs);
   font-weight: 400;
@@ -140,7 +140,7 @@ button.imb-pname-link:focus-visible {
   }
 }
 
-/* Left side of a progress row: the assignee's avatar + their name/role. */
+/* Left side of a progress row: the assignee's avatar + their name/task. */
 .imb-pname-wrap {
   display: inline-flex;
   align-items: center;

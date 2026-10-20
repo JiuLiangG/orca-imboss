@@ -72,8 +72,8 @@ function formatAsk(content: string): string {
 function formatProgress(title: string, steps: MessageStep[]): string {
   const lines: string[] = [title];
   for (const step of steps) {
-    const role = step.role ? ` (${step.role})` : "";
-    lines.push(`- ${step.name}${role} — ${step.status}`);
+    const task = step.task ? ` (${step.task})` : "";
+    lines.push(`- ${step.name}${task} — ${step.status}`);
   }
   return lines.join("\n");
 }

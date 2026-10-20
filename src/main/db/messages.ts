@@ -37,7 +37,7 @@ const MAX_KIND_LENGTH = 64;
 const MAX_STEPS = 64;
 const MAX_ATTACHMENTS = MAX_USER_ATTACHMENTS;
 const MAX_STEP_NAME_LENGTH = 256;
-const MAX_STEP_ROLE_LENGTH = 256;
+const MAX_STEP_TASK_LENGTH = 256;
 const MAX_ATTACH_NAME_LENGTH = 256;
 const MAX_ATTACH_TYPE_LENGTH = 128;
 const MAX_ATTACH_PATH_LENGTH = 4096;
@@ -516,16 +516,20 @@ function parseSteps(raw: string | null): MessageStep[] | null {
   for (const step of steps) {
     if (typeof step !== "object" || step === null) continue;
     const record = step as Record<string, unknown>;
+    // `task` superseded the old `role` field. Cards published before the rename
+    // still carry the employee's role there, so fall back to it on read — the
+    // write path (`validateSteps`) only ever produces `task`.
+    const task = record["task"] ?? record["role"];
     if (
       typeof record["name"] !== "string" ||
-      typeof record["role"] !== "string" ||
+      typeof task !== "string" ||
       !STEP_STATUSES.includes(record["status"] as StepStatus)
     ) {
       continue;
     }
     result.push({
       name: record["name"],
-      role: record["role"],
+      task,
       status: record["status"] as StepStatus,
       employeeId:
         typeof record["employeeId"] === "number" &&
@@ -639,12 +643,12 @@ function validateSteps(
       throw new Error("Invalid progress step.");
     }
     const name = String(step.name ?? "");
-    const role = String(step.role ?? "");
+    const task = String(step.task ?? "");
     if (name.length === 0 || name.length > MAX_STEP_NAME_LENGTH) {
       throw new Error("Progress step name has invalid length.");
     }
-    if (role.length > MAX_STEP_ROLE_LENGTH) {
-      throw new Error("Progress step role is too long.");
+    if (task.length === 0 || task.length > MAX_STEP_TASK_LENGTH) {
+      throw new Error("Progress step task has invalid length.");
     }
     if (!STEP_STATUSES.includes(step.status)) {
       throw new Error("Progress step status must be done, busy, or pending.");
@@ -664,7 +668,7 @@ function validateSteps(
     ) {
       throw new Error("Progress step employee does not exist.");
     }
-    result.push({ name, role, status: step.status, employeeId });
+    result.push({ name, task, status: step.status, employeeId });
   }
   return result;
 }

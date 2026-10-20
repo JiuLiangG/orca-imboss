@@ -16,7 +16,12 @@ export type StepStatus = "done" | "busy" | "pending";
 /** One row of a progress card payload (kind = `progress`). */
 export interface MessageStep {
   name: string;
-  role: string;
+  /**
+   * What this employee does on this step, as a short phrase (e.g. "write the
+   * migration"). Written by the assistant when it publishes the card; it says
+   * nothing about the employee's role/title.
+   */
+  task: string;
   status: StepStatus;
   /**
    * The employee this step tracks, so the card can link to their agent

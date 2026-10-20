@@ -241,7 +241,7 @@ function toolResult(value: unknown): AgentToolResult<unknown> {
 
 /**
  * Slim employee projection: keeps what the orchestrator uses (id for
- * @-mentions/notify, name/role for step cards, skills/mcp to judge fit) and
+ * @-mentions/notify, name for step cards, role/skills/mcp to judge fit) and
  * drops the rest — notably the `avatar` path. The full `systemPrompt` is only
  * attached when the caller explicitly opts in (`withSystemPrompt`), which the
  * assistant uses solely to read an employee's current persona before editing it
@@ -708,9 +708,10 @@ function progressTool(env: AgentEnvironment): AnyPiTool {
       "posted into (the boss's chat) and `groupChatId` is the task group the card reports on — the " +
       "card links to that group so the boss can open it. `content` is the card title and `steps` is " +
       "the full, current step list (one step per employee, each carrying that employee's " +
-      "`employeeId`; `status` `pending` before work is assigned, `busy` once it is assigned and " +
-      "running, `done` when finished). Always resend the whole list on every update; no " +
-      "participant is notified.",
+      "`employeeId`, that employee's `name`, and a `task` — a short phrase saying what that employee " +
+      "is doing on this step, not their role/title; `status` `pending` before work is assigned, " +
+      "`busy` once it is assigned and running, `done` when finished). Always resend the whole list " +
+      "on every update; no participant is notified.",
     promptSnippet: "post a progress card",
     parameters: Type.Object({
       chatId: Type.Integer({ minimum: 1 }),
@@ -719,7 +720,12 @@ function progressTool(env: AgentEnvironment): AnyPiTool {
       steps: Type.Array(
         Type.Object({
           name: Type.String({ minLength: 1, maxLength: 256 }),
-          role: Type.String({ maxLength: 256 }),
+          task: Type.String({
+            minLength: 1,
+            maxLength: 256,
+            description:
+              'What this employee does on this step, as a short phrase (e.g. "write the migration") — not their role/title.',
+          }),
           employeeId: Type.Integer({ minimum: 0 }),
           status: Type.Union([
             Type.Literal("done"),

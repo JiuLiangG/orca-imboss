@@ -18,7 +18,7 @@ import { BuildEmployeeSystemPromptArgs } from "@shared/types";
  * order). The exact template shape:
  *
  * ```
- * This is your working session as employee {ID} in chat {chatId}[, the boss's chat].
+ * This is your working session as employee {ID}[( {name}) — assistant only] in chat {chatId}[, the boss's chat].
  * [This task group chat was created from chat {fromChatId}, the boss's chat.  — only when fromChatId is set]
  * [role: generated for non-assistants; baked into ASSISTANT_SYSTEM_PROMPT for the assistant]
  * [employeePrompt: persona]
@@ -65,9 +65,17 @@ export function buildEmployeeSystemPrompt({
   // its `chatId` as such — otherwise the model cannot connect the wake prompt's
   // task-group id to the boss-facing `chatId` it must post to. For an employee
   // group session, the spawning chat (`fromChatId`) is likewise the boss's chat.
+  //
+  // The assistant also gets its own name in parentheses: its session has no
+  // generated role block (that text is baked into `ASSISTANT_SYSTEM_PROMPT`),
+  // so this is the only place the model learns what it is called. The name is
+  // boss-editable and may be blank (`validateName` allows an empty string), in
+  // which case the parenthetical is omitted and the line stays as before.
+  const assistantName = isAssistant ? name.trim() : "";
+  const assistantNameSuffix = assistantName ? ` (${assistantName})` : "";
   const identityLines = [
     isAssistant
-      ? `This is your working session as employee ${employeeId} in chat ${chatId}, the boss's chat.`
+      ? `This is your working session as employee ${employeeId}${assistantNameSuffix} in chat ${chatId}, the boss's chat.`
       : `This is your working session as employee ${employeeId} in chat ${chatId}.`,
   ];
   if (fromChatId != null) {

@@ -108,7 +108,7 @@ export function ProgressCard({
                   ) : (
                     displayName
                   )}
-                  <span className="imb-pname-role"> · {step.role}</span>
+                  <span className="imb-pname-task"> · {step.task}</span>
                 </span>
               </span>
               <span className={cls("imb-progress-tag", `imb-${step.status}`)}>
