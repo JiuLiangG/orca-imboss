@@ -1,7 +1,37 @@
+/* Detail pane header: eyebrow + title + sub on the left, row actions on the
+   right. The two are siblings in one flex row, so the title gets a real column
+   instead of being painted underneath the actions (the old absolutely
+   positioned action group covered long titles).
+
+   The wrapper is layout neutral (block, no padding); it only provides the
+   container-query context, because the cramped-pane rules below have to restyle
+   `.imb-detail-head` itself — the element whose size is being queried — and an
+   element can never query its own size. Query size = the pane width. */
+.imb-detail-head-wrap {
+  container-type: inline-size;
+}
+
 .imb-detail-head {
+  display: flex;
+  /* The actions only drop to another row when the pane is too narrow to give the
+     title a couple of characters next to them (bottom of this file). */
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  /* Percentage cap: a fixed 12px gap is a waste of the title column on the
+     narrowest panes. */
+  gap: min(var(--imb-space-3), 4%);
   padding: 0 var(--imb-space-6) var(--imb-space-4);
   border-bottom: 1px solid var(--imb-border);
-  position: relative;
+}
+
+/* Text column: absorbs all the width the actions leave over. `overflow-wrap:
+   anywhere` can only break the long unbroken names (`analytical-report-writing`,
+   provider ids) if the column is allowed to shrink below its content size.
+   The `min-width` floor is what keeps a wrapped title readable: ~4-5 CJK glyphs
+   or one short English word. Below that the cramped-pane rules take over. */
+.imb-detail-head-main {
+  flex: 1 1 auto;
+  min-width: 96px;
 }
 
 .imb-detail-head-eyebrow {
@@ -24,12 +54,81 @@
   color: var(--imb-muted);
   font-size: var(--imb-text-sm);
   margin-top: 4px;
+  overflow-wrap: anywhere;
 }
 
 .imb-detail-head-actions {
-  position: absolute;
-  right: var(--imb-space-6);
-  top: var(--imb-space-5);
+  /* Sits beside the title on the same row. `flex: 0 0 auto` keeps a single row of
+     buttons at its natural width so the title column — not the actions — absorbs
+     the shrinkage. */
+  flex: 0 0 auto;
+  margin-left: auto;
   display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  align-items: center;
   gap: var(--imb-space-2);
+  /* Optically aligns the buttons with the title row (they sit below the
+     eyebrow), matching the previous absolute `top: var(--imb-space-5)`. */
+  padding-top: var(--imb-space-5);
+}
+
+/* Cramped panes. Settings hoard 264px for their inner list, so the detail column
+   can end up as narrow as ~128px (min window width); at that size a wrapped
+   title would collapse into a one-character-wide strip, which reads far worse
+   than a truncated one. Priorities, in order: the buttons stay complete and
+   inside the pane, then the title gets whatever is left on a single line (the
+   `title` attribute from the component provides the full text on hover).
+
+   428px matches the head's content box reaching 380px (pane width − 48px of
+   padding): the widest action group (provider detail: Saved + Cancel + Save +
+   Remove) no longer fits next to the 96px title floor above that, so the two
+   modes never overlap and nothing overflows. */
+@container (max-width: 428px) {
+  .imb-detail-head-main {
+    /* The title no longer needs a readable floor: it never wraps here, so let it
+       shrink all the way down and give the space to the buttons. */
+    min-width: 0;
+  }
+
+  .imb-detail-head h2,
+  .imb-detail-head .imb-sub {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .imb-detail-head-actions {
+    /* Actions give width only when even their widest button alone cannot fit:
+       then they stack inside the pane instead of being pushed out of it. */
+    flex: 0 1 auto;
+    min-width: min-content;
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+}
+
+/* Last resort: below ~168px there is not even room for a couple of title
+   characters beside one button (a 128px pane leaves 80px for the whole row, and
+   an 80px button eats all of it). Rather than let the title disappear — it is
+   how the user tells which skill/provider is selected — the actions move to
+   their own row, right aligned, and the title keeps the full width. Everything
+   stays aligned with the detail body because the head's 24px padding is
+   untouched, and nothing overflows. */
+@container (max-width: 168px) {
+  .imb-detail-head {
+    flex-wrap: wrap;
+    row-gap: var(--imb-space-2);
+  }
+
+  .imb-detail-head-main {
+    /* Full-width first row; `overflow-wrap: anywhere` keeps long unbroken names
+       breakable, the ellipsis rules above still cap it to one line. */
+    flex: 1 1 100%;
+  }
+
+  .imb-detail-head-actions {
+    flex: 0 0 auto;
+    padding-top: 0;
+  }
 }
