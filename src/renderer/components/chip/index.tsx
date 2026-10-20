@@ -6,6 +6,8 @@ export interface ChipProps {
   onRemove?: () => void;
   removable?: boolean;
   title?: string;
+  /** Accessible name of the remove button (defaults to `title`, then "Remove"). */
+  removeLabel?: string;
 }
 
 export function Chip({
@@ -13,6 +15,7 @@ export function Chip({
   onRemove,
   removable = false,
   title,
+  removeLabel,
 }: ChipProps): React.JSX.Element {
   return (
     <span className="imb-ms-chip" title={title}>
@@ -21,7 +24,7 @@ export function Chip({
         <button
           type="button"
           className="imb-ms-chip-x"
-          aria-label={title ?? "Remove"}
+          aria-label={removeLabel ?? title ?? "Remove"}
           onClick={(e) => {
             e.stopPropagation();
             onRemove?.();

@@ -1,0 +1,190 @@
+/* One merged list-filter control: a plain search box whose right-hand funnel
+   button opens the tag panel, plus a chip echo row *under* the box while
+   filters are active.
+
+   History: the search field and the tag trigger used to be two identically
+   styled boxes stacked in the 284px pane (one control that read as two). Chips
+   were then tried inside the box, but a couple of tags squeezed the keyword
+   field to nothing at this width — so the chips moved out into this echo row,
+   which is not an input and takes no space when nothing is filtered. */
+.imb-filterbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--imb-space-1);
+  min-width: 0;
+}
+
+.imb-filterbar-box {
+  display: flex;
+  align-items: center;
+  gap: var(--imb-space-2);
+  min-height: 30px;
+  padding: 2px var(--imb-space-1) 2px var(--imb-space-3);
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-md);
+  background: var(--imb-bg);
+  transition:
+    border-color var(--imb-motion-fast) var(--imb-ease-standard),
+    box-shadow var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+/* A single focus ring for the whole control (input + its two buttons). */
+.imb-filterbar-box:focus-within {
+  border-color: var(--imb-accent);
+  box-shadow: var(--imb-focus-ring);
+}
+
+.imb-filterbar-box>.imb-icon {
+  color: var(--imb-muted);
+  flex: none;
+}
+
+.imb-filterbar-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font: inherit;
+  font-size: var(--imb-text-base);
+  color: var(--imb-fg);
+}
+
+.imb-filterbar-input::placeholder {
+  color: var(--imb-muted);
+}
+
+.imb-filterbar-input:disabled {
+  cursor: default;
+}
+
+.imb-filterbar-actions {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 2px;
+}
+
+.imb-filterbar-hint {
+  flex: none;
+  padding: 1px 5px;
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-sm);
+  background: var(--imb-surface);
+  color: var(--imb-muted);
+  font-family: var(--imb-font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.imb-filterbar-clear,
+.imb-filterbar-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 22px;
+  min-width: 22px;
+  padding: 0 3px;
+  border: 0;
+  border-radius: var(--imb-radius-sm);
+  background: transparent;
+  color: var(--imb-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.imb-filterbar-clear:hover:not(:disabled),
+.imb-filterbar-toggle:hover:not(:disabled) {
+  background: var(--imb-fg-soft);
+  color: var(--imb-fg);
+}
+
+/* The funnel is a real focus target of its own (Tab reaches it). */
+.imb-filterbar-clear:focus-visible,
+.imb-filterbar-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+}
+
+.imb-filterbar-toggle.imb-is-active {
+  color: var(--imb-accent-active);
+}
+
+.imb-filterbar-toggle.imb-is-open {
+  background: var(--imb-fg-soft);
+  color: var(--imb-fg);
+}
+
+.imb-filterbar-clear:disabled,
+.imb-filterbar-toggle:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Count of the filters currently applied, next to the funnel. */
+.imb-filterbar-count {
+  font-size: 10px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 4px;
+  border-radius: var(--imb-radius-pill);
+  background: var(--imb-accent-soft);
+  color: var(--imb-accent-active);
+}
+
+/* Active-filter echo row: chips + a text "Clear" at the end of the line. It is
+   deliberately box-free (no border, no background, no focus ring) so it reads
+   as selected conditions, not as a second input. Rendered only while filters
+   are active, so it costs no vertical space otherwise. */
+.imb-filterbar-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--imb-space-1);
+  margin-top: 2px;
+  min-width: 0;
+}
+
+.imb-filterbar-chips .imb-ms-chip {
+  max-width: 100%;
+  min-width: 0;
+  cursor: default;
+}
+
+/* Long tag names ellipsize instead of widening the row. */
+.imb-filterbar-chip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imb-filterbar-clear-filters {
+  margin-left: auto;
+  flex: none;
+  padding: 1px 4px;
+  border: 0;
+  border-radius: var(--imb-radius-sm);
+  background: transparent;
+  color: var(--imb-muted);
+  font: inherit;
+  font-size: var(--imb-text-sm);
+  cursor: pointer;
+}
+
+.imb-filterbar-clear-filters:hover:not(:disabled) {
+  color: var(--imb-fg);
+}
+
+.imb-filterbar-clear-filters:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+}
+
+.imb-filterbar-clear-filters:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

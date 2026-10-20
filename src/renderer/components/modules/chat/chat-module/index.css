@@ -92,24 +92,13 @@
   background: var(--imb-bg-2);
 }
 
-/* Search box + tag filter stacked in the pane header (filter directly under
-   the search box, above the list). */
-.imb-chat-search-stack {
+/* Empty list: the reason (no chats / no keyword hit / no tag hit / both) plus a
+   one-click way back to the unfiltered list. */
+.imb-chat-empty {
   display: flex;
   flex-direction: column;
-  gap: var(--imb-space-1);
-}
-
-/* The tag filter mirrors the search box's box + height so the two read as a
-   matching pair. */
-.imb-chat-tag-filter {
-  width: 100%;
-}
-
-.imb-chat-tag-filter .imb-ms-trigger {
-  min-height: 34px;
-  padding: 2px 12px;
-  background: var(--imb-bg);
+  align-items: center;
+  gap: var(--imb-space-2);
 }
 
 /* Per-row tag editor: its own full-width line under the row, so several tags

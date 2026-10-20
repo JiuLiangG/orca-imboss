@@ -134,6 +134,15 @@ export function IconSearch(props: IconProps): React.JSX.Element {
   );
 }
 
+/** Funnel: the tag-filter entry of the list filter bar. */
+export function IconFilter(props: IconProps): React.JSX.Element {
+  return (
+    <svg {...base(props)} strokeWidth={1.8}>
+      <path d="M4 5h16l-6.4 7.6V19l-3.2-1.8v-4.6L4 5Z" />
+    </svg>
+  );
+}
+
 export function IconPlus(props: IconProps): React.JSX.Element {
   return (
     <svg {...base(props)} strokeWidth={2}>

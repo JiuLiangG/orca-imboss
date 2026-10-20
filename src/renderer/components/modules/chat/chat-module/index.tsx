@@ -1,6 +1,6 @@
 import { ASSISTANT_ID } from "@shared/constants/employees";
 import { INTEGRATION_LABEL_KEYS } from "@shared/constants/integrations";
-import { TAG_FILTER_NONE } from "@shared/constants/tags";
+import { MAX_TAGS_PER_CHAT, TAG_FILTER_NONE } from "@shared/constants/tags";
 import { getLocale, t } from "@shared/l10n";
 import type {
   AgentStreamEvent,
@@ -29,14 +29,18 @@ import { Avatar } from "../../../avatar";
 import { Button } from "../../../button";
 import { ContextMenu, type ContextMenuState } from "../../../context-menu";
 import { EmployeeAvatar } from "../../../employee-avatar";
+import { FilterBar } from "../../../filter-bar";
 import { Input } from "../../../input";
 import { ItemList } from "../../../item-list";
 import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
 import { useMentionResolver } from "../../../markdown/use-mention";
 import { Modal } from "../../../modal";
-import { SearchInput } from "../../../search-input";
-import { TagSelect } from "../../../tag-select";
+import {
+  applyNoTagExclusion,
+  buildTagFilterOptions,
+  TagSelect,
+} from "../../../tag-select";
 import { Tooltip } from "../../../tooltip";
 import { pairAskAnswers } from "../ask-answer";
 import { ChatInputBar } from "../chat-input-bar";
@@ -74,9 +78,13 @@ const chatRowEstimate = (): number => CHAT_ROW_ESTIMATE;
 /**
  * Empty-list text for the conversation list: an empty list means something
  * different depending on why it is empty (no chats at all, a search with no
- * hits, or a tag filter that matches nothing).
+ * hits, a tag filter that matches nothing, or both stacked — the two are
+ * AND-combined, so a keyword + tag miss needs its own wording).
  */
 function chatListEmptyMessage(isSearching: boolean, tagCount: number): string {
+  if (isSearching && tagCount > 0) {
+    return t("No conversations match these filters");
+  }
   if (isSearching) return t("No conversations match your search");
   if (tagCount > 0) return t("No conversations with these tags");
   return t("No conversations yet");
@@ -217,6 +225,12 @@ export function ChatModule(): React.JSX.Element {
   // dedicated boolean (never inside `tags[]`, which the server normalizes).
   const noTagFilter = tagFilter.includes(TAG_FILTER_NONE);
   const concreteTags = tagFilter.filter((tag) => tag !== TAG_FILTER_NONE);
+  // Options of the filter bar's tag panel: candidates + any selected tag that
+  // is missing from them + the "No tags" pseudo-option (plain text, no `#`).
+  const filterOptions = useMemo(
+    () => buildTagFilterOptions(tagOptions, tagFilter, true),
+    [tagOptions, tagFilter],
+  );
   // Stable reset key for the tag filter. The "No tags" pseudo-value is an
   // empty string, so a plain `[...tagFilter].sort().join()` would produce ""
   // for both "no filter" and the no-tag-only filter — `paramsKey` would not
@@ -278,6 +292,8 @@ export function ChatModule(): React.JSX.Element {
   // `reset` / `mutate` themselves are stable.
   const searchRef = useRef(search);
   searchRef.current = search;
+  // The list's keyword input (the `FilterBar`), focused by the ⌘K shortcut.
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   /**
    * Rebuild the visible chat list after a mutation that can change *which* rows
@@ -738,9 +754,7 @@ export function ChatModule(): React.JSX.Element {
       ) {
         return;
       }
-      const input = document.querySelector<HTMLInputElement>(
-        ".imb-searchbox input",
-      );
+      const input = searchInputRef.current;
       if (!input) return;
       event.preventDefault();
       input.focus();
@@ -988,26 +1002,32 @@ export function ChatModule(): React.JSX.Element {
     }
   }, [selectedId, selectedRawTitle, titleDraft, patchPagedChat]);
 
+  // Empty-state recovery: one click back to the unfiltered list (the keyword
+  // and the tag chips are AND-combined, so a no-hit result may need both gone).
+  const clearFilters = useCallback((): void => {
+    setQuery("");
+    setTagFilter([]);
+  }, [setQuery, setTagFilter]);
+
   const listPane = (
     <ListPane
       title={t("Chats")}
       search={
-        <div className="imb-chat-search-stack">
-          <SearchInput
-            value={query}
-            onValueChange={setQuery}
-            placeholder={t("Search chats")}
-            hint={IS_MAC ? "⌘K" : "Ctrl+K"}
-          />
-          <TagSelect
-            className="imb-chat-tag-filter"
-            value={tagFilter}
-            options={tagOptions}
-            allowNoTag
-            placeholder={t("Filter by tags")}
-            onChange={setTagFilter}
-          />
-        </div>
+        <FilterBar
+          inputRef={searchInputRef}
+          value={query}
+          onValueChange={setQuery}
+          filters={tagFilter}
+          filterOptions={filterOptions}
+          onFiltersChange={(next) =>
+            setTagFilter(applyNoTagExclusion(tagFilter, next))
+          }
+          placeholder={t("Search chats")}
+          hint={IS_MAC ? "⌘K" : "Ctrl+K"}
+          filtersLabel={t("Filter by tags")}
+          emptyHint={t("No tags yet")}
+          maxSelected={MAX_TAGS_PER_CHAT}
+        />
       }
       footer={
         <Button block onClick={() => void newChat()}>
@@ -1025,7 +1045,16 @@ export function ChatModule(): React.JSX.Element {
         hasMore={listHasMore}
         loadMore={() => void search.loadMore()}
         loadError={listError}
-        emptyMessage={chatListEmptyMessage(isSearching, tagFilter.length)}
+        emptyMessage={
+          <div className="imb-chat-empty">
+            <div>{chatListEmptyMessage(isSearching, tagFilter.length)}</div>
+            {serverMode && (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                {t("Clear filters")}
+              </Button>
+            )}
+          </div>
+        }
         selectable
         selectedKeys={multi.selectedKeys}
         onItemClick={(chat, index, mods) =>

@@ -5,7 +5,51 @@ import {
 } from "@shared/constants/tags";
 import { t } from "@shared/l10n";
 import { useMemo } from "react";
-import { MultiSelect } from "../multi-select";
+import { MultiSelect, type MultiSelectOption } from "../multi-select";
+
+/**
+ * Candidate list of a tag picker, as `MultiSelect` options.
+ *
+ * Selected values missing from `options` are appended, so a tag that was just
+ * created (or deleted elsewhere) still renders as a chip. With `allowNoTag` the
+ * "No tags" pseudo-value is injected exactly once at the top, rendered as plain
+ * `t("No tags")` text (no `#` prefix). Shared by `TagSelect` and by owners that
+ * drive the panel themselves (e.g. the chat list's `FilterBar`).
+ */
+export function buildTagFilterOptions(
+  options: readonly string[],
+  selected: readonly string[],
+  allowNoTag = false,
+): MultiSelectOption[] {
+  const missing = selected.filter(
+    (tag) => tag !== TAG_FILTER_NONE && !options.includes(tag),
+  );
+  const base = missing.length > 0 ? [...options, ...missing] : [...options];
+  const values = allowNoTag ? [TAG_FILTER_NONE, ...base] : base;
+  return values.map((tag) => ({
+    value: tag,
+    label: tag === TAG_FILTER_NONE ? t("No tags") : `#${tag}`,
+  }));
+}
+
+/**
+ * Keep the "No tags" pseudo-value and the concrete tags mutually exclusive
+ * (both directions): picking one side drops the other. The filters are
+ * AND-combined, so mixing both would always match nothing.
+ */
+export function applyNoTagExclusion(
+  current: readonly string[],
+  next: readonly string[],
+): string[] {
+  const hadNoTag = current.includes(TAG_FILTER_NONE);
+  const hasNoTag = next.includes(TAG_FILTER_NONE);
+  const real = next.filter((tag) => tag !== TAG_FILTER_NONE);
+  // "No tags" just got picked → drop the concrete tags.
+  if (hasNoTag && !hadNoTag) return [TAG_FILTER_NONE];
+  // A concrete tag got picked while "No tags" was on → it replaces it.
+  if (hasNoTag && hadNoTag && real.length > 0) return real;
+  return [...next];
+}
 
 export interface TagSelectProps {
   value: string[];
@@ -50,48 +94,20 @@ export function TagSelect({
 }: TagSelectProps): React.JSX.Element {
   // A just-created tag may not be in the (refetched) candidate list yet; merge
   // the selected values in so their chips always render. The "No tags" pseudo
-  // value is excluded here and re-injected exactly once below.
-  const merged = useMemo(() => {
-    const missing = value.filter(
-      (tag) => tag !== TAG_FILTER_NONE && !options.includes(tag),
-    );
-    const base = missing.length > 0 ? [...options, ...missing] : options;
-    return allowNoTag ? [TAG_FILTER_NONE, ...base] : base;
-  }, [options, value, allowNoTag]);
+  // value is excluded here and re-injected exactly once by the builder.
   const multiOptions = useMemo(
-    () =>
-      merged.map((tag) => ({
-        value: tag,
-        label: tag === TAG_FILTER_NONE ? t("No tags") : `#${tag}`,
-      })),
-    [merged],
+    () => buildTagFilterOptions(options, value, allowNoTag),
+    [options, value, allowNoTag],
   );
 
   /**
    * Route every value change through here so the "No tags" pseudo-option and
-   * the concrete tags stay mutually exclusive (both directions):
-   * picking one side drops the other. Without `allowNoTag` this is a straight
-   * pass-through, so editor behaviour is unchanged.
+   * the concrete tags stay mutually exclusive (both directions). Without
+   * `allowNoTag` this is a straight pass-through, so editor behaviour is
+   * unchanged.
    */
   function handleChange(next: string[]): void {
-    if (!allowNoTag) {
-      onChange(next);
-      return;
-    }
-    const hadNoTag = value.includes(TAG_FILTER_NONE);
-    const hasNoTag = next.includes(TAG_FILTER_NONE);
-    const real = next.filter((tag) => tag !== TAG_FILTER_NONE);
-    if (hasNoTag && !hadNoTag) {
-      // "No tags" just got picked → drop the concrete tags.
-      onChange([TAG_FILTER_NONE]);
-      return;
-    }
-    if (hasNoTag && hadNoTag && real.length > 0) {
-      // A concrete tag got picked while "No tags" was on → it replaces it.
-      onChange(real);
-      return;
-    }
-    onChange(next);
+    onChange(allowNoTag ? applyNoTagExclusion(value, next) : next);
   }
 
   function handleCreate(text: string): void {

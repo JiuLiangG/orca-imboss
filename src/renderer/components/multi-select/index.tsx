@@ -6,16 +6,20 @@ import { useClickOutside } from "../../hooks/use-click-outside";
 import { useDropdownPosition } from "../../hooks/use-dropdown-position";
 import { useEscapeKey } from "../../hooks/use-escape-key";
 import { usePopupLayer } from "../../hooks/use-popup-layer";
-import { IconChevronDown, IconSearch, IconX } from "../icons";
+import { IconChevronDown, IconX } from "../icons";
 import "./index.css";
+import { MultiSelectPanel, type MultiSelectOption } from "./panel";
+
+export { MultiSelectPanel };
+export type {
+  MultiSelectOption,
+  MultiSelectPanelCreate,
+  MultiSelectPanelProps,
+  MultiSelectPanelSearch,
+} from "./panel";
 
 /** Keep the panel readable even when the trigger is a small inline control. */
 const PANEL_MIN_WIDTH = 200;
-
-export interface MultiSelectOption {
-  value: string;
-  label: string;
-}
 
 export interface MultiSelectProps {
   value: string[];
@@ -217,7 +221,6 @@ export function MultiSelect({
     }
   }
 
-  const showEmpty = filtered.length === 0 && !canCreate;
   const showClear = clearable && !disabled && value.length > 0;
 
   return (
@@ -276,100 +279,47 @@ export function MultiSelect({
       {open &&
         panelStyle &&
         createPortal(
-          <div
-            ref={panelRef}
-            className="imb-ms-panel"
-            role="listbox"
-            aria-multiselectable="true"
+          <MultiSelectPanel
+            panelRef={panelRef}
             style={{
-              position: "fixed",
               top: panelStyle.top,
               bottom: panelStyle.bottom,
               left: panelStyle.left,
               width: panelStyle.width,
               maxHeight: panelStyle.maxHeight,
-              right: "auto",
-              zIndex: 50,
             }}
-          >
-            {searchable && (
-              <div className="imb-ms-search">
-                <IconSearch className="imb-icon imb-sm" />
-                <input
-                  type="text"
-                  value={filter}
-                  placeholder={searchPlaceholder}
-                  autoFocus
-                  aria-label={searchPlaceholder || undefined}
-                  onChange={(event) => {
-                    setFilter(event.target.value);
-                    setActiveIndex(0);
-                  }}
-                  onKeyDown={onSearchKeyDown}
-                />
-              </div>
-            )}
-            {showEmpty && (
-              <div className="imb-ms-empty">
-                {/* A filtered-out list is not the same as an unconfigured one:
-                    `emptyHint` talks about the installation, not the query. */}
-                {filterText.length > 0 ? t("No matches") : emptyHint}
-              </div>
-            )}
-            {filtered.map((option, index) => {
-              const checked = selectedSet.has(option.value);
-              const locked = !checked && atCap;
-              return (
-                <label
-                  key={option.value}
-                  role="option"
-                  aria-selected={checked}
-                  aria-disabled={locked || undefined}
-                  className={cls(
-                    "imb-ms-option",
-                    checked && "imb-is-checked",
-                    index === activeIndex && "imb-is-active",
-                    locked && "imb-is-locked",
-                  )}
-                  data-ms-option={index}
-                  tabIndex={-1}
-                  onMouseDown={(event) => {
-                    // Keep focus in the filter input while clicking options.
-                    if (searchable) event.preventDefault();
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === " " || event.key === "Enter") {
-                      event.preventDefault();
-                      toggle(option.value);
-                      setActiveIndex(index);
-                    }
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    disabled={locked}
-                    onChange={() => toggle(option.value)}
-                    tabIndex={searchable ? -1 : index === activeIndex ? 0 : -1}
-                  />
-                  <span>{option.label}</span>
-                </label>
-              );
-            })}
-            {canCreate && (
-              <button
-                type="button"
-                className={cls(
-                  "imb-ms-create",
-                  activeIndex === filtered.length && "imb-is-active",
-                )}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={createFromFilter}
-              >
-                {t('Create "${name}"', { name: filterText })}
-              </button>
-            )}
-          </div>,
+            options={filtered}
+            selected={value}
+            activeIndex={activeIndex}
+            onToggle={toggle}
+            atCap={atCap}
+            // A filtered-out list is not the same as an unconfigured one:
+            // `emptyHint` talks about the installation, not the query.
+            emptyMessage={filterText.length > 0 ? t("No matches") : emptyHint}
+            focusStaysOutside={searchable}
+            search={
+              searchable
+                ? {
+                    value: filter,
+                    placeholder: searchPlaceholder,
+                    onChange: (next) => {
+                      setFilter(next);
+                      setActiveIndex(0);
+                    },
+                    onKeyDown: onSearchKeyDown,
+                  }
+                : undefined
+            }
+            create={
+              canCreate
+                ? {
+                    label: t('Create "${name}"', { name: filterText }),
+                    active: activeIndex === filtered.length,
+                    onClick: createFromFilter,
+                  }
+                : undefined
+            }
+          />,
           document.body,
         )}
     </div>
