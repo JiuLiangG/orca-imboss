@@ -43,6 +43,7 @@ const LIST_DETAIL_MODULES: ReadonlySet<AppModule> = new Set([
 export function AppShell(): React.JSX.Element {
   const { module, navCollapsed } = useApp();
   const layout = shellLayoutFor(module);
+  const thinList = module === "settings";
 
   async function setNavCollapsed(collapsed: boolean): Promise<void> {
     appStore.navCollapsed = collapsed;
@@ -60,6 +61,7 @@ export function AppShell(): React.JSX.Element {
         className={cls(
           "imb-shell-content",
           layout === "single" && "imb-layout-single",
+          thinList && "imb-shell-thinlist",
         )}
       >
         {/* Always mounted: it hosts the persistent mini-app iframes, which
