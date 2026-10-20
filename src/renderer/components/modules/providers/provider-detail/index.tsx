@@ -1,3 +1,7 @@
+import {
+  isSubscriptionLoginProvider,
+  SUBSCRIPTION_SIGNED_IN_LABELS,
+} from "@shared/constants/providers";
 import { t } from "@shared/l10n";
 import type { ProviderInfo, ProviderUpsert } from "@shared/types";
 import { useEffect, useRef, useState } from "react";
@@ -202,7 +206,11 @@ export function ProviderDetail({
         {provider.authType === "oauth" ? (
           <Field label={t("Subscription")}>
             <span className="imb-provider-info">
-              {t("Signed in with SuperGrok or X Premium")}
+              {t(
+                isSubscriptionLoginProvider(provider.id)
+                  ? SUBSCRIPTION_SIGNED_IN_LABELS[provider.id]
+                  : "Signed in with a subscription.",
+              )}
             </span>
           </Field>
         ) : (

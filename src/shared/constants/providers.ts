@@ -39,21 +39,32 @@ export const CURATED_PROVIDERS_LABELS = {
 } as const;
 
 /**
- * Built-in providers whose Pi auth includes a subscription OAuth login.
- * imboss only drives the device-code flow these use; other Pi OAuth
- * providers that prompt for a secret or a callback stay API-key only.
+ * Built-in providers whose Pi auth is a subscription OAuth login that this
+ * app can drive. xAI is device code. Anthropic is Pi's browser loopback
+ * flow (Claude Pro/Max), with a paste step when the callback does not
+ * return. Other Pi OAuth flows that ask for a secret stay API-key only.
  */
-export const SUBSCRIPTION_LOGIN_PROVIDERS = ["xai"] as const;
+export const SUBSCRIPTION_LOGIN_PROVIDERS = ["anthropic", "xai"] as const;
 
 export type SubscriptionLoginProvider =
   (typeof SUBSCRIPTION_LOGIN_PROVIDERS)[number];
 
-/** Pi's own login label for each subscription provider. */
+/** Button label for each subscription provider. */
 export const SUBSCRIPTION_LOGIN_LABELS: Record<
   SubscriptionLoginProvider,
   string
 > = {
+  anthropic: "Sign in with Claude Pro or Max",
   xai: "Sign in with SuperGrok or X Premium",
+};
+
+/** Status line once that provider's OAuth credential is stored. */
+export const SUBSCRIPTION_SIGNED_IN_LABELS: Record<
+  SubscriptionLoginProvider,
+  string
+> = {
+  anthropic: "Signed in with Claude Pro or Max",
+  xai: "Signed in with SuperGrok or X Premium",
 };
 
 /**

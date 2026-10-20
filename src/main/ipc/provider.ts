@@ -6,7 +6,10 @@ import type {
 } from "@shared/types";
 import { clipboard, ipcMain, shell, type WebContents } from "electron";
 import { listAvailableModels, refreshModelStore } from "../agent/model-runtime";
-import { loginProviderSubscription } from "../agent/provider-login";
+import {
+  loginProviderSubscription,
+  submitLoginCode,
+} from "../agent/provider-login";
 import {
   listModels,
   listProviders,
@@ -84,6 +87,10 @@ export function registerProviderHandlers(): void {
     activeLogin?.controller.abort();
   });
 
+  ipcMain.handle("providers:submitLogin", (_event, value: unknown) => {
+    submitLoginCode(assertString(value, "authorization code"));
+  });
+
   ipcMain.handle("providers:copyKey", async (_event, id: unknown) => {
     const key = await revealProviderKey(assertString(id, "provider id"));
     if (!key) throw new Error("No API key set for this provider.");
@@ -114,8 +121,16 @@ function deliverLoginEvent(
   payload: ProviderLoginEvent,
 ): void {
   if (!sender.isDestroyed()) sender.send("providers:loginEvent", payload);
-  if (!isHttpsUrl(payload.verificationUri)) return;
-  void shell.openExternal(payload.verificationUri);
+  const url = loginUrl(payload);
+  if (!url || !isHttpsUrl(url)) return;
+  void shell.openExternal(url);
+}
+
+function loginUrl(payload: ProviderLoginEvent): string | undefined {
+  if (payload.type === "device_code" || payload.type === "auth_url") {
+    return payload.verificationUri;
+  }
+  return undefined;
 }
 
 function isHttpsUrl(raw: string): boolean {
