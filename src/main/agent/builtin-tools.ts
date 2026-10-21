@@ -17,8 +17,10 @@ import { t } from "@shared/l10n";
 import type {
   AgentEnvironment,
   AnyPiTool,
+  ChatEmployeeStats,
   CronJob,
   Employee,
+  EmployeeAgentStat,
   EmployeeSession,
   Message,
   MessageAttachment,
@@ -1241,8 +1243,15 @@ function askTool(env: AgentEnvironment): AnyPiTool {
 }
 
 /**
- * `imb_get_employee_stat` — assistant-only: what is one employee session doing
- * **right now**?
+ * `imb_get_employee_stat` — assistant-only: what are the employee session(s)
+ * of a chat doing **right now**?
+ *
+ * `chatId` is always required; `employeeId` is optional. With it, the result is
+ * the single `(employeeId, chatId)` stat described below, byte-identical to
+ * before. Without it, the result is `{ chatId, chatTitle, employees }` — one
+ * stat per employee participant of the chat; the assistant (id 0) is never
+ * listed, and participants without a session here are included with
+ * `sessionExists: false` so the roster stays complete.
  *
  * The boss needs to tell "stuck" from "still working", so every field describes
  * the present: `running` (a Pi run is streaming), `queued` (pending prompts,
@@ -1264,15 +1273,21 @@ function askTool(env: AgentEnvironment): AnyPiTool {
  *
  * Read-only and side-effect free: it never creates a queue state or a Pi
  * session (see `readSessionActivity`), and a corrupt/missing session file
- * degrades to "no output yet" instead of an error.
+ * degrades to "no output yet" instead of an error. Bulk mode fans out the same
+ * per-employee pipeline concurrently: one slow or broken transcript degrades to
+ * that employee's `null`, never to a failed call.
  */
 function employeeStatTool(callingEmployeeId: number): AnyPiTool {
   return {
     name: "imb_get_employee_stat",
     label: "Employee status",
     description:
-      "Report the current state of one employee's agent session (one `(employeeId, chatId)` pair; " +
-      "both are required). Returns `running` (the employee is streaming a response right now), " +
+      "Report the current state of the employee agent session(s) of a chat. `chatId` is " +
+      "required; `employeeId` selects one session and is optional: omit it to get **every** " +
+      "employee participant of the chat at once — the result is then `{ chatId, chatTitle, " +
+      "employees: [...] }` with one stat per employee (the assistant itself is never listed; " +
+      "participants without a session appear with `sessionExists: false`). With `employeeId` " +
+      "the result is a single stat: `running` (the employee is streaming a response right now), " +
       "`queued` (prompts waiting to run — background only, it never affects `lastAgentMessage`) " +
       "and `lastAgentMessage`. While `running`, `lastAgentMessage` always describes the turn " +
       "being produced right now: `streaming: true`, partial `text`, `at`/`ageSeconds` null — " +
@@ -1293,14 +1308,18 @@ function employeeStatTool(callingEmployeeId: number): AnyPiTool {
       "stuck employee from one that is still working.",
     promptSnippet: "check an employee's current state",
     parameters: Type.Object({
-      employeeId: Type.Integer({
-        minimum: 0,
-        description: "The employee to inspect; `0` is the assistant itself.",
-      }),
+      employeeId: Type.Optional(
+        Type.Integer({
+          minimum: 0,
+          description:
+            "The employee to inspect; `0` is the assistant itself. Omit it to get every " +
+            "employee participant of `chatId` at once.",
+        }),
+      ),
       chatId: Type.Integer({
         minimum: 1,
         description:
-          "The chat of the session to inspect — one session per employee and chat.",
+          "The chat of the session(s) to inspect — one session per employee and chat.",
       }),
       maxChars: Type.Optional(
         Type.Integer({
@@ -1312,33 +1331,87 @@ function employeeStatTool(callingEmployeeId: number): AnyPiTool {
     }),
     execute: async (_toolCallId, params) => {
       const input = params as {
-        employeeId: number;
+        employeeId?: number;
         chatId: number;
         maxChars?: number;
       };
       assertAssistantCaller(callingEmployeeId);
+      const maxChars = clampMaxChars(input.maxChars);
+      if (input.employeeId === undefined) {
+        // Bulk mode: the chat is the only target to validate — who belongs to
+        // it is decided from its participants, so there is no per-employee
+        // caller mistake to catch.
+        const chat = dbChats.getChat(input.chatId);
+        if (!chat) throw new Error(`Chat ${input.chatId} does not exist.`);
+        const employees = await Promise.all(
+          bulkStatTargets(chat.participants).map((employeeId) =>
+            buildStat(employeeId, input.chatId, chat.title, maxChars),
+          ),
+        );
+        return toolResult({
+          chatId: input.chatId,
+          chatTitle: chat.title,
+          employees,
+        } satisfies ChatEmployeeStats);
+      }
       assertStatTarget(input.employeeId, input.chatId);
       const chat = dbChats.getChat(input.chatId);
       // `assertStatTarget` already proved the chat exists; re-read for the title.
-      const activity = readSessionActivity(input.employeeId, input.chatId);
-      const persisted = await readLastAssistantMessage(
-        input.employeeId,
-        input.chatId,
-      );
       return toolResult(
-        buildEmployeeAgentStat({
-          employeeId: input.employeeId,
-          chatId: input.chatId,
-          chatTitle: chat?.title ?? "",
-          sessionExists:
-            dbSessions.getSession(input.employeeId, input.chatId) !== null,
-          activity,
-          persisted,
-          maxChars: clampMaxChars(input.maxChars),
-        }),
+        await buildStat(
+          input.employeeId,
+          input.chatId,
+          chat?.title ?? "",
+          maxChars,
+        ),
       );
     },
   };
+}
+
+/**
+ * One employee's stat — the shared core of the single and the bulk mode of
+ * `imb_get_employee_stat`.
+ *
+ * Side-effect free per employee: `readSessionActivity` only reads queue state
+ * that already exists, and `readLastAssistantMessage` degrades to `null` on any
+ * transcript failure, so one broken session never fails a whole bulk call.
+ */
+async function buildStat(
+  employeeId: number,
+  chatId: number,
+  chatTitle: string,
+  maxChars: number,
+): Promise<EmployeeAgentStat> {
+  const activity = readSessionActivity(employeeId, chatId);
+  const persisted = await readLastAssistantMessage(employeeId, chatId);
+  return buildEmployeeAgentStat({
+    employeeId,
+    chatId,
+    chatTitle,
+    sessionExists: dbSessions.getSession(employeeId, chatId) !== null,
+    activity,
+    persisted,
+    maxChars,
+  });
+}
+
+/**
+ * The employees the bulk mode reports, in the chat's participant order:
+ * deduplicated, and with the assistant (id 0 — it has no session in a task
+ * group chat, its stat belongs to the root chat) and stale ids of deleted
+ * employees dropped (`chats.participants` is a JSON column, not FK-enforced).
+ */
+function bulkStatTargets(participants: readonly number[]): number[] {
+  const seen = new Set<number>();
+  const ids: number[] = [];
+  for (const id of participants) {
+    if (id === ASSISTANT_ID || seen.has(id)) continue;
+    if (!getEmployee(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
 }
 
 /**

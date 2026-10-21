@@ -177,8 +177,14 @@ function summarizeKnown(
     }
     case "imb_remove_cronjob":
       return text(record.id);
-    case "imb_get_employee_stat":
+    case "imb_get_employee_stat": {
+      // Bulk mode (no `employeeId`) reports every employee of the chat.
+      const chatId = text(record.chatId);
+      if (record.employeeId === undefined) {
+        return chatId ? `all employees · chat ${chatId}` : "all employees";
+      }
       return employeeAndChat(record);
+    }
     case "imb_interrupt": {
       const target = employeeAndChat(record);
       const instruction = text(record.instruction);

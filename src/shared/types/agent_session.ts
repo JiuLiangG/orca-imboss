@@ -253,3 +253,25 @@ export interface AgentProgressStat {
   /** Tool calls started in this run (distinguishes one slow call from a loop). */
   toolCallsThisRun: number;
 }
+
+/**
+ * Payload of the assistant-only `imb_get_employee_stat` tool when
+ * `employeeId` is **omitted**: the state of every real employee participant of
+ * the chat in one call.
+ *
+ * Each entry has exactly the shape of the single-session payload
+ * (`EmployeeAgentStat`), so a consumer that understands one understands the
+ * other. The assistant itself (id 0) is never listed — bulk mode answers
+ * "what are the employees doing in this chat", not "what am I doing".
+ */
+export interface ChatEmployeeStats {
+  chatId: number;
+  chatTitle: string;
+  /**
+   * One entry per employee participant of the chat (deduplicated; employees
+   * that never opened a session here are still included, with
+   * `sessionExists: false` and no agent output — the roster is complete, an
+   * absent employee is never silently dropped).
+   */
+  employees: EmployeeAgentStat[];
+}
