@@ -24,8 +24,8 @@ import { IconButton } from "../../../icon-button";
 import { IconChevronDown, IconChevronUp, IconHalt } from "../../../icons";
 import { Markdown } from "../../../markdown";
 import { useMentionResolver } from "../../../markdown/use-mention";
-import { SessionComposer } from "../session-composer";
 import "../../chat/thread.css";
+import { SessionComposer } from "../session-composer";
 import "./index.css";
 
 export interface AgentSessionModuleProps {
@@ -784,7 +784,7 @@ export function AgentSessionModule({
     <>
       <div className="imb-chat-header">
         <div className="imb-chat-header-avatar">
-          <EmployeeAvatar employeeId={employeeId} size={36} />
+          <EmployeeAvatar employeeId={employeeId} size={30} />
         </div>
         <div className="imb-session-heading">
           <div className="imb-chat-title">{employeeName}</div>

@@ -29,6 +29,18 @@ body {
   overflow: hidden;
 }
 
+/*
+ * macOS chrome glass: the native vibrancy material lives *behind* the web
+ * contents, so nothing between the page root and the chrome may paint an opaque
+ * background or the material is hidden for good. On macOS the page root stays
+ * transparent and every surface paints itself (panes, thread, chrome band); on
+ * the other platforms the root keeps painting the window colour, which also
+ * keeps the first frame from flashing white.
+ */
+:root[data-platform="darwin"] body {
+  background: transparent;
+}
+
 #root {
   height: 100vh;
 }
@@ -60,6 +72,75 @@ h3,
 h4 {
   text-wrap: balance;
   margin: 0;
+}
+
+/*
+ * The one chrome surface declaration.
+ *
+ * The toolbar band and the sidebar rail must read as one piece of material, so
+ * they share this class instead of each declaring the same paint. They are
+ * separate grid boxes (band = row 1, rail = row 2) and therefore never overlap:
+ * two stacked 60% layers would multiply to 84% and show up as a brightness step.
+ *
+ * The sheen is deliberately NOT part of this class: it belongs to the top edge of
+ * the window (the band). Giving the rail its own sheen would restart the
+ * gradient at the band's bottom edge and put a highlight line right where the two
+ * surfaces meet.
+ */
+.imb-chrome {
+  background-color: var(--imb-material-chrome);
+}
+
+.imb-chrome-top {
+  background-image: var(--imb-chrome-sheen);
+  background-size: 100% var(--imb-titlebar-h);
+  background-repeat: no-repeat;
+}
+
+/*
+ * The one floating-menu recipe.
+ *
+ * Every menu in the app is the same object: a context menu, a select popup, the
+ * multi-select panel and the composer's attach menu. They are opaque on purpose
+ * (menus over scrolling content are where translucency destroys legibility) and
+ * they share one surface + one row + one separator declaration, so a menial
+ * change to shadow or row height cannot leave one of them behind.
+ */
+.imb-menu-surface {
+  background: var(--imb-material-menu);
+  border: 1px solid var(--imb-sep-strong);
+  border-radius: var(--imb-radius-card);
+  box-shadow: var(--imb-highlight-top), var(--imb-shadow-2);
+}
+
+.imb-menu-row {
+  display: flex;
+  align-items: center;
+  gap: var(--imb-space-2);
+  min-height: var(--imb-control-h);
+  width: 100%;
+  padding: 0 var(--imb-space-3);
+  border: 0;
+  border-radius: var(--imb-radius-control);
+  background: none;
+  color: var(--imb-fg);
+  font: inherit;
+  font-size: var(--imb-fs-ui);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-menu-row:hover,
+.imb-menu-row.imb-is-active {
+  background: var(--imb-fg-soft);
+}
+
+.imb-menu-sep {
+  height: 1px;
+  margin: var(--imb-space-1) 0;
+  background: var(--imb-sep);
+  flex: none;
 }
 
 .imb-num {

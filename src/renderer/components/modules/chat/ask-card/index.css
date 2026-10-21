@@ -2,8 +2,8 @@
   position: relative;
   background: var(--imb-surface);
   border: 1px solid var(--imb-border);
-  border-radius: var(--imb-radius-lg);
-  padding: var(--imb-space-3) var(--imb-space-4);
+  border-radius: var(--imb-radius-card);
+  padding: var(--imb-space-4) var(--imb-space-5);
   box-shadow: var(--imb-elev-raised);
   min-width: 0;
   flex: 1;
@@ -17,7 +17,7 @@
 }
 
 .imb-ask-question {
-  margin-top: var(--imb-space-3);
+  margin-top: var(--imb-space-4);
 }
 
 .imb-ask-q-text {
@@ -29,7 +29,7 @@
 .imb-ask-options {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--imb-space-2);
 }
 
 .imb-ask-option {

@@ -54,7 +54,7 @@
   -webkit-appearance: none;
   appearance: none;
   background: var(--imb-border);
-  border-radius: var(--imb-radius-full);
+  border-radius: var(--imb-radius-pill);
   outline: none;
   cursor: pointer;
   transition: background var(--imb-motion-fast) var(--imb-ease-standard);

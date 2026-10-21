@@ -1,8 +1,8 @@
 .imb-provider-info {
   display: block;
-  padding: 10px 13px;
+  padding: var(--imb-space-3);
   border: 1px solid var(--imb-border);
-  border-radius: var(--imb-radius-md);
+  border-radius: var(--imb-radius-control);
   background: var(--imb-surface);
   color: var(--imb-fg);
   font-size: var(--imb-text-sm);

@@ -1,8 +1,8 @@
 .imb-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: var(--imb-space-5);
+  gap: var(--imb-space-2);
+  margin-bottom: var(--imb-space-4);
 }
 
 .imb-field label {

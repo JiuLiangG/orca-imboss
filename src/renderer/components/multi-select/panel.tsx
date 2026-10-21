@@ -80,7 +80,7 @@ export function MultiSelectPanel({
     <div
       ref={panelRef}
       id={idPrefix !== undefined ? `${idPrefix}-listbox` : undefined}
-      className={cls("imb-ms-panel", className)}
+      className={cls("imb-ms-panel imb-menu-surface", className)}
       role="listbox"
       aria-multiselectable="true"
       style={{ position: "fixed", right: "auto", zIndex: 50, ...style }}
@@ -118,7 +118,7 @@ export function MultiSelectPanel({
             aria-selected={checked}
             aria-disabled={locked || undefined}
             className={cls(
-              "imb-ms-option",
+              "imb-ms-option imb-menu-row",
               checked && "imb-is-checked",
               index === activeIndex && "imb-is-active",
               locked && "imb-is-locked",

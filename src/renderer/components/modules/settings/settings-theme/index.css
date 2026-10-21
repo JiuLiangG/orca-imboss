@@ -12,13 +12,13 @@
 .imb-theme-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(40px, 1fr));
-  gap: var(--imb-space-3);
+  gap: var(--imb-space-4);
 }
 
 .imb-theme-swatch {
   position: relative;
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 2.5px solid transparent;
   cursor: pointer;
@@ -46,8 +46,8 @@
 
 .imb-theme-swatch.imb-is-active::after {
   content: "✓";
-  color: #fff;
-  font-size: 14px;
+  color: var(--imb-fg);
+  font-size: var(--imb-fs-small);
   font-weight: 700;
 }
 

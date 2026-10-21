@@ -172,6 +172,33 @@ function createWindow(): void {
     autoHideMenuBar: true,
     titleBarStyle: "hidden",
     ...(process.platform === "linux" ? { icon } : {}),
+    // macOS chrome glass (design route A).
+    //
+    // The native `NSVisualEffectView` sits *behind* the web contents; the
+    // renderer paints only the chrome band translucent over it
+    // (`--imb-material-chrome`) and keeps every content surface opaque, so the
+    // material can never bleed into text. `followWindow` lets the system
+    // brighten/desaturate the material with the window's key state.
+    //
+    // `under-window` (not `sidebar`): the app owns a full-window layout rather
+    // than an AppKit source list, and the whole-window background material is
+    // the more translucent of the two — the boss read `sidebar` as too solid on
+    // a real window. The CSS layer above it is 60% window colour, so ~40% of the
+    // material shows through; see `--imb-material-chrome` in tokens.css for the
+    // tuning band (55–65%).
+    //
+    // Deliberately NOT `transparent: true`: that path needs a private corner
+    // mask to keep the window corners smooth and previously spiked
+    // WindowServer GPU load. The alpha background below is only "let the
+    // material through", not a see-through window.
+    ...(process.platform === "darwin"
+      ? {
+          vibrancy: "under-window" as const,
+          visualEffectState: "followWindow" as const,
+          backgroundColor: "#00000000",
+          roundedCorners: true,
+        }
+      : {}),
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       spellcheck: false,

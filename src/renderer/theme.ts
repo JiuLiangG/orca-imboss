@@ -48,29 +48,87 @@ export function updateThemeState(state: ThemeState): void {
   appStore.theme = state;
 }
 
-/** Inject an accent preset as CSS variables (prototype-parity derivation). */
+/**
+ * Ink (text/icon) colour painted on top of an accent fill must clear this
+ * ratio; below it the label stops being readable on bright presets. macOS
+ * keeps controls at 3:1 rather than 4.5:1, and so do we (native look first).
+ */
+const ACCENT_INK_MIN_CONTRAST = 3;
+const ACCENT_INK_LIGHT = "#ffffff";
+const ACCENT_INK_DARK = "#1a1a1a";
+
+/**
+ * Accent presets whose white ink is part of the brand identity even though it
+ * sits below `ACCENT_INK_MIN_CONTRAST` (WeChat green). Removing an entry is all
+ * it takes to hand that preset back to the contrast rule.
+ */
+const BRAND_WHITE_INK = new Set<string>(["#07C160"]);
+
+/**
+ * Inject an accent preset as CSS variables (prototype-parity derivation).
+ *
+ * Only the *inputs* are injected here: the accent, its hover/active steps and
+ * the ink painted on top of it. Everything derived from them (soft tint, focus
+ * ring) is declared once in `styles/tokens.css` against `--imb-accent`, so a
+ * preset has exactly one source of truth.
+ */
 function applyThemeAccent(hex: string): void {
-  const { h, s, l } = hexToHsl(hex);
+  const color = typeof hex === "string" ? hex.toUpperCase() : "";
+  if (!/^#[0-9A-F]{6}$/.test(color)) return; // defensive: never paint an invalid colour
+  const { h, s, l } = hexToHsl(color);
   const root = document.documentElement;
-  root.style.setProperty("--imb-accent", hex);
-  root.style.setProperty("--imb-accent-on", "#ffffff");
+  // Write the *primitives*: `--imb-accent` and everything derived from it (soft
+  // tint, ring, inactive-window desaturation) is declared once in tokens.css
+  // against `--imb-p-accent`, so a preset has exactly one source of truth and
+  // stylesheet-level states can recolour it.
+  root.style.setProperty("--imb-p-accent", color);
+  root.style.setProperty("--imb-p-accent-on", accentInk(color));
   root.style.setProperty(
-    "--imb-accent-hover",
+    "--imb-p-accent-hover",
     `hsl(${h}, ${s}%, ${Math.min(l + 8, 95)}%)`,
   );
   root.style.setProperty(
-    "--imb-accent-active",
+    "--imb-p-accent-active",
     `hsl(${h}, ${s}%, ${Math.max(l - 10, 8)}%)`,
   );
-  root.style.setProperty("--imb-success", hex);
-  root.style.setProperty(
-    "--imb-accent-soft",
-    `color-mix(in oklch, ${hex} 14%, transparent)`,
+  // Status colours are not theme colours: `--imb-success` stays the system
+  // green that tokens.css declares, whatever accent is selected.
+  root.style.removeProperty("--imb-success");
+  // Superseded inline derivations from older builds; drop them so the tokens'
+  // `color-mix()` versions apply.
+  root.style.removeProperty("--imb-accent");
+  root.style.removeProperty("--imb-accent-on");
+  root.style.removeProperty("--imb-accent-hover");
+  root.style.removeProperty("--imb-accent-active");
+  root.style.removeProperty("--imb-accent-soft");
+  root.style.removeProperty("--imb-focus-ring");
+}
+
+/** White unless white would be unreadable on that fill (brand presets pinned). */
+function accentInk(hex: string): string {
+  if (BRAND_WHITE_INK.has(hex)) return ACCENT_INK_LIGHT;
+  return contrastRatio(hex, ACCENT_INK_LIGHT) >= ACCENT_INK_MIN_CONTRAST
+    ? ACCENT_INK_LIGHT
+    : ACCENT_INK_DARK;
+}
+
+/** WCAG relative luminance of an `#RRGGBB` colour. */
+function relativeLuminance(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const channel = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return channel <= 0.03928
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** WCAG contrast ratio between two `#RRGGBB` colours (1–21). */
+function contrastRatio(a: string, b: string): number {
+  const [lighter, darker] = [relativeLuminance(a), relativeLuminance(b)].sort(
+    (x, y) => y - x,
   );
-  root.style.setProperty(
-    "--imb-focus-ring",
-    `0 0 0 3px color-mix(in oklab, ${hex}, transparent 70%)`,
-  );
+  return (lighter + 0.05) / (darker + 0.05);
 }
 
 /** Set/clear the `data-theme-mode` attribute (system = clear). */

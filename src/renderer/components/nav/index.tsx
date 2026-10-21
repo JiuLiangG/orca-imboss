@@ -37,7 +37,6 @@ import {
   IconApp,
   IconChat,
   IconClock,
-  IconCollapse,
   IconEmployees,
   IconGear,
   IconStats,
@@ -89,11 +88,6 @@ const NAV_ITEMS: NavItem[] = [
       ]
     : []),
 ];
-
-export interface NavProps {
-  collapsed: boolean;
-  onToggle: () => void;
-}
 
 /**
  * Menu of an opened Nav entry: close this entry, or every opened group chat and
@@ -148,7 +142,7 @@ function useSortableNav(id: string): {
   };
 }
 
-export function Nav({ collapsed, onToggle }: NavProps): React.JSX.Element {
+export function Nav(): React.JSX.Element {
   const {
     openedItems,
     module,
@@ -194,20 +188,16 @@ export function Nav({ collapsed, onToggle }: NavProps): React.JSX.Element {
 
   return (
     <>
-      <nav
-        className={cls("imb-nav", collapsed && "imb-is-collapsed")}
-        aria-label="Modules"
-      >
+      <nav className="imb-nav imb-chrome" aria-label="Modules">
+        {/* Rail: the brand is the app mark alone; names live in tooltips. */}
         <div className="imb-nav-brand">
-          <BrandLogo style={{ maxWidth: "41px" }} />
-          <span className="imb-nav-brandname">imboss</span>
+          <BrandLogo />
         </div>
         <div className="imb-nav-items">
           {main.map((item) => (
-            <NavButton key={item.module} item={item} collapsed={collapsed} />
+            <NavButton key={item.module} item={item} />
           ))}
         </div>
-        <div className="imb-nav-divider" />
         <div className="imb-scroll">
           {miniApps.length > 0 && (
             <DndContext
@@ -224,7 +214,6 @@ export function Nav({ collapsed, onToggle }: NavProps): React.JSX.Element {
                     <NavMiniAppButton
                       key={app.id}
                       app={app}
-                      collapsed={collapsed}
                       active={
                         module === "miniapp" && activeMiniAppId === app.id
                       }
@@ -237,7 +226,6 @@ export function Nav({ collapsed, onToggle }: NavProps): React.JSX.Element {
           )}
           {openedItems.length > 0 && (
             <>
-              {miniApps.length > 0 && <div className="imb-nav-divider" />}
               <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
@@ -255,7 +243,6 @@ export function Nav({ collapsed, onToggle }: NavProps): React.JSX.Element {
                           <NavChatButton
                             key={itemKey}
                             chat={item}
-                            collapsed={collapsed}
                             active={
                               module === "group-chat" &&
                               activeChatId === item.id
@@ -286,7 +273,6 @@ export function Nav({ collapsed, onToggle }: NavProps): React.JSX.Element {
                           itemKey={itemKey}
                           employeeId={item.employeeId}
                           label={label}
-                          collapsed={collapsed}
                           active={
                             module === "agent-session" &&
                             activeSessionKey === key
@@ -313,23 +299,8 @@ export function Nav({ collapsed, onToggle }: NavProps): React.JSX.Element {
         </div>
         <div className="imb-nav-spacer" />
         <div className="imb-nav-items imb-nav-bottom">
-          <Tooltip
-            content={collapsed ? t("Expand") : t("Collapse")}
-            placement="right"
-            disabled={!collapsed}
-          >
-            <button
-              type="button"
-              className="imb-nav-toggle"
-              aria-label={collapsed ? t("Expand") : t("Collapse")}
-              onClick={onToggle}
-            >
-              <IconCollapse className="imb-icon" />
-              <span>{t("Collapse")}</span>
-            </button>
-          </Tooltip>
           {bottom.map((item) => (
-            <NavButton key={item.module} item={item} collapsed={collapsed} />
+            <NavButton key={item.module} item={item} />
           ))}
         </div>
       </nav>
@@ -340,10 +311,9 @@ export function Nav({ collapsed, onToggle }: NavProps): React.JSX.Element {
 
 type NavButtonProps = {
   item: NavItem;
-  collapsed: boolean;
 };
 
-function NavButton({ item, collapsed }: NavButtonProps): React.JSX.Element {
+function NavButton({ item }: NavButtonProps): React.JSX.Element {
   const { module } = useApp();
 
   async function setModule(value: AppModule): Promise<void> {
@@ -358,16 +328,16 @@ function NavButton({ item, collapsed }: NavButtonProps): React.JSX.Element {
   const active = module === item.module;
 
   return (
-    <Tooltip content={t(item.labelKey)} placement="right" disabled={!collapsed}>
+    <Tooltip content={t(item.labelKey)} placement="right">
       <button
         type="button"
         className={cls("imb-nav-item", active && "imb-is-active")}
+        data-module={item.module}
         aria-current={active ? "page" : undefined}
-        aria-label={collapsed ? t(item.labelKey) : undefined}
+        aria-label={t(item.labelKey)}
         onClick={() => setModule(item.module)}
       >
         <Icon className="imb-icon" />
-        <span className="imb-nav-label">{t(item.labelKey)}</span>
       </button>
     </Tooltip>
   );
@@ -375,7 +345,6 @@ function NavButton({ item, collapsed }: NavButtonProps): React.JSX.Element {
 
 type NavChatButtonProps = {
   chat: NavChat;
-  collapsed: boolean;
   active: boolean;
   onClick: () => void;
   onContextMenu: (event: React.MouseEvent) => void;
@@ -384,7 +353,6 @@ type NavChatButtonProps = {
 /** Nav entry for a group chat opened from a `chat`-kind card. Sortable. */
 function NavChatButton({
   chat,
-  collapsed,
   active,
   onClick,
   onContextMenu,
@@ -400,13 +368,26 @@ function NavChatButton({
           type="button"
           className={cls("imb-nav-item", active && "imb-is-active")}
           aria-current={active ? "page" : undefined}
-          aria-label={collapsed ? chat.title : undefined}
+          aria-label={chat.title}
           onClick={onClick}
           onContextMenu={onContextMenu}
           {...(listeners ?? {})}
         >
-          <GroupAvatar participants={chat.participants} size={24} />
-          <span className="imb-nav-label">{chat.title}</span>
+          <span className="imb-nav-avatar">
+            <GroupAvatar participants={chat.participants} size={24} />
+            {/*
+             * Group-chat marker. A 24px avatar next to a 24px employee avatar is
+             * hard to tell apart at rail size, and a bare dot would say nothing;
+             * two overlapping speech tiles read as "a conversation with several
+             * people". Decorative — the accessible name stays the chat title.
+             */}
+            <span className="imb-nav-badge" aria-hidden="true">
+              <svg viewBox="0 0 8 8" focusable="false">
+                <rect x="0.6" y="1.4" width="4.6" height="3.9" rx="1.1" />
+                <rect x="3.1" y="3.4" width="4.3" height="3.4" rx="1.05" />
+              </svg>
+            </span>
+          </span>
         </button>
       </Tooltip>
     </div>
@@ -418,7 +399,6 @@ type NavSessionButtonProps = {
   itemKey: string;
   employeeId: number;
   label: string;
-  collapsed: boolean;
   active: boolean;
   onClick: () => void;
   onContextMenu: (event: React.MouseEvent) => void;
@@ -429,7 +409,6 @@ function NavSessionButton({
   itemKey,
   employeeId,
   label,
-  collapsed,
   active,
   onClick,
   onContextMenu,
@@ -443,13 +422,12 @@ function NavSessionButton({
           type="button"
           className={cls("imb-nav-item", active && "imb-is-active")}
           aria-current={active ? "page" : undefined}
-          aria-label={collapsed ? label : undefined}
+          aria-label={label}
           onClick={onClick}
           onContextMenu={onContextMenu}
           {...(listeners ?? {})}
         >
           <EmployeeAvatar employeeId={employeeId} size={24} />
-          <span className="imb-nav-label">{label}</span>
         </button>
       </Tooltip>
     </div>
@@ -458,7 +436,6 @@ function NavSessionButton({
 
 type NavMiniAppButtonProps = {
   app: NavMiniApp;
-  collapsed: boolean;
   active: boolean;
   onClick: () => void;
 };
@@ -466,7 +443,6 @@ type NavMiniAppButtonProps = {
 /** Nav entry for a registered mini app. Sortable (persisted via main). */
 function NavMiniAppButton({
   app,
-  collapsed,
   active,
   onClick,
 }: NavMiniAppButtonProps): React.JSX.Element {
@@ -481,7 +457,7 @@ function NavMiniAppButton({
           type="button"
           className={cls("imb-nav-item", active && "imb-is-active")}
           aria-current={active ? "page" : undefined}
-          aria-label={collapsed ? app.name : undefined}
+          aria-label={app.name}
           onClick={onClick}
           {...(listeners ?? {})}
         >
@@ -495,7 +471,6 @@ function NavMiniAppButton({
           ) : (
             <IconApp className="imb-icon" />
           )}
-          <span className="imb-nav-label">{app.name}</span>
         </button>
       </Tooltip>
     </div>

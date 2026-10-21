@@ -117,14 +117,6 @@ export function IconGear(props: IconProps): React.JSX.Element {
   );
 }
 
-export function IconCollapse(props: IconProps): React.JSX.Element {
-  return (
-    <svg {...base(props)}>
-      <polyline points="15 18 9 12 15 6" />
-    </svg>
-  );
-}
-
 export function IconSearch(props: IconProps): React.JSX.Element {
   return (
     <svg {...base(props)}>

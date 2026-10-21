@@ -6,10 +6,16 @@ import "./index.css";
 const stroke = { stroke: "currentColor", strokeWidth: 1.4 } as const;
 
 /**
- * Full-width title bar / drag region (row 1 of `.imb-app`).
- * macOS: empty draggable strip; the native traffic lights sit on its left.
- * Windows/Linux: custom small min/max/close buttons on the right (native
+ * The window's chrome band: grid row 1 of `.imb-app`, spanning the full width.
+ *
+ * macOS: the native traffic lights sit on its left and the band is otherwise
+ * empty. Windows/Linux: custom small min/max/close buttons on the right (native
  * controls are hidden via the absence of `titleBarOverlay`).
+ *
+ * The band owns its own material (`.imb-chrome` + `.imb-chrome-top`). Because it
+ * is a grid row rather than an overlay, the rail below it is a separate box that
+ * simply touches it — the two never stack, so the translucent colour is never
+ * applied twice.
  */
 export function TitleBar(): React.JSX.Element {
   const [maximized, setMaximized] = useState(false);
@@ -29,7 +35,7 @@ export function TitleBar(): React.JSX.Element {
   }, []);
 
   return (
-    <header className="imb-titlebar">
+    <header className="imb-titlebar imb-chrome imb-chrome-top">
       {!IS_MAC && (
         <div className="imb-winbtns">
           <WindowButton

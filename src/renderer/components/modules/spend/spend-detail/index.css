@@ -25,6 +25,8 @@
 .imb-spend-stat-value {
   font-family: var(--imb-font-mono);
   font-size: var(--imb-text-lg);
+  /* Same size as body text: hierarchy comes from weight, not from a new step. */
+  font-weight: var(--imb-fw-semibold);
   color: var(--imb-fg);
 }
 

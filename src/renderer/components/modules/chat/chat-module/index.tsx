@@ -44,7 +44,7 @@ import {
 import { Tooltip } from "../../../tooltip";
 import { pairAskAnswers } from "../ask-answer";
 import { ChatInputBar } from "../chat-input-bar";
-import { CHAT_MUTE_ENABLED, MuteGlyph, chatMuteMenuItem } from "../chat-mute";
+import { CHAT_MUTE_ENABLED, chatMuteMenuItem, MuteGlyph } from "../chat-mute";
 import { MessageItem } from "../message-item";
 import {
   MY_JUMP_TOP_GAP,
@@ -1160,7 +1160,7 @@ export function ChatModule(): React.JSX.Element {
     <>
       <div className="imb-chat-header">
         <div className="imb-chat-header-avatar">
-          <EmployeeAvatar employeeId={0} size={36} />
+          <EmployeeAvatar employeeId={0} size={30} />
         </div>
         {editingTitle ? (
           <Input

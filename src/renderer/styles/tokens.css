@@ -1,24 +1,73 @@
+/* ============================================================================
+   imboss design tokens
+
+   Three layers, in one file so the dependency direction stays obvious:
+
+     1. primitives (--imb-p-*)   Raw palette. This is the ONLY layer a theme
+                                 re-declares (light is the base, dark overrides
+                                 the palette below).
+     2. semantics  (--imb-bg-*, --imb-fg*, --imb-sep*, --imb-sel-*,
+                    --imb-shadow-*, --imb-material-*, --imb-radius-*,
+                    --imb-control-h*, --imb-row-h*, --imb-fs-*, --imb-dur-*)
+                                 Roles built from layer 1, so they derive per
+                                 theme automatically through color-mix()/var().
+     3. aliases                  Historical names (--imb-bg, --imb-surface,
+                                 --imb-border, --imb-muted, --imb-text-*, …)
+                                 that component CSS already references. They map
+                                 onto layers 1-2 and keep their exact computed
+                                 value, so moving a component to the new
+                                 vocabulary is a per-component change, not a flag
+                                 day.
+
+   Rules of the road:
+     - Component CSS uses layers 2 and 3 only, never --imb-p-* directly.
+     - Never bake a per-theme value into layer 2: derive it from a primitive, or
+       it will silently stop following the theme.
+     - Concentric radii: a nested surface's radius = its container's radius minus
+       the padding in between. Use the --imb-radius-* roles, not literals.
+     - Elevation is a stack, not a shade: hairline ring + specular top edge +
+       one cast shadow, and every step must stay distinguishable from its
+       neighbours.
+   ========================================================================== */
+
 :root {
-  --imb-bg: #ededed;
-  --imb-bg-2: rgb(from var(--imb-bg) r g b / 0.75);
-  --imb-bg-group: #e6e6e6;
-  --imb-surface: #f7f7f7;
-  --imb-surface-warm: var(--imb-surface);
-  --imb-fg: #1a1a1a;
-  --imb-fg-2: var(--imb-fg);
-  --imb-muted: #888888;
-  --imb-meta: var(--imb-muted);
-  --imb-border: #e0e0e0;
-  --imb-border-soft: var(--imb-border);
-  --imb-accent: #07c160;
-  --imb-accent-on: #ffffff;
-  --imb-accent-hover: #10b160;
-  --imb-accent-active: #059050;
-  --imb-success: #07c160;
-  --imb-warn: #fab702;
-  --imb-danger: #fa5151;
-  --imb-bubble-self: #95ec69;
-  --imb-bubble-text: #1a1a1a;
+  /* -- 1a. palette primitives (light) ------------------------------------- */
+
+  /* Backdrops and fills, darkest to lightest role. */
+  --imb-p-window: #ededed; /* window/chrome backdrop */
+  --imb-p-grouped: #e6e6e6; /* grouped-content backdrop */
+  --imb-p-raised: #f7f7f7; /* content + control fill */
+  --imb-p-ink: #1a1a1a; /* primary text */
+  --imb-p-ink-2: #888888; /* secondary text */
+  --imb-p-line: #e0e0e0; /* hairline + control stroke */
+
+  /* Specular cue for the top edge of raised/glass surfaces. It imitates light
+     falling on a bevel, so it is a theme value: bright on light, faint on dark. */
+  --imb-p-specular: rgba(255, 255, 255, 0.9);
+
+  /* Accent. Derived states (hover/active) are injected by theme.ts for the
+     chosen preset; these are the shipped defaults. */
+  --imb-p-accent: #07c160;
+  --imb-p-accent-on: #ffffff;
+  --imb-p-accent-hover: #10b160;
+  --imb-p-accent-active: #059050;
+
+  /* Status. Deliberately independent of the accent: "success" must stay green
+     whatever accent the boss picks (theme.ts no longer overwrites these). */
+  --imb-p-success: #07c160;
+  --imb-p-warn: #fab702;
+  --imb-p-danger: #fa5151;
+
+  /* Chat bubbles. The boss's own bubble keeps the brand green. */
+  --imb-p-bubble-self: #95ec69;
+  --imb-p-bubble-ink: #1a1a1a;
+
+  /* -- 1b. typography ------------------------------------------------------ */
+
+  --imb-font-ui:
+    -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Noto Sans SC", "Helvetica Neue", Helvetica, Arial,
+    sans-serif;
   --imb-font-display:
     -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
     "Microsoft YaHei", "Noto Sans SC", "Helvetica Neue", Helvetica, Arial,
@@ -30,17 +79,34 @@
   --imb-font-mono:
     ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas,
     monospace;
-  --imb-text-xs: 11px;
-  --imb-text-sm: 13px;
-  --imb-text-base: 15px;
-  --imb-text-lg: 16px;
-  --imb-text-xl: 18px;
-  --imb-text-2xl: 24px;
-  --imb-text-3xl: 32px;
-  --imb-text-4xl: 48px;
-  --imb-leading-body: 1.6;
-  --imb-leading-tight: 1.3;
-  --imb-tracking-display: -0.01em;
+
+  /* Semantic type roles (desktop density). The numeric aliases at the bottom of
+     this file resolve to these same steps. */
+  /*
+   * Scale (desktop density, second pass). 13px read as too small on a real
+   * screen, so the body moved up one step to 14 and meta to 12. Titles step up
+   * proportionally, keeping a strict order: 12 < 14 < 16 < 18 < 21 < 27.
+   *
+   * `caption` and `small` intentionally collapse onto 12: macOS also uses a
+   * single small size for both timestamps and secondary text. They stay separate
+   * tokens because they are separate *roles* — if one ever needs to move, it is
+   * one line here rather than a hunt through components.
+   */
+  --imb-fs-caption: 12px;
+  --imb-fs-small: 12px;
+  --imb-fs-ui: 14px;
+  --imb-fs-title-3: 16px;
+  --imb-fs-title-2: 18px;
+  --imb-fs-title-1: 21px;
+  --imb-fs-large-title: 27px;
+  --imb-fw-regular: 400;
+  --imb-fw-medium: 500;
+  --imb-fw-semibold: 600;
+  --imb-leading-ui: 1.3; /* single-line chrome */
+  --imb-leading-text: 1.5; /* flowing text (CJK needs ≥1.5) */
+
+  /* -- 1c. spacing, sizing ------------------------------------------------ */
+
   --imb-space-1: 4px;
   --imb-space-2: 8px;
   --imb-space-3: 12px;
@@ -49,100 +115,319 @@
   --imb-space-6: 24px;
   --imb-space-8: 32px;
   --imb-space-12: 48px;
-  --imb-section-y-desktop: 72px;
-  --imb-section-y-tablet: 48px;
-  --imb-section-y-phone: 32px;
-  --imb-radius-sm: 4px;
-  --imb-radius-md: 8px;
-  --imb-radius-lg: 16px;
+
+  /* Control heights, from the macOS desktop scale. */
+  --imb-control-h-mini: 22px;
+  --imb-control-h: 26px; /* menus, segmented segments, small buttons */
+  --imb-control-h-large: 30px; /* buttons, inputs, selects, search */
+  --imb-control-h-xl: 36px;
+  /* Row pitch. */
+  --imb-row-h: 30px; /* sidebar / source-list row */
+  --imb-row-h-list: 48px; /* conversation / item row */
+  --imb-icon-sm: 16px;
+  --imb-icon: 20px;
+  /* Knockout ring behind the rail's group-chat badge: the chrome surface colour,
+     so the chip reads as cut out of the avatar it overlaps. */
+  --imb-nav-badge-ring: var(--imb-p-window);
+  /* Rail-only icon size: the icon-only sidebar has room for a slightly larger
+     glyph than an in-button leading icon, so it does not share `--imb-icon-sm`. */
+  --imb-icon-rail: 18px;
+  /* Fixed icon rail width (the sidebar has no expanded state). */
+  --imb-rail-w: 56px;
+  /* The chrome band is a real grid row across the whole window: native traffic
+     lights (macOS) / window buttons (Windows, Linux) live in it, and the rail +
+     panes start below it. 30px matches a compact macOS titlebar. */
+  --imb-titlebar-h: 30px;
+
+  /* -- 1d. radii (concentric scale) --------------------------------------- */
+  /* window ≥ sheet > card ≥ control > chip > inner. Nested surfaces step down
+     by the padding between them. */
+  --imb-radius-window: 12px;
+  --imb-radius-sheet: 14px;
+  --imb-radius-bubble: 12px; /* chat bubbles; the tail corner uses `inner` */
+  --imb-radius-card: 10px; /* cards, popovers, menus */
+  --imb-radius-control: 7px; /* buttons, fields, rows */
+  --imb-radius-chip: 5px; /* chips, tags, tooltips, code spans */
+  --imb-radius-inner: 3px;
   --imb-radius-pill: 9999px;
-  --imb-elev-flat: none;
-  --imb-elev-ring: 0 0 0 1px var(--imb-border);
+
+  /* -- 1e. elevation ------------------------------------------------------- */
+  /* Three real depths: in-flow card, floating panel, sheet. Plus the two
+     ingredients every raised surface shares (hairline + specular edge). */
+  --imb-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --imb-shadow-2: 0 8px 24px rgba(0, 0, 0, 0.15);
+  --imb-shadow-3: 0 12px 40px rgba(0, 0, 0, 0.18);
+  --imb-highlight-top: inset 0 1px 0 var(--imb-p-specular);
+  /* Press feedback: a tiny inward scale, cancelled under reduced motion. */
+  --imb-press-scale: 0.97;
+
+  /* -- 1f. materials ------------------------------------------------------- */
+  /* The chrome (sidebar rail + the toolbar band across the top) is the only
+     translucent surface in the app. On macOS the native vibrancy material sits
+     behind the web contents and these colours let it through; everywhere else —
+     and for anyone who asked the OS for less transparency — the very same
+     tokens resolve to an opaque colour plus a sheen, so one set of component
+     rules covers both (no `backdrop-filter` anywhere: there is nothing behind
+     an opaque window to blur, and sampling a backdrop per frame is exactly the
+     cost this design avoids).
+     Content surfaces (`--imb-bg-content`, `--imb-bg-window`) stay opaque: glass
+     never carries text. */
+  /* 60% window colour = ~40% of the native material reaches the eye. 72% read
+     as "solid" on a real window over `sidebar`; with `under-window` behind it
+     the chrome needs to give more of itself up. Tuning band for a second pass:
+     55–65% (too transparent → text on busy wallpapers loses contrast; too solid
+     → back to an opaque rail). */
+  --imb-material-chrome: color-mix(
+    in oklab,
+    var(--imb-p-window) 60%,
+    transparent
+  );
+  /* Sheen: the faint top-lit gradient that makes an opaque surface read as a
+     material when there is no real backdrop to sample. */
+  --imb-chrome-sheen: none;
+  /* Floating layers are opaque on purpose: menus over a scrolling list are
+     where translucency destroys legibility (the macOS 26 complaint). */
+  --imb-material-menu: var(--imb-p-raised);
+  --imb-material-popover: var(--imb-p-raised);
+
+  /* -- 1g. motion ---------------------------------------------------------- */
+  --imb-dur-1: 100ms;
+  --imb-dur-2: 200ms;
+  --imb-dur-3: 240ms;
+  --imb-ease-standard: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --imb-ease-emphasized: cubic-bezier(
+    0.22,
+    1,
+    0.36,
+    1
+  ); /* selection slides in */
+  --imb-ease-exit: cubic-bezier(0.4, 0, 1, 1); /* dismissals get out fast */
+
+  /* -- 2. semantics -------------------------------------------------------- */
+
+  --imb-bg-window: var(--imb-p-window);
+  --imb-bg-chrome: var(--imb-p-window); /* P2: becomes the glass surface */
+  --imb-bg-content: var(--imb-p-raised);
+  --imb-bg-group: var(--imb-p-grouped);
+  --imb-bg-control: var(--imb-p-raised);
+  --imb-bg-elevated: var(--imb-p-raised);
+  --imb-bg-sunken: var(--imb-p-grouped);
+
+  --imb-fg: var(--imb-p-ink);
+  --imb-fg-muted: var(--imb-p-ink-2);
+  --imb-fg-tertiary: color-mix(in oklch, var(--imb-p-ink-2) 62%, transparent);
+
+  /* Two line weights: rules between regions, and strokes that must read as an
+     affordance around a control. */
+  --imb-sep: color-mix(in oklab, var(--imb-p-ink) 9%, transparent);
+  --imb-sep-strong: color-mix(in oklab, var(--imb-p-ink) 16%, transparent);
+  --imb-control-border: color-mix(in oklab, var(--imb-p-ink) 16%, transparent);
+
+  --imb-row-hover: color-mix(in oklch, var(--imb-p-ink) 6%, transparent);
+  /* Track fill for capsule controls (segmented control, switch off-state). */
+  --imb-track-bg: color-mix(in oklab, var(--imb-p-ink) 8%, transparent);
+  --imb-row-active: color-mix(
+    in oklch,
+    var(--imb-accent) 15%,
+    var(--imb-bg-content)
+  );
+  --imb-row-selected: color-mix(
+    in oklch,
+    var(--imb-accent) 12%,
+    var(--imb-bg-content)
+  );
+  /* Sidebar selection: on mac it is a tinted capsule, not a solid accent block. */
+  --imb-sel-bg: var(--imb-row-selected);
+  --imb-sel-fg: var(--imb-fg);
+
+  --imb-accent: var(--imb-p-accent);
+  --imb-accent-on: var(--imb-p-accent-on);
+  --imb-accent-hover: var(--imb-p-accent-hover);
+  --imb-accent-active: var(--imb-p-accent-active);
+  --imb-accent-soft: color-mix(in oklch, var(--imb-accent) 14%, transparent);
+  --imb-accent-ring: color-mix(in oklab, var(--imb-accent), transparent 70%);
+  --imb-danger-ring: color-mix(in oklab, var(--imb-p-danger), transparent 70%);
+  --imb-focus-ring: 0 0 0 3px var(--imb-accent-ring);
+
+  /* Sidebar icon tints (Golden Gate: source-list icons are colourful again).
+     Drawn from the accent-preset palette so there is only one colour system. */
+  --imb-tint-emerald: #07c160;
+  --imb-tint-blue: #3370ff;
+  --imb-tint-orange: #f58220;
+  --imb-tint-purple: #8b5cf6;
+  --imb-tint-gray: #8e8e93;
+
+  /* Two danger tints: a soft *fill* for banners, and a translucent one for
+     hover states that must sit on any surface. */
+  --imb-danger-soft: color-mix(
+    in oklch,
+    var(--imb-p-danger) 12%,
+    var(--imb-bg-content)
+  );
+  --imb-danger-tint: color-mix(in oklch, var(--imb-p-danger) 14%, transparent);
+
+  --imb-success: var(--imb-p-success);
+  --imb-warn: var(--imb-p-warn);
+  --imb-danger: var(--imb-p-danger);
+  --imb-bubble-self: var(--imb-p-bubble-self);
+  --imb-bubble-text: var(--imb-p-bubble-ink);
+
+  /* -- 3. aliases (historical names, exact values kept) -------------------- */
+
+  --imb-bg: var(--imb-bg-window);
+  --imb-bg-2: rgb(from var(--imb-bg) r g b / 0.75);
+  --imb-surface: var(--imb-bg-content);
+  --imb-surface-warm: var(--imb-surface);
+  --imb-fg-2: var(--imb-fg);
+  --imb-muted: var(--imb-fg-muted);
+  --imb-meta: var(--imb-muted);
+  --imb-border: var(--imb-p-line);
+  --imb-border-soft: var(--imb-border);
+  --imb-fg-soft: var(--imb-row-hover);
+  --imb-text-2: color-mix(in oklch, var(--imb-muted) 32%, var(--imb-fg));
+
+  /* Numeric aliases. P1 snapped them onto the semantic scale so every component
+     that already used them got the desktop density for free; components migrate
+     to the role names as they are touched. */
+  --imb-text-xs: var(--imb-fs-caption);
+  --imb-text-sm: var(--imb-fs-small);
+  --imb-text-base: var(--imb-fs-ui);
+  --imb-text-lg: var(--imb-fs-ui); /* button labels are body-sized on the mac */
+  --imb-text-xl: var(--imb-fs-title-3);
+  --imb-text-2xl: var(--imb-fs-title-1);
+  --imb-text-3xl: var(--imb-fs-large-title);
+
+  --imb-leading-body: var(--imb-leading-text);
+  --imb-leading-tight: var(--imb-leading-ui);
+
+  --imb-radius-sm: var(--imb-radius-chip);
+  --imb-radius-md: var(--imb-radius-control);
+  --imb-radius-lg: var(--imb-radius-card);
+
   /* In-flow cards and controls: a hairline lift only. */
-  --imb-elev-raised: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --imb-elev-raised: var(--imb-shadow-1);
   /* Layers that float *above* the content (menus, popovers, panels): a real cast
      shadow so the surface reads as detached from the text underneath. */
-  --imb-elev-overlay: 0 8px 24px rgba(0, 0, 0, 0.15);
-  --imb-focus-ring: 0 0 0 3px color-mix(in oklab, var(--imb-accent), transparent 70%);
-  --imb-motion-fast: 100ms;
-  --imb-motion-base: 200ms;
-  --imb-ease-standard: cubic-bezier(0.25, 0.1, 0.25, 1);
-  --imb-container-max: 1200px;
-  --imb-container-gutter-desktop: 24px;
-  --imb-container-gutter-tablet: 16px;
-  --imb-container-gutter-phone: 16px;
+  --imb-elev-overlay: var(--imb-shadow-2);
+
+  --imb-motion-fast: var(--imb-dur-1);
+  --imb-motion-base: var(--imb-dur-2);
+
+  --imb-fs-h2: var(--imb-fs-title-2);
+  --imb-fs-body: var(--imb-fs-ui);
 }
 
-:root {
-  --imb-fs-h1: 24px;
-  --imb-fs-h2: 20px;
-  --imb-fs-h3: 16px;
-  --imb-fs-lead: 15px;
-  --imb-fs-body: 15px;
-  --imb-fs-meta: 13px;
-  --imb-gap-xs: 8px;
-  --imb-gap-sm: 12px;
-  --imb-gap-md: 16px;
-  --imb-gap-lg: 24px;
-  --imb-gap-xl: 32px;
-  --imb-gap-2xl: 48px;
-  --imb-container: 1120px;
-  --imb-gutter: 24px;
-  --imb-radius: var(--imb-radius-md);
-  --imb-accent-soft: color-mix(in oklch, var(--imb-accent) 14%, transparent);
-  --imb-fg-soft: color-mix(in oklch, var(--imb-fg) 6%, transparent);
-  --imb-text-2: color-mix(in oklch, var(--imb-muted) 32%, var(--imb-fg));
-  --imb-titlebar-h: 20px;
-}
+/* ============================================================================
+   Themes
+
+   Light is the base above. A theme only re-declares the palette, which is why
+   dark is eight declarations instead of a full copy of the token file.
+   ========================================================================== */
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme-mode="light"]) {
-    --imb-bg: #1a1a1a;
-    --imb-bg-group: #3e3e3e;
-    --imb-surface: #2c2c2c;
-    --imb-fg: #f7f7f7;
-    --imb-fg-2: var(--imb-fg);
-    --imb-muted: #999999;
-    --imb-meta: var(--imb-muted);
-    --imb-border: #3a3a3a;
-    --imb-border-soft: var(--imb-border);
-    --imb-bubble-self: #4caf50;
-    --imb-bubble-text: #f7f7f7;
+    --imb-p-window: #1a1a1a;
+    --imb-p-grouped: #3e3e3e;
+    --imb-p-raised: #2c2c2c;
+    --imb-p-ink: #f7f7f7;
+    --imb-p-ink-2: #999999;
+    --imb-p-line: #3a3a3a;
+    --imb-p-specular: rgba(255, 255, 255, 0.06);
+    --imb-p-bubble-self: #4caf50;
+    --imb-p-bubble-ink: #f7f7f7;
   }
 
-  .imb-self {
-    --imb-muted: #ccc;
+  /* The boss's own bubbles are the one place the muted text has to lift: they
+     sit on saturated green, where the theme's grey loses too much contrast. */
+  :root:not([data-theme-mode="light"]) .imb-self {
+    --imb-p-ink-2: #ccc;
   }
 }
 
+/* Explicit dark (same palette; kept as a separate entry point because the media
+   query above has to exclude it). */
 :root[data-theme-mode="dark"] {
-  --imb-bg: #1a1a1a;
-  --imb-bg-group: #3e3e3e;
-  --imb-surface: #2c2c2c;
-  --imb-fg: #f7f7f7;
-  --imb-fg-2: var(--imb-fg);
-  --imb-muted: #999999;
-  --imb-meta: var(--imb-muted);
-  --imb-border: #3a3a3a;
-  --imb-border-soft: var(--imb-border);
-  --imb-bubble-self: #4caf50;
-  --imb-bubble-text: #f7f7f7;
+  --imb-p-window: #1a1a1a;
+  --imb-p-grouped: #3e3e3e;
+  --imb-p-raised: #2c2c2c;
+  --imb-p-ink: #f7f7f7;
+  --imb-p-ink-2: #999999;
+  --imb-p-line: #3a3a3a;
+  --imb-p-specular: rgba(255, 255, 255, 0.06);
+  --imb-p-bubble-self: #4caf50;
+  --imb-p-bubble-ink: #f7f7f7;
+}
 
-  .imb-self {
-    --imb-muted: #ccc;
+:root[data-theme-mode="dark"] .imb-self {
+  --imb-p-ink-2: #ccc;
+}
+
+/* Explicit light needs no block: light *is* the base palette, and the dark
+   entries above are excluded by `:not([data-theme-mode="light"])` /
+   `[data-theme-mode="dark"]`. */
+
+/* ============================================================================
+   Platform: where the glass comes from
+
+   macOS gets the real thing (native vibrancy behind the web contents), so the
+   chrome is painted translucent and no CSS blur is involved. Windows and Linux
+   have no material to let through, so the same tokens resolve to the opaque
+   window colour plus a top-lit sheen — the chrome still reads as its own layer,
+   and every component rule stays identical across platforms.
+   ========================================================================== */
+
+:root:not([data-platform="darwin"]) {
+  --imb-material-chrome: var(--imb-p-window);
+  --imb-chrome-sheen: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--imb-p-specular) 55%, transparent),
+    transparent
+  );
+}
+
+/* ============================================================================
+   Accessibility fallbacks
+
+   The OS preference wins over aesthetics, always. These are not settings: they
+   are the platform asking us to stop decorating.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    /* Long enough that transitions still fire (state stays observable), short
+       enough to read as instant. */
+    --imb-dur-1: 1ms;
+    --imb-dur-2: 1ms;
+    --imb-dur-3: 1ms;
+    /* A press that "squashes" is motion; users who asked for less get none. */
+    --imb-press-scale: 1;
   }
 }
 
-/* Explicit light override (wins over the media query). */
-:root[data-theme-mode="light"] {
-  --imb-bg: #ededed;
-  --imb-surface: #f7f7f7;
-  --imb-fg: #1a1a1a;
-  --imb-fg-2: var(--imb-fg);
-  --imb-muted: #888888;
-  --imb-meta: var(--imb-muted);
-  --imb-border: #e0e0e0;
-  --imb-border-soft: var(--imb-border);
-  --imb-bubble-self: #95ec69;
-  --imb-bubble-text: #1a1a1a;
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    /* A user who asked for less transparency gets *opaque*, not "slightly less
+       transparent": the chrome collapses onto its solid backdrop and keeps the
+       sheen (a gradient is not a transparency effect). */
+    --imb-material-chrome: var(--imb-p-window);
+    --imb-chrome-sheen: linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--imb-p-specular) 55%, transparent),
+      transparent
+    );
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    /* Push the two line weights and the secondary text apart from the fill. */
+    --imb-fg-muted: color-mix(in oklab, var(--imb-p-ink) 70%, transparent);
+    --imb-sep: color-mix(in oklab, var(--imb-p-ink) 22%, transparent);
+    --imb-sep-strong: color-mix(in oklab, var(--imb-p-ink) 34%, transparent);
+    --imb-control-border: color-mix(
+      in oklab,
+      var(--imb-p-ink) 34%,
+      transparent
+    );
+  }
 }

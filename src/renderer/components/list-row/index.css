@@ -20,8 +20,8 @@
 
 /* Full-width line below the row button (e.g. the tag editor). */
 .imb-list-row-footer {
-  padding: 0 10px 5px 40px;
-  margin-top: -10px;
+  padding: 0 var(--imb-space-3) var(--imb-space-1) 44px;
+  margin-top: -8px;
 }
 
 .imb-list-row {
@@ -29,8 +29,9 @@
   text-align: left;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 11px 10px;
+  gap: var(--imb-space-3);
+  min-height: var(--imb-row-h-list);
+  padding: var(--imb-space-2) var(--imb-space-3);
   border: 0;
   background: transparent;
 }
@@ -59,11 +60,6 @@
   text-overflow: ellipsis;
 }
 
-.imb-list-row-wrap.imb-is-active .imb-list-row-name {
-  font-weight: 600;
-  color: var(--imb-fg);
-}
-
 .imb-list-row-time {
   font-family: var(--imb-font-mono);
   font-size: var(--imb-text-xs);
@@ -75,8 +71,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-top: 3px;
+  gap: var(--imb-space-2);
+  margin-top: var(--imb-space-1);
 }
 
 .imb-list-row-desc {
@@ -93,13 +89,13 @@
 
 .imb-unread {
   flex: none;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 9px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--imb-radius-pill);
   background: var(--imb-accent);
   color: var(--imb-accent-on);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   display: grid;
   place-items: center;
@@ -108,11 +104,11 @@
 /* Muted pill tag used for e.g. the built-in assistant's "Built-in" badge. */
 .imb-badge {
   flex: none;
-  padding: 1px 7px;
-  border-radius: var(--imb-radius-pill);
+  padding: 0 6px;
+  border-radius: var(--imb-radius-chip);
   background: color-mix(in oklch, var(--imb-accent) 14%, var(--imb-surface));
   color: var(--imb-accent);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   white-space: nowrap;
 }

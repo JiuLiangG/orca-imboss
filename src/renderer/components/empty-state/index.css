@@ -1,11 +1,13 @@
+/* Empty states: one recipe, two sizes. Muted, 12px, generous vertical padding —
+   an empty pane should read as calm, not as an error. */
 .imb-list-empty {
-  padding: 32px 16px;
+  padding: var(--imb-space-6) var(--imb-space-5);
   text-align: center;
-  color: var(--imb-muted);
-  font-size: var(--imb-text-sm);
-  line-height: var(--imb-leading-body);
+  color: var(--imb-fg-muted);
+  font-size: var(--imb-fs-small);
+  line-height: var(--imb-leading-text);
 }
 
 .imb-list-empty.imb-detail {
-  padding: 48px 24px;
+  padding: var(--imb-space-8) var(--imb-space-5);
 }

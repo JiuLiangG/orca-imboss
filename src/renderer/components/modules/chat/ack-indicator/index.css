@@ -32,7 +32,7 @@
 
 /* Direct children of the track are the dim base dots; the overlay's dots stay
    fully lit and are faded as a whole by the overlay's own opacity. */
-.imb-ack-track>.imb-ack-dot {
+.imb-ack-track > .imb-ack-dot {
   opacity: 0.3;
 }
 
@@ -79,6 +79,15 @@
    flex gap goes with it). The indicator is now wrapped in an `.imb-msg` row,
    so target that wrapper (the thread's direct child) instead of the bare
    `.imb-ack`, which is no longer a `.imb-thread` child. */
-.imb-thread>.imb-msg:has(> .imb-ack):has(~ .imb-msg) {
+.imb-thread > .imb-msg:has(> .imb-ack):has(~ .imb-msg) {
   display: none;
+}
+
+/* The three-dot "someone is typing" sweep is decoration: with reduced motion we
+   pin it to its fully-lit end state instead of animating. */
+@media (prefers-reduced-motion: reduce) {
+  .imb-ack-fill {
+    animation: none;
+    clip-path: inset(0 0 0 0);
+  }
 }

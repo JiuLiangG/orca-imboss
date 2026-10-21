@@ -1,13 +1,13 @@
 .imb-textarea {
   width: 100%;
-  padding: 10px 13px;
+  padding: var(--imb-space-2) var(--imb-space-3);
   border: 1px solid var(--imb-border);
-  border-radius: var(--imb-radius-md);
+  border-radius: var(--imb-radius-control);
   background: var(--imb-surface);
   color: var(--imb-fg);
   font: inherit;
   font-size: var(--imb-text-base);
-  min-height: 96px;
+  min-height: 84px;
   resize: vertical;
   line-height: var(--imb-leading-body);
   transition:

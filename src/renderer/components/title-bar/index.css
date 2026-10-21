@@ -1,17 +1,23 @@
+/*
+ * The chrome band: row 1 of `.imb-app`, full window width, 30px tall.
+ *
+ * It is a grid item, not an overlay — the rail and the panes live in row 2 and
+ * begin at its bottom edge. That is what keeps the material honest: the band and
+ * the rail are two touching boxes, so their shared translucent paint is never
+ * applied twice.
+ */
 .imb-titlebar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: var(--imb-titlebar-h, 32px);
+  grid-column: 1 / -1;
+  grid-row: 1;
   display: flex;
-  align-items: start;
+  align-items: center;
+  /* Only the Windows/Linux window buttons sit in the band; macOS leaves the rest
+     of it to the traffic lights and the drag region. */
   justify-content: flex-end;
+  padding-right: var(--imb-space-2);
   -webkit-app-region: drag;
   app-region: drag;
   user-select: none;
-  background: transparent;
-  z-index: 10;
 }
 
 .imb-winbtns {

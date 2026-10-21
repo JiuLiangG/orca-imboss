@@ -11,9 +11,9 @@
 .imb-modal {
   width: 100%;
   max-width: 580px;
-  background: var(--imb-surface);
-  border-radius: var(--imb-radius-lg);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  background: var(--imb-material-popover);
+  border-radius: var(--imb-radius-sheet);
+  box-shadow: var(--imb-highlight-top), var(--imb-shadow-3);
   overflow: hidden;
   max-height: calc(100vh - 40px);
   display: flex;
@@ -29,18 +29,18 @@
 }
 
 .imb-modal-head h3 {
-  font-size: var(--imb-text-xl);
-  font-weight: 600;
+  font-size: var(--imb-fs-title-2);
+  font-weight: var(--imb-fw-semibold);
 }
 
 .imb-modal-head .imb-sub {
   color: var(--imb-muted);
   font-size: var(--imb-text-sm);
-  margin-top: 3px;
+  margin-top: var(--imb-space-1);
 }
 
 .imb-modal-body {
-  padding: var(--imb-space-1) var(--imb-space-6) var(--imb-space-2);
+  padding: var(--imb-space-2) var(--imb-space-6) var(--imb-space-3);
   max-height: 60vh;
   overflow-y: auto;
   flex: 1;
@@ -48,12 +48,12 @@
 
 .imb-modal-error {
   padding: 0 var(--imb-space-6);
-  margin: 0 0 var(--imb-space-2);
+  margin: 0 0 var(--imb-space-3);
 }
 
 .imb-modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: var(--imb-space-3);
+  gap: var(--imb-space-2);
   padding: var(--imb-space-3) var(--imb-space-6) var(--imb-space-5);
 }

@@ -907,7 +907,7 @@ export function ChatInputBar({
               createPortal(
                 <div
                   ref={popupMenuRef}
-                  className="imb-attach-popup imb-open"
+                  className="imb-attach-popup imb-menu-surface imb-open"
                   role="menu"
                   style={{
                     position: "fixed",
@@ -923,7 +923,7 @@ export function ChatInputBar({
                   <button
                     type="button"
                     role="menuitem"
-                    className="imb-attach-popup-item"
+                    className="imb-attach-popup-item imb-menu-row"
                     onClick={() => {
                       setPopupOpen(false);
                       fileInputRef.current?.click();
@@ -935,7 +935,7 @@ export function ChatInputBar({
                   <button
                     type="button"
                     role="menuitem"
-                    className="imb-attach-popup-item"
+                    className="imb-attach-popup-item imb-menu-row"
                     onClick={() => {
                       setPopupOpen(false);
                       void chooseFolders();
@@ -947,7 +947,7 @@ export function ChatInputBar({
                   <button
                     type="button"
                     role="menuitem"
-                    className="imb-attach-popup-item"
+                    className="imb-attach-popup-item imb-menu-row"
                     onClick={() => {
                       setPopupOpen(false);
                       setChatQuery("");
@@ -963,13 +963,16 @@ export function ChatInputBar({
                       none is configured. */}
                   {projects.length > 0 && (
                     <>
-                      <div className="imb-attach-popup-sep" role="separator" />
+                      <div
+                        className="imb-attach-popup-sep imb-menu-sep"
+                        role="separator"
+                      />
                       {projects.map((project) => (
                         <button
                           key={project.id}
                           type="button"
                           role="menuitem"
-                          className="imb-attach-popup-item"
+                          className="imb-attach-popup-item imb-menu-row"
                           onClick={() => void applyProject(project)}
                         >
                           <IconFolder />

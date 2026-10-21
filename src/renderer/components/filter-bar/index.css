@@ -18,7 +18,7 @@
   display: flex;
   align-items: center;
   gap: var(--imb-space-2);
-  min-height: 30px;
+  min-height: var(--imb-control-h-large);
   padding: 2px var(--imb-space-1) 2px var(--imb-space-3);
   border: 1px solid var(--imb-border);
   border-radius: var(--imb-radius-md);
@@ -34,7 +34,7 @@
   box-shadow: var(--imb-focus-ring);
 }
 
-.imb-filterbar-box>.imb-icon {
+.imb-filterbar-box > .imb-icon {
   color: var(--imb-muted);
   flex: none;
 }

@@ -2,11 +2,11 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 9px;
-  border-radius: var(--imb-radius-pill);
+  padding: 1px 6px;
+  border-radius: var(--imb-radius-chip);
   background: var(--imb-accent-soft);
   color: var(--imb-accent-active);
-  font-size: var(--imb-text-sm);
+  font-size: var(--imb-fs-caption);
   white-space: nowrap;
   max-width: 100%;
   user-select: text;
@@ -17,7 +17,7 @@
   background: none;
   cursor: pointer;
   color: inherit;
-  font-size: var(--imb-text-sm);
+  font-size: var(--imb-fs-caption);
   line-height: 1;
   padding: 0 1px;
   opacity: 0.7;

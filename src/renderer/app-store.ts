@@ -162,7 +162,6 @@ const LEGACY_MODULE_SECTIONS: Record<string, SettingsSection> = {
 export const appStore = proxy({
   locale: imb.initialLocale,
   theme: { mode: "system", color: "#07C160" } as ThemeState,
-  navCollapsed: false,
   module: "chat" as AppModule,
 
   /** Folder id of the mini app currently open in `module === "miniapp"`. */
@@ -1033,14 +1032,10 @@ export async function initAppStore(): Promise<void> {
 
   await Promise.all([
     imb.theme.get(),
-    imb.settings.get(SettingKeys.NavCollapse),
     imb.settings.get(SettingKeys.Module),
     imb.settings.get(SettingKeys.MiniAppActive),
-  ]).then(([theme, collapsed, storedModule, storedMiniApp]) => {
+  ]).then(([theme, storedModule, storedMiniApp]) => {
     updateThemeState(theme);
-    if (collapsed === "1") {
-      appStore.navCollapsed = true;
-    }
     if (storedModule) {
       const legacySection = LEGACY_MODULE_SECTIONS[storedModule] ?? null;
       if (legacySection !== null) {

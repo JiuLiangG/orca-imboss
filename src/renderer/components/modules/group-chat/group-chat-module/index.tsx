@@ -6,8 +6,8 @@ import { ModuleView } from "../../../app-shell";
 import { GroupAvatar } from "../../../group-avatar";
 import { MessageItem } from "../../chat/message-item";
 import { shouldShowTimeSeparator } from "../../chat/relative-time";
-import { TimeSeparator } from "../../chat/time-separator";
 import "../../chat/thread.css";
+import { TimeSeparator } from "../../chat/time-separator";
 
 export interface GroupChatModuleProps {
   chatId: number;
@@ -104,7 +104,7 @@ export function GroupChatModule({
         <div className="imb-chat-header-avatar">
           <GroupAvatar
             participants={chat?.participants ?? []}
-            size={36}
+            size={30}
             title={chat?.title}
           />
         </div>

@@ -16,7 +16,6 @@ export const SettingKeys = {
   HttpProxy: "network.httpProxy",
   ThemeMode: "ui.theme.mode",
   ThemeColor: "ui.theme.color",
-  NavCollapse: "ui.navCollapsed",
   Module: "ui.module",
   WindowState: "ui.window",
   /** Folder id of the last opened mini app (restored on next launch). */

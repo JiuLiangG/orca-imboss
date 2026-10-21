@@ -49,8 +49,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 32px;
+  width: 20px;
+  height: var(--imb-control-h-large);
   padding: 0;
   border: none;
   background: none;
@@ -73,14 +73,14 @@
 .imb-project-name-input {
   flex: 1;
   min-width: 0;
-  height: 36px;
-  padding: 6px 10px;
+  height: var(--imb-control-h-large);
+  padding: 0 var(--imb-space-2);
 }
 
 .imb-project-body {
   display: flex;
   flex-direction: column;
-  gap: var(--imb-space-2);
+  gap: var(--imb-space-3);
   padding-left: calc(24px + var(--imb-space-2));
 }
 
@@ -93,9 +93,9 @@
 .imb-project-folder-path {
   flex: 1;
   min-width: 0;
-  height: 36px;
-  padding: 6px 10px;
-  font-size: var(--imb-text-sm);
+  height: var(--imb-control-h-large);
+  padding: 0 var(--imb-space-2);
+  font-size: var(--imb-fs-small);
 }
 
 .imb-project-folder-btn {

@@ -7,11 +7,11 @@
   position: fixed;
   z-index: 60;
   max-width: 300px;
-  padding: var(--imb-space-3) var(--imb-space-4);
-  background: var(--imb-surface);
-  border: 1px solid var(--imb-border);
-  border-radius: var(--imb-radius-lg);
-  box-shadow: var(--imb-elev-raised);
+  padding: var(--imb-space-2) var(--imb-space-3);
+  background: var(--imb-material-popover);
+  border: 1px solid var(--imb-sep-strong);
+  border-radius: var(--imb-radius-card);
+  box-shadow: var(--imb-highlight-top), var(--imb-shadow-2);
   color: var(--imb-fg);
   font-size: var(--imb-text-sm);
   line-height: var(--imb-leading-tight);

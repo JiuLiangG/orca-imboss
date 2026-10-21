@@ -1,38 +1,52 @@
+/* macOS switch: 38×22 capsule, knob on a hairline shadow. The track starts as a
+   neutral tint and only fills with the accent when on; the knob eases with the
+   emphasized curve so the flip reads as a hand moving a switch. */
 .imb-toggle {
   position: relative;
   flex: none;
-  width: 40px;
-  height: 24px;
+  width: 38px;
+  height: 22px;
   padding: 0;
-  border: 1px solid var(--imb-border);
-  border-radius: var(--imb-radius-pill, 999px);
-  background: var(--imb-surface);
+  border: 1px solid transparent;
+  border-radius: var(--imb-radius-pill);
+  background: var(--imb-track-bg);
   cursor: pointer;
   transition:
-    background 0.15s ease,
-    border-color 0.15s ease;
+    background var(--imb-motion-base) var(--imb-ease-standard),
+    opacity var(--imb-motion-fast) var(--imb-ease-standard),
+    transform var(--imb-dur-1) var(--imb-ease-standard);
+}
+
+.imb-toggle:active:not(:disabled) {
+  transform: scale(var(--imb-press-scale));
+}
+
+.imb-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
 }
 
 .imb-toggle:disabled {
   opacity: 0.55;
-  cursor: not-allowed;
+  cursor: default;
 }
 
 .imb-toggle.imb-is-on {
   background: var(--imb-accent);
-  border-color: var(--imb-accent);
 }
 
 .imb-toggle-knob {
   position: absolute;
-  top: 2px;
-  left: 2px;
+  top: 1px;
+  left: 1px;
   width: 18px;
   height: 18px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-  transition: transform 0.15s ease;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.24),
+    0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  transition: transform var(--imb-motion-base) var(--imb-ease-emphasized);
 }
 
 .imb-toggle.imb-is-on .imb-toggle-knob {

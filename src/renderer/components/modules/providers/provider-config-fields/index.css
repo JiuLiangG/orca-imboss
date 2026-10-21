@@ -21,8 +21,8 @@
 .imb-model-row .imb-model-row-id {
   flex: 1;
   min-width: 0;
-  height: 36px;
-  padding: 6px 10px;
+  height: var(--imb-control-h-large);
+  padding: 0 var(--imb-space-2);
 }
 
 /* The multi-select trigger has its own 38px height; keep the row compact. */
@@ -31,8 +31,8 @@
 }
 
 .imb-model-row .imb-model-row-input .imb-ms-trigger {
-  min-height: 36px;
-  font-size: var(--imb-text-sm);
+  min-height: var(--imb-control-h-large);
+  font-size: var(--imb-fs-small);
 }
 
 .imb-model-rows-empty {

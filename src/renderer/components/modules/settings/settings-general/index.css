@@ -7,8 +7,8 @@
 .imb-settings-workdir-row .imb-workdir-path {
   flex: 1;
   min-width: 0;
-  height: 36px;
-  padding: 6px 10px;
+  height: var(--imb-control-h-large);
+  padding: 0 var(--imb-space-2);
 }
 
 .imb-workdir-badge {
@@ -54,8 +54,8 @@
 .imb-env-list {
   display: flex;
   flex-direction: column;
-  gap: var(--imb-space-2);
-  margin-top: var(--imb-space-2);
+  gap: var(--imb-space-3);
+  margin-top: var(--imb-space-3);
 }
 
 .imb-env-row {
@@ -67,8 +67,8 @@
 .imb-env-row .imb-input {
   flex: 1;
   min-width: 0;
-  height: 36px;
-  padding: 6px 10px;
+  height: var(--imb-control-h-large);
+  padding: 0 var(--imb-space-2);
 }
 
 .imb-env-row .imb-input.imb-env-key {

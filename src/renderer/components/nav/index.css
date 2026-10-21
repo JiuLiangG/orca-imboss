@@ -1,9 +1,28 @@
+/*
+ * Fixed source-list rail (`--imb-rail-w`, 60px).
+ *
+ * The sidebar is icon-only by design: there is no expanded state any more, so
+ * every row is an icon in a fixed-width rail and the name lives in a tooltip on
+ * the right. Keeping one state means one set of rules and no collapsed/expanded
+ * branching (`data-*` switches, width transitions, label truncation).
+ *
+ * The rail's material comes from the shared `.imb-chrome` class (base.css), the
+ * same declaration the toolbar band uses.
+ */
 .imb-nav {
   display: flex;
   flex-direction: column;
-  background: var(--imb-bg);
-  border-right: 1px solid var(--imb-border);
-  padding: calc(var(--imb-titlebar-h) + var(--imb-space-5)) var(--imb-space-4) var(--imb-space-4);
+  /*
+   * No edge line between the rail and the list pane. The rail is a different
+   * surface (chrome material vs content fill), so the tone step already
+   * separates them — and a vertical rule running up into the toolbar band read
+   * as fighting the window buttons. The list/detail hairline stays: those two
+   * panes share the same fill and need it.
+   */
+  grid-column: 1;
+  grid-row: 2;
+  /* The band above is a real row now, so the rail only needs its own inset. */
+  padding: var(--imb-space-3) var(--imb-space-2);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -11,43 +30,41 @@
 
 .imb-nav-brand {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 10px 18px;
+  justify-content: center;
+  padding: var(--imb-space-1) 0 var(--imb-space-4);
 }
 
-.imb-nav-brandname {
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
+/* The brand mark is the rail's only non-icon element: size it here, not in JS. */
+.imb-nav-brand .imb-brand-logo {
+  width: 28px;
+  border-radius: 6px;
 }
 
 .imb-scroll {
   overflow-y: scroll;
   scrollbar-width: none;
+  /* Groups are separated by space, not by rules: a 1px line inside a 56px rail
+     reads as a table border and fights the rail's own edges. */
+  margin-top: var(--imb-space-3);
 }
 
 .imb-nav-items {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--imb-space-1);
 }
 
 .imb-nav-item {
   display: flex;
   align-items: center;
-  gap: 11px;
+  justify-content: center;
   width: 100%;
-  height: 34px;
-  text-align: left;
-  padding: 6px 12px;
+  height: var(--imb-row-h);
+  padding: 0;
   border: 0;
   background: transparent;
-  border-radius: var(--imb-radius-md);
+  border-radius: var(--imb-radius-control);
   color: var(--imb-text-2);
-  font-size: 14px;
-  white-space: nowrap;
   overflow: hidden;
   transition:
     background var(--imb-motion-fast) var(--imb-ease-standard),
@@ -65,20 +82,83 @@
 }
 
 .imb-nav-item.imb-is-active {
-  color: var(--imb-accent-active);
-  font-weight: 600;
+  background: var(--imb-sel-bg);
+  color: var(--imb-fg);
+}
+
+/* Source-list icons carry colour again (macOS 27). The chat icon follows the
+   chosen accent so the rail still reads as the brand; the rest are fixed
+   category tints from the same palette. */
+.imb-nav-item[data-module="chat"] .imb-icon {
+  color: var(--imb-accent);
+}
+
+.imb-nav-item[data-module="employees"] .imb-icon {
+  color: var(--imb-tint-blue);
+}
+
+.imb-nav-item[data-module="cron"] .imb-icon {
+  color: var(--imb-tint-orange);
+}
+
+.imb-nav-item[data-module="spend"] .imb-icon {
+  color: var(--imb-tint-purple);
+}
+
+.imb-nav-item[data-module="settings"] .imb-icon {
+  color: var(--imb-tint-gray);
 }
 
 .imb-nav-item .imb-icon {
+  width: var(--imb-icon-rail);
+  height: var(--imb-icon-rail);
   color: currentColor;
   flex: none;
 }
 
-.imb-nav-appicon {
-  width: 20px;
-  height: 20px;
+/* Avatar + badge share one positioning box so the rail row stays centred. */
+.imb-nav-avatar {
+  position: relative;
+  display: flex;
   flex: none;
-  border-radius: 5px;
+}
+
+/*
+ * Group-chat badge, pinned to the avatar's bottom-right.
+ *
+ * 11px chip, 2px overlap with the 24px avatar, and a 1.5px knockout ring in the
+ * chrome base colour: without the ring the accent chip visually merges into the
+ * avatar's mosaic. It stays inside a 30px row (top 18 → bottom 29) and 3px clear
+ * of the rail's padding box, and the ring colour is the *surface* colour, so the
+ * part that overlaps the avatar reads as a bite rather than a border.
+ */
+.imb-nav-badge {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 11px;
+  height: 11px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--imb-radius-pill);
+  background: var(--imb-accent);
+  color: var(--imb-accent-on);
+  box-shadow: 0 0 0 1.5px var(--imb-nav-badge-ring);
+  pointer-events: none;
+}
+
+.imb-nav-badge svg {
+  /* 7px inside an 11px chip: any smaller and the two tiles blur into one blob. */
+  width: 7px;
+  height: 7px;
+  fill: currentColor;
+}
+
+.imb-nav-appicon {
+  width: var(--imb-icon-rail);
+  height: var(--imb-icon-rail);
+  flex: none;
+  border-radius: 4px;
   object-fit: cover;
 }
 
@@ -91,13 +171,13 @@
   overflow-clip-margin: 4px;
 }
 
-/* Sortable sidebar row. The wrapper owns the dnd-kit transform so `Tooltip`'s
-   ref on the inner button is never clobbered. */
+/* Sortable rail row. The wrapper owns the dnd-kit transform so `Tooltip`'s ref
+   on the inner button is never clobbered. */
 .imb-nav-sortable {
   position: relative;
 }
 
-.imb-nav-sortable>.imb-nav-item {
+.imb-nav-sortable > .imb-nav-item {
   cursor: grab;
 }
 
@@ -105,102 +185,23 @@
   z-index: 1;
 }
 
-.imb-nav-sortable.imb-is-dragging>.imb-nav-item {
+.imb-nav-sortable.imb-is-dragging > .imb-nav-item {
   opacity: 0.5;
   cursor: grabbing;
-}
-
-/* Long chat titles truncate with an ellipsis instead of hard-clipping. */
-.imb-nav-item>.imb-nav-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .imb-nav-spacer {
   flex: 1;
 }
 
-.imb-nav-divider {
-  height: 1px;
-  background: var(--imb-border);
-  margin: var(--imb-space-1) 0;
-  flex: none;
+/* Mini-app and opened-session groups are siblings inside `.imb-scroll`; when both
+   exist they get the same space-only separation. */
+.imb-nav-sortable-list + .imb-nav-sortable-list {
+  margin-top: var(--imb-space-3);
 }
 
 .imb-nav-bottom {
-  border-top: 1px solid var(--imb-border);
-  margin-top: 12px;
-  padding-top: 10px;
-}
-
-.imb-nav-toggle {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  width: 100%;
-  padding: 6px 12px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  border-radius: var(--imb-radius-md);
-  white-space: nowrap;
-}
-
-.imb-nav-toggle:hover {
-  color: var(--imb-fg);
-  background: var(--imb-fg-soft);
-}
-
-.imb-nav-toggle:focus-visible {
-  outline: none;
-  box-shadow: var(--imb-focus-ring);
-}
-
-.imb-nav-toggle .imb-icon {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-}
-
-.imb-nav-toggle span {
-  font-size: 14px;
-  white-space: nowrap;
-}
-
-.imb-nav.imb-is-collapsed .imb-nav-toggle {
-  justify-content: center;
-  padding: 6px 0;
-}
-
-.imb-nav.imb-is-collapsed .imb-nav-toggle .imb-icon {
-  transform: rotate(180deg);
-}
-
-.imb-nav.imb-is-collapsed .imb-nav-toggle span {
-  display: none;
-}
-
-.imb-app.imb-is-collapsed {
-  grid-template-columns: 76px 1fr;
-}
-
-.imb-nav.imb-is-collapsed .imb-nav-item .imb-nav-label,
-.imb-nav.imb-is-collapsed .imb-nav-brandname {
-  display: none;
-}
-
-.imb-nav.imb-is-collapsed .imb-nav-brand {
-  justify-content: center;
-  padding: 6px 1px 18px;
-}
-
-.imb-nav.imb-is-collapsed .imb-nav-item {
-  justify-content: center;
-  padding: 6px 0;
-}
-
-.imb-nav.imb-is-collapsed .imb-nav-bottom .imb-nav-item {
-  justify-content: center;
+  /* The spacer above already pins this group to the bottom; no rule, no inset. */
+  margin-top: 0;
+  padding-top: 0;
 }

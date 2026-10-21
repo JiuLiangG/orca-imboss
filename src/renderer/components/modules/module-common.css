@@ -1,27 +1,31 @@
 .imb-field-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--imb-space-4);
+  gap: var(--imb-space-5);
 }
 
 .imb-field-row--single {
   grid-template-columns: 1fr;
 }
 
+/* Error banner: one recipe shared with the chat module's banner (`.imb-chat-error`).
+   A tinted fill + hairline reads as "something failed" without the shout of a
+   solid red bar. */
 .imb-module-error {
   position: fixed;
   left: 50%;
-  bottom: 12px;
+  bottom: var(--imb-space-3);
   transform: translateX(-50%);
   z-index: 60;
-  background: color-mix(in oklch, var(--imb-danger) 12%, var(--imb-surface));
-  border: 1px solid var(--imb-danger);
-  border-radius: var(--imb-radius-md);
-  padding: 6px 14px;
+  background: var(--imb-danger-soft);
+  border: 1px solid color-mix(in oklab, var(--imb-danger) 45%, transparent);
+  border-radius: var(--imb-radius-card);
+  padding: var(--imb-space-1) var(--imb-space-3);
   max-width: 60vw;
-  box-shadow: var(--imb-elev-raised);
+  box-shadow: var(--imb-shadow-1);
   margin: 0;
-  font-size: var(--imb-text-sm);
+  color: var(--imb-fg);
+  font-size: var(--imb-fs-small);
 }
 
 .imb-module-note {

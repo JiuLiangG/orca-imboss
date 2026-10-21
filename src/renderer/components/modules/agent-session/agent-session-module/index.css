@@ -528,3 +528,10 @@ button.imb-session-tool-head:hover {
   line-height: var(--imb-leading-body);
   word-break: break-word;
 }
+
+/* Decorative pulse: stop it for reduced-motion users. */
+@media (prefers-reduced-motion: reduce) {
+  .imb-session-tool.imb-is-running .imb-session-tool-dot {
+    animation: none;
+  }
+}

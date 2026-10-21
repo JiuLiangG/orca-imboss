@@ -6,11 +6,11 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 9px;
-  border-radius: var(--imb-radius-pill);
+  padding: 1px 6px;
+  border-radius: var(--imb-radius-chip);
   background: var(--imb-accent-soft);
   color: var(--imb-accent-active);
-  font-size: var(--imb-text-sm);
+  font-size: var(--imb-fs-caption);
   white-space: nowrap;
   max-width: 100%;
   user-select: text;
@@ -18,14 +18,14 @@
 
 .imb-ms-trigger {
   width: 100%;
-  min-height: 38px;
+  min-height: var(--imb-control-h-large);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 4px 12px;
+  gap: var(--imb-space-1);
+  padding: 2px var(--imb-space-2);
   border: 1px solid var(--imb-border);
-  border-radius: var(--imb-radius-md);
+  border-radius: var(--imb-radius-control);
   background: var(--imb-surface);
   color: var(--imb-fg);
   font: inherit;
@@ -74,30 +74,16 @@
 }
 
 .imb-ms-panel {
-  background: var(--imb-surface);
-  border: 1px solid var(--imb-border);
-  border-radius: var(--imb-radius-md);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  /* Surface/border/shadow come from the shared menu recipe in base.css. */
   overflow: hidden auto;
-}
-
-.imb-ms-option {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
-  border-radius: var(--imb-radius-sm);
-  cursor: pointer;
-  font-size: var(--imb-text-base);
-  color: var(--imb-fg);
-}
-
-.imb-ms-option:hover {
-  background: var(--imb-fg-soft);
 }
 
 .imb-ms-option.imb-is-checked {
   color: var(--imb-accent-active);
+}
+
+.imb-ms-option.imb-is-checked.imb-is-active {
+  background: var(--imb-fg-soft);
 }
 
 .imb-ms-option input {
@@ -109,7 +95,7 @@
 }
 
 .imb-ms-empty {
-  padding: 9px 10px;
+  padding: var(--imb-space-2) var(--imb-space-2);
   color: var(--imb-muted);
   text-align: center;
   font-size: var(--imb-text-sm);
@@ -159,10 +145,10 @@
   display: block;
   width: 100%;
   text-align: left;
-  padding: 9px 10px;
+  padding: var(--imb-space-1) var(--imb-space-2);
   margin-top: 2px;
   border: 0;
-  border-radius: var(--imb-radius-sm);
+  border-radius: var(--imb-radius-chip);
   background: transparent;
   color: var(--imb-accent-active);
   font: inherit;
@@ -181,8 +167,8 @@
 /* "Clear all" control, a sibling of the trigger so it never toggles the panel.
    The higher-specificity padding rule keeps the chips clear of it in every
    variant (the module-level trigger overrides have lower specificity). */
-.imb-ms.imb-ms-has-clear>.imb-ms-trigger {
-  padding-right: 38px;
+.imb-ms.imb-ms-has-clear > .imb-ms-trigger {
+  padding-right: 28px;
 }
 
 .imb-ms-clear {

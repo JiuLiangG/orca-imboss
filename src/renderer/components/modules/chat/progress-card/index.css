@@ -148,3 +148,11 @@ button.imb-pname-link:focus-visible {
   min-width: 0;
   cursor: pointer;
 }
+
+/* Decorative pulse: stop it for reduced-motion users (the "busy" label and the
+   dot's colour still say what is going on). */
+@media (prefers-reduced-motion: reduce) {
+  .imb-progress-tag.imb-busy .imb-status-dot {
+    animation: none;
+  }
+}

@@ -3,23 +3,28 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding-top: var(--imb-titlebar-h);
+  /* The pane's fill starts at its own top edge: the band is a grid row above, so
+     there is nothing to punch a hole for. Breathing room at the top comes from
+     the headers themselves. */
   background: var(--imb-surface);
 }
 
 .imb-listpane {
-  border-right: 1px solid var(--imb-border);
+  /* Hairline between list and detail. The pane starts at the band's bottom edge,
+     so an inset shadow spans exactly the content area — no pseudo-element needed
+     any more. */
+  box-shadow: inset -1px 0 0 var(--imb-sep);
 }
 
 .imb-pane-header {
-  padding: 0 var(--imb-space-2) var(--imb-space-2);
+  padding: var(--imb-space-2) var(--imb-space-3);
   flex: none;
 }
 
 .imb-pane-title {
-  font-size: var(--imb-text-xl);
-  font-weight: 600;
-  padding: 0 2px var(--imb-space-4);
+  font-size: var(--imb-fs-title-3);
+  font-weight: var(--imb-fw-semibold);
+  padding: 0 2px var(--imb-space-3);
 }
 
 /* Scrollable list body. Most modules fill it with `ItemList` (whose
@@ -37,7 +42,7 @@
 
 .imb-pane-footer {
   flex: none;
-  padding: var(--imb-space-3) var(--imb-space-4) var(--imb-space-4);
+  padding: var(--imb-space-3) var(--imb-space-4);
   border-top: 1px solid var(--imb-border);
 }
 

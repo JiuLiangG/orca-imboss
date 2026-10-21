@@ -11,7 +11,8 @@
   flex: none;
   transition:
     color var(--imb-motion-fast) var(--imb-ease-standard),
-    background var(--imb-motion-fast) var(--imb-ease-standard);
+    background var(--imb-motion-fast) var(--imb-ease-standard),
+    transform var(--imb-dur-1) var(--imb-ease-standard);
 }
 
 .imb-icon-btn:hover:not(:disabled) {
@@ -20,7 +21,8 @@
 }
 
 .imb-icon-btn:active:not(:disabled) {
-  background: rgba(0, 0, 0, 0.08);
+  background: var(--imb-fg-soft);
+  transform: scale(var(--imb-press-scale));
 }
 
 .imb-icon-btn:focus-visible {

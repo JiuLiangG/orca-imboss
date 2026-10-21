@@ -20,7 +20,7 @@
   /* Percentage cap: a fixed 12px gap is a waste of the title column on the
      narrowest panes. */
   gap: min(var(--imb-space-3), 4%);
-  padding: 0 var(--imb-space-6) var(--imb-space-4);
+  padding: var(--imb-space-2) var(--imb-space-6) var(--imb-space-3);
   border-bottom: 1px solid var(--imb-border);
 }
 

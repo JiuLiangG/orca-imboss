@@ -1,6 +1,9 @@
 .imb-app {
   display: grid;
-  grid-template-columns: 208px 1fr;
+  /* Row 1 is the chrome band (full width); row 2 holds the fixed icon rail plus
+     the content. Both rows are real boxes, so nothing overlays anything else. */
+  grid-template-columns: var(--imb-rail-w) 1fr;
+  grid-template-rows: var(--imb-titlebar-h) 1fr;
   height: 100vh;
   min-height: 0;
   width: 100vw;
@@ -11,6 +14,8 @@
 /* Content region next to the nav rail. Holds the list/detail split for
    `list-detail` modules, or a single content pane for two-column modules. */
 .imb-shell-content {
+  grid-column: 2;
+  grid-row: 2;
   display: grid;
   grid-template-columns: 300px 1fr;
   min-width: 0;

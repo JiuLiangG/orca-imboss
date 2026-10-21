@@ -27,11 +27,11 @@
   display: inline;
 }
 
-.imb-markdown> :first-child {
+.imb-markdown > :first-child {
   margin-top: 0;
 }
 
-.imb-markdown> :last-child {
+.imb-markdown > :last-child {
   margin-bottom: 0;
 }
 
@@ -45,7 +45,7 @@
 .imb-markdown h4,
 .imb-markdown h5,
 .imb-markdown h6 {
-  margin: var(--imb-space-3) 0 var(--imb-space-2);
+  margin: var(--imb-space-4) 0 var(--imb-space-2);
   line-height: var(--imb-leading-tight);
   font-weight: 600;
 }
@@ -55,11 +55,11 @@
 }
 
 .imb-markdown h2 {
-  font-size: var(--imb-text-xl);
+  font-size: var(--imb-fs-title-2);
 }
 
 .imb-markdown h3 {
-  font-size: var(--imb-text-lg);
+  font-size: var(--imb-fs-title-3);
 }
 
 .imb-markdown h4,
@@ -70,15 +70,15 @@
 
 .imb-markdown ul,
 .imb-markdown ol {
-  margin: 0 0 var(--imb-space-2);
+  margin: 0 0 var(--imb-space-3);
   padding-left: var(--imb-space-5);
 }
 
 .imb-markdown li {
-  margin: 2px 0;
+  margin: var(--imb-space-1) 0;
 }
 
-.imb-markdown li>p {
+.imb-markdown li > p {
   margin: 0;
 }
 

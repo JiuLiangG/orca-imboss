@@ -1,6 +1,6 @@
 .imb-msg {
   display: flex;
-  gap: 10px;
+  gap: var(--imb-space-2);
   max-width: 82%;
   /* Positioning context for the Halt button, which is anchored just right of
      the bubble (see `.imb-halt`) so it never affects the bubble's width. */
@@ -15,8 +15,8 @@
 .imb-bubble {
   /* Anchors the hover time tag (`MessageTime`) at the bottom-right corner. */
   position: relative;
-  padding: 10px 14px;
-  border-radius: var(--imb-radius-lg);
+  padding: var(--imb-space-2) var(--imb-space-3);
+  border-radius: var(--imb-radius-bubble);
   font-size: var(--imb-text-base);
   line-height: var(--imb-leading-body);
   word-break: break-word;
@@ -27,20 +27,20 @@
 .imb-msg.imb-self .imb-bubble {
   background: var(--imb-bubble-self);
   color: var(--imb-bubble-text);
-  border-top-right-radius: 4px;
+  border-top-right-radius: var(--imb-radius-inner);
 }
 
 .imb-msg.imb-other .imb-bubble {
   background: var(--imb-surface);
   color: var(--imb-fg);
-  border-top-left-radius: 4px;
+  border-top-left-radius: var(--imb-radius-inner);
   box-shadow: var(--imb-elev-raised);
 }
 
 .imb-msg .imb-avatar {
-  width: 34px;
-  height: 34px;
-  font-size: 13px;
+  width: 32px;
+  height: 32px;
+  font-size: var(--imb-fs-small);
 }
 
 .imb-bubble-text {
@@ -93,7 +93,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 8px;
+  padding: 1px 6px;
   background: rgba(255, 255, 255, 0.5);
   border: none;
   border-radius: var(--imb-radius-sm);

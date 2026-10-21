@@ -135,7 +135,7 @@ export function ContextMenu({
   return createPortal(
     <div
       ref={ref}
-      className="imb-ctx-menu imb-open"
+      className="imb-ctx-menu imb-menu-surface imb-open"
       role="menu"
       style={{
         left,
@@ -148,7 +148,7 @@ export function ContextMenu({
           return (
             <div
               key={item.key}
-              className="imb-ctx-menu-divider"
+              className="imb-ctx-menu-divider imb-menu-sep"
               role="separator"
             />
           );
@@ -158,7 +158,10 @@ export function ContextMenu({
             key={item.key}
             type="button"
             role="menuitem"
-            className={cls("imb-ctx-menu-item", item.danger && "imb-danger")}
+            className={cls(
+              "imb-ctx-menu-item imb-menu-row",
+              item.danger && "imb-danger",
+            )}
             onClick={() => {
               onClose();
               item.onSelect();

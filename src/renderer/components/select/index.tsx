@@ -230,7 +230,7 @@ export function Select({
         createPortal(
           <ul
             ref={panelRef}
-            className="imb-select-panel"
+            className="imb-select-panel imb-menu-surface"
             id={listboxId}
             role="listbox"
             style={{
@@ -256,7 +256,7 @@ export function Select({
                 role="option"
                 aria-selected={option.value === value}
                 className={cls(
-                  "imb-select-option",
+                  "imb-select-option imb-menu-row",
                   index === activeIndex && "imb-is-active",
                   option.value === value && "imb-is-selected",
                 )}

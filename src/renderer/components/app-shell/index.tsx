@@ -1,9 +1,7 @@
-import { SettingKeys } from "@shared/constants/settings";
 import { useLayoutEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cls } from "reactutils";
 import {
-  appStore,
   contentPaneRef,
   detailPaneRef,
   listPaneRef,
@@ -35,28 +33,20 @@ const LIST_DETAIL_MODULES: ReadonlySet<AppModule> = new Set([
 ]);
 
 /**
- * App shell — nav rail plus a content region. The content region is either a
- * list/detail split (`list-detail` modules) or a single full-width content pane
- * (two-column `single` modules). Active modules portal their trees into the
- * matching pane(s) (see ModuleView below).
+ * App shell — a fixed 68px nav rail plus a content region. The content region is
+ * either a list/detail split (`list-detail` modules) or a single full-width
+ * content pane (two-column `single` modules). Active modules portal their trees
+ * into the matching pane(s) (see ModuleView below).
  */
 export function AppShell(): React.JSX.Element {
-  const { module, navCollapsed } = useApp();
+  const { module } = useApp();
   const layout = shellLayoutFor(module);
   const thinList = module === "settings";
 
-  async function setNavCollapsed(collapsed: boolean): Promise<void> {
-    appStore.navCollapsed = collapsed;
-    void imb.settings.set(SettingKeys.NavCollapse, collapsed ? "1" : "0");
-  }
-
   return (
-    <div className={cls("imb-app", navCollapsed && "imb-is-collapsed")}>
+    <div className="imb-app">
       <TitleBar />
-      <Nav
-        collapsed={navCollapsed}
-        onToggle={() => setNavCollapsed(!navCollapsed)}
-      />
+      <Nav />
       <div
         className={cls(
           "imb-shell-content",

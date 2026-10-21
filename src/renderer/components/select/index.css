@@ -4,14 +4,14 @@
 
 .imb-select {
   width: 100%;
-  min-height: 38px;
+  min-height: var(--imb-control-h-large);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 4px 34px 4px 13px;
+  gap: var(--imb-space-1);
+  padding: 0 28px 0 var(--imb-space-2);
   border: 1px solid var(--imb-border);
-  border-radius: var(--imb-radius-md);
+  border-radius: var(--imb-radius-control);
   background: var(--imb-surface);
   color: var(--imb-fg);
   font: inherit;
@@ -72,31 +72,16 @@
 }
 
 .imb-select-panel {
-  background: var(--imb-surface);
-  border: 1px solid var(--imb-border);
-  border-radius: var(--imb-radius-md);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  /* Surface/border/shadow come from the shared menu recipe in base.css. */
   overflow-y: auto;
-  padding: 6px;
+  padding: 4px;
   margin: 0;
   list-style: none;
 }
 
 .imb-select-option {
-  display: flex;
-  align-items: center;
+  /* Row geometry, typography and hover come from the shared menu recipe. */
   justify-content: space-between;
-  gap: 8px;
-  padding: 9px 10px;
-  border-radius: var(--imb-radius-sm);
-  cursor: pointer;
-  font-size: var(--imb-text-base);
-  color: var(--imb-fg);
-}
-
-.imb-select-option:hover,
-.imb-select-option.imb-is-active {
-  background: var(--imb-fg-soft);
 }
 
 .imb-select-option.imb-is-selected {
@@ -117,7 +102,8 @@
 }
 
 .imb-select-empty {
-  padding: 9px 10px;
+  padding: var(--imb-space-2) var(--imb-space-3);
   color: var(--imb-muted);
   text-align: center;
+  font-size: var(--imb-fs-ui);
 }
