@@ -28,6 +28,12 @@
   line-height: var(--imb-leading-text);
 }
 
+.imb-skill-tip-title {
+  margin: 0 0 var(--imb-space-1);
+  font-weight: var(--imb-fw-semibold);
+  line-height: var(--imb-leading-ui);
+}
+
 .imb-skill-tip-body {
   position: relative;
 }
