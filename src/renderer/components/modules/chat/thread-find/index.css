@@ -1,0 +1,88 @@
+/* In-thread find bar (⌘F / Ctrl+F) for the interactive chat module and the
+   read-only group-chat module.
+
+   It floats over the thread's top-right corner: the host `.imb-chat-thread-wrap`
+   is the positioning context (see `thread.css`), so the bar never takes layout
+   space and opening / closing it cannot shift a single message. z-index sits
+   above the bottom-right "my messages" control (`z-index: 5`). */
+.imb-findbar {
+  position: absolute;
+  top: var(--imb-space-3);
+  right: var(--imb-space-5);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: var(--imb-space-1);
+  width: 340px;
+  /* Never wider than the thread minus its insets. */
+  max-width: calc(100% - var(--imb-space-5) * 2);
+  padding: var(--imb-space-1);
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-md);
+  background: var(--imb-surface);
+  box-shadow: var(--imb-elev-overlay);
+}
+
+/* The whole bar is one control: the focus ring lives here, not on the field
+   (an inner ring inside the rounded card read as a box in a box). */
+.imb-findbar:focus-within {
+  border-color: var(--imb-accent);
+  box-shadow: var(--imb-focus-ring), var(--imb-elev-overlay);
+}
+
+.imb-findbar-glyph {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-left: var(--imb-space-1);
+  color: var(--imb-muted);
+}
+
+/* A chrome-less field inside the bar: no border, no own background, no own
+   ring (both come from the bar). */
+.imb-findbar-input,
+.imb-findbar-input:focus {
+  flex: 1;
+  min-width: 0;
+  height: var(--imb-control-h);
+  padding: 0 var(--imb-space-1);
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  font-size: var(--imb-text-sm);
+}
+
+.imb-findbar-counter {
+  flex: none;
+  min-width: 46px;
+  color: var(--imb-muted);
+  font-size: var(--imb-text-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* "No matches" is wider than `n/m`; it borrows the reserved width. */
+.imb-findbar-counter-empty {
+  color: var(--imb-danger);
+}
+
+.imb-findbar-btn {
+  flex: none;
+}
+
+/* Match highlights. Applied through the CSS Custom Highlight API
+   (`CSS.highlights`) from `useThreadFind`, so no DOM node is inserted into the
+   React-managed markdown tree. Only a small property set is honoured here. */
+::highlight(imb-find) {
+  background-color: color-mix(in oklab, var(--imb-accent) 28%, transparent);
+  color: inherit;
+}
+
+/* The occurrence the counter points at. Solid accent + on-accent ink keeps it
+   readable on the boss's own green bubble, where a translucent tint would not
+   show at all. */
+::highlight(imb-find-active) {
+  background-color: var(--imb-accent);
+  color: var(--imb-accent-on);
+}

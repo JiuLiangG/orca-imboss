@@ -22,9 +22,29 @@
 .imb-chat-title {
   font-size: var(--imb-text-xl);
   font-weight: 600;
+  /* A long title ellipsizes instead of pushing the header's trailing controls
+     (source badge, find entry) out of the row. */
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Header search entry (⌘F / Ctrl+F), shared by the root chat and the task
+   group chat. `margin-left: auto` pins it to the right edge — the same trick as
+   the agent-session interrupt chip — and `flex: none` keeps it from being
+   squeezed when the title is long. */
+.imb-chat-find {
+  flex: none;
+  margin-left: auto;
+}
+
+/* The find bar is up. Stated, not disabled: pressing it again re-focuses and
+   re-selects the term, exactly like ⌘F (closing belongs to Esc / ×). */
+.imb-icon-btn.imb-chat-find[aria-pressed="true"],
+.imb-icon-btn.imb-chat-find[aria-pressed="true"]:hover:not(:disabled) {
+  color: var(--imb-accent);
+  background: var(--imb-accent-soft);
 }
 
 .imb-thread {
@@ -36,6 +56,44 @@
   flex-direction: column;
   gap: var(--imb-space-4);
   min-height: 0;
+}
+
+/* Positioning context for the overlays that must float over the transcript
+   while the thread itself scrolls (the in-thread find bar at the top-right, the
+   "my messages" control at the bottom-right). An absolutely positioned child of
+   the scroller would scroll away with the messages, so the wrapper exists and
+   every thread view uses it. */
+.imb-chat-thread-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Landing flash of a jump (a match, one of the boss's messages): `flashRow`
+   tags the row with `data-quote-target` and removes it on `animationend`, so no
+   React state is involved. Reduced motion is handled in JS (no tag is set at
+   all); this rule is a belt. */
+@keyframes imb-quote-flash {
+  from {
+    box-shadow: 0 0 0 3px
+      color-mix(in oklab, var(--imb-accent), transparent 45%);
+  }
+
+  to {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+
+.imb-msg[data-quote-target] .imb-bubble {
+  animation: imb-quote-flash 700ms var(--imb-ease-standard);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imb-msg[data-quote-target] .imb-bubble {
+    animation: none;
+  }
 }
 
 .imb-chat-empty-detail {

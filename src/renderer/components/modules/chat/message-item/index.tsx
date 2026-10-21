@@ -1,4 +1,5 @@
 import type { Message } from "@shared/types";
+import { memo } from "react";
 import { appStore, useApp } from "../../../../app-store";
 import { EmployeeAvatar } from "../../../employee-avatar";
 import { useMentionResolver } from "../../../markdown/use-mention";
@@ -16,8 +17,12 @@ export interface MessageItemProps {
   message: Message;
   /** Read-only rendering (group-chat view): interactive cards are static. */
   readonly?: boolean;
-  /** Called after a successful ask-card answer (interactive mode only). */
-  onAnswered?: () => void;
+  /**
+   * Called after a successful ask-card answer (interactive mode only), with the
+   * answered chat's id. Takes the id (instead of closing over it) so callers can
+   * keep one stable callback and this row can stay memoized.
+   */
+  onAnswered?: (chatId: number) => void;
   /** The answer message folded into this ask card, when one exists. */
   askAnswer?: Message;
 }
@@ -25,8 +30,16 @@ export interface MessageItemProps {
 /**
  * Renders one message according to its `kind`, shared by the interactive chat
  * module and the read-only group-chat module so the two views never drift.
+ *
+ * Memoized: a thread module re-renders on every keystroke in the in-thread find
+ * bar and on every scan result (the find engine keeps its state in the module),
+ * and re-rendering hundreds of already-rendered rows for that is pure waste.
+ * The props are all reference-stable (`message`/`askAnswer` come from the loaded
+ * message list, the callbacks are memoized by the callers), and the internals
+ * that do depend on app state (`useApp`, mention resolution) subscribe on their
+ * own, so a skipped render can never show stale data.
  */
-export function MessageItem({
+export const MessageItem = memo(function MessageItem({
   message,
   readonly = false,
   onAnswered,
@@ -55,7 +68,7 @@ export function MessageItem({
         <AskCard
           message={message}
           readonly={readonly}
-          onAnswered={onAnswered ?? (() => undefined)}
+          onAnswered={() => onAnswered?.(message.chatId)}
           answer={askAnswer}
           onAvatarClick={openSession}
           resolveMention={mentions.resolveMention}
@@ -146,4 +159,4 @@ export function MessageItem({
         />
       );
   }
-}
+});

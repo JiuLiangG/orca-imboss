@@ -30,6 +30,8 @@ import { Button } from "../../../button";
 import { ContextMenu, type ContextMenuState } from "../../../context-menu";
 import { EmployeeAvatar } from "../../../employee-avatar";
 import { FilterBar } from "../../../filter-bar";
+import { IconButton } from "../../../icon-button";
+import { IconSearch } from "../../../icons";
 import { Input } from "../../../input";
 import { ItemList } from "../../../item-list";
 import { ListPane } from "../../../list-pane";
@@ -58,6 +60,9 @@ import {
   shouldShowTimeSeparator,
 } from "../relative-time";
 import "../thread.css";
+import { ThreadFindBar } from "../thread-find";
+import { useThreadFind } from "../thread-find/use-thread-find";
+import { PIN_THRESHOLD, scrollThreadToRow } from "../thread-scroll";
 import { TimeSeparator } from "../time-separator";
 import "./index.css";
 
@@ -98,44 +103,12 @@ interface ChatRunStatus {
   compacting: boolean;
 }
 
-/** Distance from the bottom (px) still considered "pinned" for auto-scroll. */
-const PIN_THRESHOLD = 32;
-
-/** Landing-flash duration (ms); mirrors the `imb-quote-flash` keyframe. */
-const FLASH_MS = 700;
-
 /**
  * Collapse every whitespace run (newlines included) to one space — the "my
  * messages" list is one line per entry, so the raw text is never shown.
  */
 function collapseWhitespace(text: string): string {
   return text.replace(/\s+/g, " ").trim();
-}
-
-/**
- * Briefly outline the row a jump landed on. Pure DOM (a `data-`attribute read by
- * `my-message-jump/index.css`) so nothing re-renders and nothing shifts; skipped
- * entirely when the user asked for reduced motion.
- */
-let flashSeq = 0;
-function flashRow(row: HTMLElement): void {
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const token = String(++flashSeq);
-  let timer = 0;
-  const clear = (): void => {
-    window.clearTimeout(timer);
-    row.removeEventListener("animationend", clear);
-    // A newer flash may own the attribute by now.
-    if (row.dataset.quoteTarget === token) delete row.dataset.quoteTarget;
-  };
-  // Drop and re-add the attribute (with a reflow) so a repeated jump restarts
-  // the keyframe instead of continuing a finished one.
-  delete row.dataset.quoteTarget;
-  void row.offsetWidth;
-  row.dataset.quoteTarget = token;
-  row.addEventListener("animationend", clear);
-  // Defensive: `animationend` never fires if the row is detached mid-animation.
-  timer = window.setTimeout(clear, FLASH_MS + 300);
 }
 
 /**
@@ -451,6 +424,17 @@ export function ChatModule(): React.JSX.Element {
       setError(err instanceof Error ? err.message : String(err));
     }
   }, []);
+
+  /**
+   * Stable ask-card answer handler. `MessageItem` is memoized, so it must not
+   * receive a fresh closure on every render (the row would re-render with it).
+   */
+  const handleAnswered = useCallback(
+    (chatId: number): void => {
+      void loadMessages(chatId);
+    },
+    [loadMessages],
+  );
 
   /**
    * Mark `chatId` read and mirror the cleared counter into every list source:
@@ -796,9 +780,9 @@ export function ChatModule(): React.JSX.Element {
 
   /**
    * Scroll the thread to one of the boss's messages. One rect read for the
-   * clicked row (no measuring while hovering / scrolling), `scrollTo` on the
-   * thread itself (never `scrollIntoView`, which can scroll ancestors), and the
-   * landing row flashes once the smooth scroll settles.
+   * clicked row (no measuring while hovering / scrolling) and the landing row
+   * flashes once the smooth scroll settles; the scroll itself (and the "my
+   * messages" jump) share `../thread-scroll` with the other thread views.
    */
   const jumpToMessage = useCallback((messageId: number): void => {
     const el = threadRef.current;
@@ -807,28 +791,31 @@ export function ChatModule(): React.JSX.Element {
       `[data-message-id="${messageId}"]`,
     );
     if (!row) return;
-    const maxScroll = Math.max(el.scrollHeight - el.clientHeight, 0);
-    const target = Math.min(
-      Math.max(
-        row.getBoundingClientRect().top -
-          el.getBoundingClientRect().top +
-          el.scrollTop -
-          MY_JUMP_TOP_GAP,
-        0,
-      ),
-      maxScroll,
-    );
-    const reduceMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-    if (Math.abs(target - el.scrollTop) <= 1) {
-      // Nothing to scroll (already there): still show where it is.
-      flashRow(row);
-      return;
-    }
-    // Following the live tail must not fight the jump: the follow effect re-pins
-    // on every `messages` change, so `pinned` is cleared *before* scrolling (a
-    // programmatic scroll emits `scroll`, which re-syncs it from the position).
+    scrollThreadToRow(el, row, {
+      topGap: MY_JUMP_TOP_GAP,
+      // Following the live tail must not fight the jump: the follow effect
+      // re-pins on every `messages` change, so `pinned` is cleared *before*
+      // scrolling (a programmatic scroll emits `scroll`, which re-syncs it from
+      // the position).
+      beforeScroll: (target) => {
+        pinnedRef.current = false;
+        if (selectedIdRef.current !== null) {
+          chatScrollStore.set(selectedIdRef.current, {
+            scrollTop: target,
+            pinned: false,
+          });
+        }
+      },
+      flash: row,
+    });
+  }, []);
+
+  /**
+   * A find-bar jump cleared the "pinned to the bottom" state (new messages must
+   * not yank the view back to the tail while a match is being read) and records
+   * the landing position, exactly like `jumpToMessage`.
+   */
+  const handleFindJump = useCallback((target: number): void => {
     pinnedRef.current = false;
     if (selectedIdRef.current !== null) {
       chatScrollStore.set(selectedIdRef.current, {
@@ -836,23 +823,19 @@ export function ChatModule(): React.JSX.Element {
         pinned: false,
       });
     }
-    el.scrollTo({ top: target, behavior: reduceMotion ? "auto" : "smooth" });
-    if (reduceMotion) return;
-    // Flash on arrival rather than on click, otherwise the ring can finish
-    // before the target is on screen. `scrollend` is the accurate signal; the
-    // timer is the fallback for the (rare) case it never fires.
-    let done = false;
-    let timer = 0;
-    const flashOnArrival = (): void => {
-      if (done) return;
-      done = true;
-      el.removeEventListener("scrollend", flashOnArrival);
-      window.clearTimeout(timer);
-      flashRow(row);
-    };
-    el.addEventListener("scrollend", flashOnArrival);
-    timer = window.setTimeout(flashOnArrival, FLASH_MS);
   }, []);
+
+  // In-thread find (⌘F). It searches exactly what the thread renders, so it is
+  // handed the same list the thread maps over (a folded answer is not rendered
+  // and therefore not searchable).
+  const threadFind = useThreadFind({
+    chatId: selectedId,
+    messages: visibleMessages,
+    threadRef,
+    // The delete dialog owns the keyboard while it is open.
+    hotkeysEnabled: !deleteOpen,
+    onBeforeJump: handleFindJump,
+  });
 
   const handleSend = useCallback(
     async (text: string, attachments: MessageAttachment[]): Promise<void> => {
@@ -1200,6 +1183,28 @@ export function ChatModule(): React.JSX.Element {
             {t(INTEGRATION_LABEL_KEYS[selected.source])}
           </span>
         )}
+        {/* Header search entry: the same action as ⌘F (open + focus, or
+            re-select the term when the bar is already up). `aria-pressed`
+            states whether the bar is open; it never toggles it closed — that
+            would make the button behave differently from the shortcut. */}
+        <Tooltip
+          placement="bottom"
+          content={`${t("Find in chat")} · ${IS_MAC ? "⌘F" : "Ctrl+F"}`}
+        >
+          <IconButton
+            className="imb-chat-find"
+            label={t("Find in chat")}
+            aria-pressed={threadFind.open}
+            // The bubble above is the hint; an empty `title` suppresses the
+            // native (duplicate) one the component would otherwise add.
+            title=""
+            boxSize={28}
+            size={16}
+            onClick={threadFind.openFind}
+          >
+            <IconSearch />
+          </IconButton>
+        </Tooltip>
       </div>
       {/* The thread is the scroll container, so the floating "my messages"
           control lives in this positioning wrapper instead of inside it (an
@@ -1211,6 +1216,9 @@ export function ChatModule(): React.JSX.Element {
             myMessages.length > 0 && "imb-has-my-jump",
           )}
           ref={threadRef}
+          // Focus target after the find bar closes when nothing better is
+          // available (a message row keeps `focus-within` styling intact).
+          tabIndex={-1}
           onScroll={handleThreadScroll}
         >
           {visibleMessages.map((message, index) => (
@@ -1220,7 +1228,7 @@ export function ChatModule(): React.JSX.Element {
               )}
               <MessageItem
                 message={message}
-                onAnswered={() => void loadMessages(message.chatId)}
+                onAnswered={handleAnswered}
                 askAnswer={pairing.answerByAskId.get(message.id)}
               />
             </Fragment>
@@ -1233,6 +1241,7 @@ export function ChatModule(): React.JSX.Element {
             </div>
           )}
         </div>
+        {threadFind.open && <ThreadFindBar find={threadFind} />}
         {myMessages.length > 0 && (
           <MyMessageJump
             threadRef={threadRef}

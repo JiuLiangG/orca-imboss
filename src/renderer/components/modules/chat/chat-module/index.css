@@ -4,17 +4,6 @@
   margin: var(--imb-space-2) 0;
 }
 
-/* Positioning context for the floating "my messages" control (see
-   `../my-message-jump`). The thread inside keeps its own `flex: 1`, so this
-   wrapper changes nothing about the thread's scrolling. */
-.imb-chat-thread-wrap {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
 /* Reserve room for that control so it never covers the tail of the last
    message (the boss's own bubbles are right-aligned, i.e. exactly where the
    button sits): 20px inset + 32px button + 20px gap. */

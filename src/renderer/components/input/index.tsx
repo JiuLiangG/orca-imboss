@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes } from "react";
+import type { InputHTMLAttributes, RefObject } from "react";
 import { cls } from "reactutils";
 import { useComposition } from "../../hooks/use-composition";
 import "./index.css";
@@ -8,12 +8,18 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   mono?: boolean;
   /** Fires when the value is committed — never mid-IME composition. */
   onValueCommit?: (value: string) => void;
+  /**
+   * The underlying `<input>`, for owners that must focus / select it (the
+   * in-thread find bar). `ref` itself is not forwarded.
+   */
+  inputRef?: RefObject<HTMLInputElement | null>;
 }
 
 export function Input({
   invalid = false,
   mono = false,
   className,
+  inputRef,
   onValueCommit,
   onKeyDown,
   onChange,
@@ -25,6 +31,7 @@ export function Input({
 
   return (
     <input
+      ref={inputRef}
       className={cls(
         "imb-input",
         invalid && "imb-is-invalid",

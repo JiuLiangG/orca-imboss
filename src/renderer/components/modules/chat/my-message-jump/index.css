@@ -155,29 +155,11 @@
   height: 16px;
 }
 
-/* Landing flash: `jumpToMessage` tags the target row with `data-quote-target`
-   and removes it on `animationend`, so no React state is involved. Reduced
-   motion is handled in JS (no tag is set at all); this rule is a belt. */
-@keyframes imb-quote-flash {
-  from {
-    box-shadow: 0 0 0 3px color-mix(in oklab, var(--imb-accent), transparent 45%);
-  }
-
-  to {
-    box-shadow: 0 0 0 3px transparent;
-  }
-}
-
-.imb-msg[data-quote-target] .imb-bubble {
-  animation: imb-quote-flash 700ms var(--imb-ease-standard);
-}
+/* Landing flash: the keyframes and the `data-quote-target` rule live in the
+   shared `../thread.css` (the group-chat view flashes too). */
 
 @media (prefers-reduced-motion: reduce) {
   .imb-my-jump-panel {
     transition: none;
-  }
-
-  .imb-msg[data-quote-target] .imb-bubble {
-    animation: none;
   }
 }

@@ -167,3 +167,7 @@ h4 {
 .imb-error-text {
   color: var(--imb-danger);
 }
+
+:focus-visible {
+  outline: none;
+}
