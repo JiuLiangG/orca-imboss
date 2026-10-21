@@ -4,7 +4,11 @@
  * bubble. `report` is a free-form result summary (employee → assigner, or
  * assistant → boss for the final summary). `ack` is the app-generated receipt
  * acknowledgement posted immediately after a user message; its display text is
- * localized at render time and its stored content is empty.
+ * localized at render time and its stored content is empty. `interrupted` records
+ * that the boss halted a task group; `error` is the app-generated notice that an
+ * agent run failed (its `content` carries the raw technical detail, while the
+ * renderer shows a localized label). Both system kinds are written with a `null`
+ * sender, so they never bump unread and are never forwarded to an IM platform.
  */
 export type MessageKind = string;
 

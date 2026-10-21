@@ -11,6 +11,7 @@ import * as dbChats from "../db/chats";
 import * as dbMessages from "../db/messages";
 import { errorEvent, sendEventTo, toStreamEvent } from "./agent-events";
 import { getAgentEnvironment } from "./environment";
+import { recordRunFailure } from "./run-failure";
 import type { AgentSession as AppAgentSession } from "./session";
 import { ensureSessionFile } from "./session-files";
 import {
@@ -118,6 +119,23 @@ interface QueueState {
   openTools: Map<string, OpenToolCall>;
   /** Tool calls started in the current run (including nested ones). */
   toolCallsThisRun: number;
+  /**
+   * `stopReason` / `errorMessage` of the **last** assistant message of the run
+   * in flight. Pi retries a failed turn internally and then ends the run
+   * normally (no rejection), so this is the only way to tell "this run failed"
+   * apart from "it finished": the last assistant message is `error` only when
+   * every retry was used up (or the error was never retryable). Reset at every
+   * run start.
+   */
+  lastAssistantStop?: { stopReason: string; errorMessage?: string };
+  /** Automatic retries Pi announced during the run in flight (for the notice). */
+  retryAttempts: number;
+  /**
+   * Set right before an interrupt aborts the run. An aborted run also ends with
+   * an `error`-stopped assistant message and a cancelled retry, so this flag is
+   * what keeps an intentional interrupt from being reported as a failure.
+   */
+  abortRequested: boolean;
   /** Set by lifecycle teardown so an in-flight drain stops cleanly. */
   disposed: boolean;
 }
@@ -603,6 +621,9 @@ async function interruptSession(
   const delivered = state.deliveredSteers;
   try {
     const cleared = session.clearQueue();
+    // An interrupt must not be reported as a failed run: the abort leaves an
+    // `error`-stopped assistant message and a cancelled retry behind.
+    state.abortRequested = true;
     await session.abort();
     await session.waitForRunSettled();
     const requeue = takeUndelivered(
@@ -702,6 +723,7 @@ async function interruptState(state: QueueState): Promise<boolean> {
     // interrupted turn would immediately continue with queued steer/follow-up
     // messages.
     session.clearQueue();
+    state.abortRequested = true;
     await session.abort();
     return true;
   } catch (err) {
@@ -743,7 +765,15 @@ async function drain(state: QueueState): Promise<void> {
         state.lastProgressKind = "run_start";
         state.openTools.clear();
         state.toolCallsThisRun = 0;
+        state.lastAssistantStop = undefined;
+        state.retryAttempts = 0;
+        state.abortRequested = false;
         await state.session?.prompt(text);
+        // A failed run does not reject: Pi retries the turn itself and then ends
+        // the run with an `error`-stopped assistant message. Read that off the
+        // event stream and make the failure durable (chat notice + assistant).
+        const failure = runFailureOf(state);
+        if (failure !== null) reportRunFailure(state, failure);
       } catch (err) {
         emitError(state, err);
       }
@@ -808,6 +838,8 @@ function getOrCreateState(employeeId: number, chatId: number): QueueState {
       lastForwardedWasMessageEnd: false,
       openTools: new Map(),
       toolCallsThisRun: 0,
+      retryAttempts: 0,
+      abortRequested: false,
       disposed: false,
     };
     states.set(key, state);
@@ -888,9 +920,26 @@ async function disposeSessionOf(state: QueueState): Promise<void> {
  */
 function forwardEvent(state: QueueState, event: AgentSessionEvent): void {
   if (event.type === "message_end") {
-    const message = event.message as { role?: unknown; content?: unknown };
+    const message = event.message as {
+      role?: unknown;
+      content?: unknown;
+      stopReason?: unknown;
+      errorMessage?: unknown;
+    };
     if (message?.role === "user" && state.pendingSteers.length > 0) {
       state.deliveredSteers.push(userMessageText(message.content));
+    }
+    if (message?.role === "assistant") {
+      // Remembered so `drain()` can tell a finished run from a failed one. The
+      // last assistant message of a run is the meaningful one: an earlier
+      // retryable failure is superseded by a successful retry.
+      const stopReason =
+        typeof message.stopReason === "string" ? message.stopReason : "unknown";
+      const errorMessage =
+        typeof message.errorMessage === "string"
+          ? message.errorMessage
+          : undefined;
+      state.lastAssistantStop = { stopReason, errorMessage };
     }
     // Only an assistant `message_end` means the last streamed message is now
     // part of the transcript (a user message is persisted before its answer) —
@@ -967,7 +1016,9 @@ function noteProgress(state: QueueState, event: AgentSessionEvent): void {
       break;
     case "auto_retry_start":
       // Waiting for an automatic retry: the app is alive but no model output
-      // will arrive for `delayMs`.
+      // will arrive for `delayMs`. Counted so a failure notice can say how many
+      // retries Pi already spent on this turn.
+      state.retryAttempts += 1;
       markProgress(state, "retry_wait");
       break;
     default:
@@ -996,5 +1047,49 @@ function emitError(state: QueueState, err: unknown): void {
     state.employeeId,
     state.chatId,
     errorEvent(err),
+  );
+  // A thrown run is a failure too (no model configured, prepare/auth errors, …):
+  // it gets the same durable record and assistant wake as an error-stopped run.
+  reportRunFailure(state, err instanceof Error ? err.message : String(err));
+}
+
+/**
+ * The failure of the run that just finished, or `null` when it finished cleanly
+ * (or was aborted on purpose).
+ */
+function runFailureOf(state: QueueState): string | null {
+  // An interrupt aborts the run: Pi then closes the attempt with an `error`
+  // message and emits a cancelled retry. That is a decision, not a failure.
+  if (state.abortRequested) return null;
+  const stop = state.lastAssistantStop;
+  if (stop?.stopReason !== "error") return null;
+  const message = (stop.errorMessage ?? "").trim();
+  return message.length > 0 ? message : "Unknown error";
+}
+
+/**
+ * Make one failed run durable: an `error` notice in the chat plus (guarded by
+ * `run-failure.ts`) one assistant wake. Never throws — the queue's bookkeeping
+ * must not depend on it.
+ */
+function reportRunFailure(state: QueueState, errorMessage: string): void {
+  if (state.disposed) return;
+  recordRunFailure(
+    {
+      employeeId: state.employeeId,
+      chatId: state.chatId,
+      errorMessage,
+      retryAttempts: state.retryAttempts,
+    },
+    (employeeId, chatId, text) => {
+      void wakeAgent(employeeId, chatId, text, { mode: "queue" }).catch(
+        (err: unknown) => {
+          console.error(
+            `[session-queue] failed to wake the assistant about a failed run in chat ${chatId}:`,
+            err instanceof Error ? err.message : err,
+          );
+        },
+      );
+    },
   );
 }

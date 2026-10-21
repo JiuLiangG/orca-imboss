@@ -73,6 +73,11 @@ export function getRootChatId(chatId: number): number {
  * (assistant ↔ user); ordered by last-message time — newest first. A chat
  * that has never received a message falls back to its creation time (set on
  * insert, so a fresh chat tops the list).
+ *
+ * The preview skips app-generated notices (`ack` receipt, `interrupted` halt,
+ * `error` failed-run record): they are not conversation, and the raw provider
+ * text behind an `error` belongs to the notice's own expandable detail, not to
+ * a one-line list teaser.
  */
 export function listChatSummaries(): ChatSummary[] {
   const rows = getDB()
@@ -80,10 +85,10 @@ export function listChatSummaries(): ChatSummary[] {
       `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
               c.pinned, c.muted, c.source, c.last_message_at,
               (SELECT m.content FROM messages m
-               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted')
+               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted', 'error')
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
               (SELECT m.created_at FROM messages m
-               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted')
+               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted', 'error')
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_at
        FROM chats c
        WHERE c.from_chat_id IS NULL
@@ -104,10 +109,10 @@ export function getChatSummary(id: number): ChatSummary | null {
       `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
               c.pinned, c.muted, c.source, c.last_message_at,
               (SELECT m.content FROM messages m
-               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted')
+               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted', 'error')
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
               (SELECT m.created_at FROM messages m
-               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted')
+               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted', 'error')
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_at
        FROM chats c
        WHERE c.id = ?`,
@@ -195,10 +200,10 @@ export function listChatSummariesPage(
       `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
               c.pinned, c.muted, c.source, c.last_message_at,
               (SELECT m.content FROM messages m
-               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted')
+               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted', 'error')
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
               (SELECT m.created_at FROM messages m
-               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted')
+               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted', 'error')
                ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_at
        FROM chats c
        WHERE ${conditions.join(" AND ")}

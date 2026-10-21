@@ -1,9 +1,16 @@
 import { app, BrowserWindow, shell } from "electron";
 import { join } from "path";
 import icon from "../../resources/icon.png?asset";
+import { ASSISTANT_ID } from "@shared/constants/employees";
+import { READ_CHAT_PROMPT } from "@shared/constants/prompts";
 import { materializeBuiltinSkills } from "./agent/builtin-skills";
 import { refreshModelStore } from "./agent/model-runtime";
-import { disposeAll } from "./agent/session-queue";
+import { cancelRunRecovery, initRunRecovery } from "./agent/run-recovery";
+import {
+  disposeAll,
+  readSessionActivity,
+  wakeAgent,
+} from "./agent/session-queue";
 import { deleteAvatarFiles } from "./avatars";
 import { applyPendingRestore } from "./backup";
 import * as cron from "./cron";
@@ -79,6 +86,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  cancelRunRecovery();
   cron.stopAll();
   stopAllMiniAppServers();
   void disposeAll();
@@ -121,6 +129,18 @@ app.whenReady().then(() => {
   void syncMiniAppIndex();
 
   cron.initCron();
+
+  // Retry a human turn whose agent run never finished because the app quit,
+  // crashed or was killed: one delayed, bounded pass that only wakes the
+  // assistant to re-read those chats. It never makes up a missed cron time
+  // point (cron wakes leave no `messages` row to recover from) — see
+  // `agent/run-recovery.ts`.
+  initRunRecovery({
+    isStreaming: (chatId) =>
+      readSessionActivity(ASSISTANT_ID, chatId).streaming,
+    wake: (chatId) =>
+      wakeAgent(ASSISTANT_ID, chatId, READ_CHAT_PROMPT, { mode: "queue" }),
+  });
 
   void purgeDisabledEmployeesOnStartup();
 

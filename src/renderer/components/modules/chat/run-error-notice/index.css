@@ -1,0 +1,68 @@
+/*
+ * Centered system notice for `error` messages (thread layout): a failure pill
+ * in the danger tint — the one notice that says work stopped. Same shape and
+ * spacing as `.imb-interrupted` so the two system hints read as one family; the
+ * raw technical detail expands below the label.
+ */
+.imb-run-error {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  max-width: 82%;
+  padding: 4px 12px;
+  border-radius: var(--imb-radius-lg);
+  background: var(--imb-danger-soft);
+  color: var(--imb-danger);
+  font-size: var(--imb-text-xs);
+  line-height: var(--imb-leading-tight);
+  text-align: center;
+}
+
+.imb-run-error-label {
+  font-weight: var(--imb-fw-medium);
+}
+
+.imb-run-error-toggle {
+  font: inherit;
+  color: var(--imb-text-2);
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  border-radius: var(--imb-radius-sm);
+  transition: color var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-run-error-toggle:hover {
+  color: var(--imb-danger);
+}
+
+.imb-run-error-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+}
+
+.imb-run-error-detail {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  padding: 6px 8px;
+  border-radius: var(--imb-radius-sm);
+  background: var(--imb-bg-content);
+  color: var(--imb-text-2);
+  font-family: var(--imb-font-mono);
+  font-size: var(--imb-text-xs);
+  line-height: var(--imb-leading-text);
+  text-align: start;
+  /* The provider error keeps its original line breaks… */
+  white-space: pre-wrap;
+  /* …and must never widen the transcript. */
+  overflow-wrap: anywhere;
+  /* Unlike the pill around it, the detail is worth copying. */
+  user-select: text;
+}

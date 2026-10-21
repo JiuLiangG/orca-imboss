@@ -183,6 +183,20 @@ const MIGRATIONS: Array<(db: Database) => void> = [
       ALTER TABLE messages ADD COLUMN image_model TEXT;
     `);
   },
+  // 6 — startup-recovery bookkeeping: one row per chat whose last human turn
+  // was never answered (the app quit / crashed / was killed mid-run). It only
+  // bounds how often such a turn may be retried across restarts; the pending
+  // turn itself is derived from `messages`, never stored here.
+  (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS run_recovery (
+        chat_id           INTEGER PRIMARY KEY REFERENCES chats(id) ON DELETE CASCADE,
+        anchor_message_id INTEGER NOT NULL,
+        attempts          INTEGER NOT NULL DEFAULT 0,
+        last_attempt_at   INTEGER NOT NULL
+      );
+    `);
+  },
 ];
 
 export function migrate(db: Database): void {

@@ -12,6 +12,7 @@ import { InterruptedNotice } from "../interrupted-notice";
 import { MessageBubble } from "../message-bubble";
 import { ProgressCard } from "../progress-card";
 import { formatMessageTime } from "../relative-time";
+import { RunErrorNotice } from "../run-error-notice";
 
 export interface MessageItemProps {
   message: Message;
@@ -111,6 +112,11 @@ export const MessageItem = memo(function MessageItem({
       // App-generated notice (the boss halted the linked task group). Rendered
       // as a centered system hint, not a bubble; no sender/avatar row.
       return <InterruptedNotice groupChatId={message.groupChatId} />;
+    case "error":
+      // App-generated notice (an agent run failed and was recorded). Also a
+      // centered system hint: nobody sent it, and its raw technical detail sits
+      // behind a toggle.
+      return <RunErrorNotice content={message.content} />;
     case "image":
       // Image generation: one row carries the whole lifecycle (a placeholder
       // while the model runs, then the picture) — see `../image-gen`.
