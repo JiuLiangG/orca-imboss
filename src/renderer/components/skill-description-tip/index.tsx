@@ -1,6 +1,7 @@
 import { t } from "@shared/l10n";
 import {
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -30,9 +31,10 @@ export interface SkillDescriptionTipProps {
 }
 
 /**
- * Hover card for one skill description. The description is the skill file's
- * own text. "Show more" / "Show less" and the accessible name go through
- * `t()`, so a language switch rewrites those words and leaves the description.
+ * Hover card for one skill description. The body is the skill file's own
+ * text. The title, "Show more" / "Show less", and the accessible name go
+ * through `t()`, so a language switch rewrites those words and leaves the
+ * description. The title sits outside the clamp.
  */
 export function SkillDescriptionTip({
   tipRef,
@@ -44,6 +46,7 @@ export function SkillDescriptionTip({
   onDismiss,
 }: SkillDescriptionTipProps): React.JSX.Element | null {
   const measureRef = useRef<HTMLParagraphElement>(null);
+  const titleId = useId();
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
   const [pos, setPos] = useState<AnchoredPosition | null>(null);
@@ -110,11 +113,14 @@ export function SkillDescriptionTip({
       className={cls("imb-skill-tip", pos && "imb-is-open")}
       style={{ top: pos?.top, left: pos?.left }}
       role="region"
-      aria-label={t("Skill description")}
+      aria-labelledby={titleId}
       onMouseEnter={onPointerEnter}
       onMouseLeave={onPointerLeave}
     >
       <div className="imb-skill-tip-card">
+        <p id={titleId} className="imb-skill-tip-title">
+          {t("Skill Description")}
+        </p>
         <div className="imb-skill-tip-body">
           <p
             className={cls(
