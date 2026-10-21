@@ -66,12 +66,53 @@
   color: var(--imb-fg-2);
 }
 
+/* Header subtitle = the conversation this session belongs to. Rendered as a
+   `<button>` (click → jump to that conversation), so it carries the button
+   reset as well as the caption typography. `align-self: flex-start` is load
+   bearing: `.imb-session-heading` is a column flex container, where the default
+   `stretch` would make the whole rest of the row a click target. `max-width` +
+   `min-width: 0` keep a long title ellipsized instead of pushing the interrupt
+   chip out of the row. */
 .imb-session-subtitle {
+  align-self: flex-start;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--imb-muted);
+  font: inherit;
   font-size: var(--imb-text-sm);
+  text-align: start;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Clickable affordance (boss's call): muted at rest, accent on hover only —
+   deliberately no underline and no permanently visible icon. */
+.imb-session-chat-link {
+  cursor: pointer;
+  transition: color var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-session-chat-link:hover {
+  color: var(--imb-accent);
+}
+
+.imb-session-chat-link:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+  border-radius: var(--imb-radius-sm);
+}
+
+/* The jump is in flight (`openConversationById` awaits one IPC round-trip):
+   dim it, drop the hover tint and the pointer affordance. */
+.imb-session-chat-link:disabled,
+.imb-session-chat-link:disabled:hover {
+  color: var(--imb-muted);
+  opacity: 0.6;
+  cursor: default;
 }
 
 /* Thread + floating jump control share one positioned wrapper, so the control

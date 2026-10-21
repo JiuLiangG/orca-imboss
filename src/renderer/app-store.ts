@@ -895,6 +895,28 @@ export const appStore = proxy({
     appStore.module = "group-chat";
   },
 
+  /**
+   * Open a conversation by id in the view that can display it: a root chat is
+   * selected inside the Chat module, a spawned group chat is opened as a Nav
+   * entry (the Chat module's list only holds root chats, so there is no other
+   * way in).
+   *
+   * Returns `false` when the chat no longer exists — nothing was opened, so the
+   * caller decides how to report it. IPC failures are **thrown** to the caller
+   * for the same reason (this helper never swallows them).
+   */
+  async openConversationById(chatId: number): Promise<boolean> {
+    if (!Number.isSafeInteger(chatId) || chatId <= 0) return false;
+    const summary = await imb.chats.summary(chatId);
+    if (summary === null) return false;
+    if (summary.fromChatId === null) {
+      await appStore.focusChat(summary.id);
+    } else {
+      appStore.openChat(summary);
+    }
+    return true;
+  },
+
   /** Close an opened group chat; activate the merged-list neighbour or Chat. */
   closeChat(id: number): void {
     const index = appStore.openedItems.findIndex(
@@ -947,6 +969,58 @@ export const appStore = proxy({
     appStore.module = "agent-session";
     // Needed by the Nav entry (avatar + label) and the session header.
     appStore.ensureEmployees();
+  },
+
+  /**
+   * Re-read one chat's title and write it into every opened Nav entry that
+   * labels itself with it: agent sessions (`OpenedSession.chatTitle` — the
+   * session header and its Nav label) **and** opened group chats
+   * (`OpenedChat.title` — its Nav label and the group-chat view's header).
+   *
+   * Both are snapshots taken when the entry was opened (see `openAgentSession`
+   * / `openChat`), yet titles change afterwards: a freshly spawned task group
+   * chat is named by the title-generation job after its first messages, and a
+   * chat can be renamed at any time. Without this, every opened entry keeps the
+   * stale name for the rest of the session. Driven by `chats:changed` (see
+   * `initAppStore`), so it runs for root chats and group chats alike (the
+   * group-chat branch of `refreshChatSummary` returns early for the chat
+   * *list*, which is why the opened entries need their own refresh).
+   *
+   * **One** summary read covers both entry kinds (never one IPC per entry), and
+   * none at all unless an opened entry references this chat. Only titles are
+   * touched — order, unread, pins and tags are other owners' state.
+   *
+   * Best-effort: a renamed-but-deleted chat is handled by `chats:onDeleted`, so
+   * a `null` summary only means "nothing to update".
+   */
+  async refreshOpenedChatTitles(chatId: number): Promise<void> {
+    if (!Number.isSafeInteger(chatId) || chatId <= 0) return;
+    // Cheap guard first: no IPC at all unless an opened entry needs the title.
+    const tracked = appStore.openedItems.some((item) =>
+      item.kind === "chat" ? item.id === chatId : item.chatId === chatId,
+    );
+    if (!tracked) return;
+    try {
+      const summary = await imb.chats.summary(chatId);
+      if (summary === null) return;
+      // Same normalization as `resolveChatTitle`, so a later re-open cannot
+      // flip the label between "" and the fallback.
+      const raw = summary.title.trim();
+      const title = raw.length > 0 ? raw : t("New Chat");
+      for (const item of appStore.openedItems) {
+        if (item.kind === "chat") {
+          if (item.id === chatId && item.title !== title) item.title = title;
+        } else if (item.chatId === chatId && item.chatTitle !== title) {
+          item.chatTitle = title;
+        }
+      }
+    } catch (err) {
+      // Labels only — never surface this (the title on screen simply stays).
+      console.error(
+        "[opened-titles:refresh]",
+        err instanceof Error ? err.message : err,
+      );
+    }
   },
 
   /** Focus an already-opened agent session (Nav item click). */
@@ -1089,6 +1163,10 @@ export async function initAppStore(): Promise<void> {
   // messages:changed refresh) — same summary refresh keeps list + header in sync.
   imb.chats.onChanged(({ chatId }) => {
     void appStore.refreshChatSummary(chatId);
+    // Opened Nav entries (group chats + agent sessions) label themselves with
+    // this chat's title; their snapshots are not covered by the chat-list
+    // refresh above.
+    void appStore.refreshOpenedChatTitles(chatId);
   });
   // Cascade deletes push the full deleted id set (root + spawned chats) so the
   // list cache, Nav opened chats and the focus target all stay consistent.

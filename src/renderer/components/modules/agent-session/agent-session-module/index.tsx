@@ -16,7 +16,7 @@ import {
   useState,
 } from "react";
 import { cls } from "reactutils";
-import { useApp } from "../../../../app-store";
+import { appStore, useApp } from "../../../../app-store";
 import { ModuleView } from "../../../app-shell";
 import { EmployeeAvatar } from "../../../employee-avatar";
 import { HaltButton } from "../../../halt-button";
@@ -24,6 +24,7 @@ import { IconButton } from "../../../icon-button";
 import { IconChevronDown, IconChevronUp, IconHalt } from "../../../icons";
 import { Markdown } from "../../../markdown";
 import { useMentionResolver } from "../../../markdown/use-mention";
+import { Tooltip } from "../../../tooltip";
 import "../../chat/thread.css";
 import { SessionComposer } from "../session-composer";
 import "./index.css";
@@ -205,6 +206,13 @@ export function AgentSessionModule({
   const [runError, setRunError] = useState<string | null>(null);
   /** Cosmetic run state: a run is streaming, so a send would be a steer. */
   const [streaming, setStreaming] = useState(false);
+  /**
+   * Failure of the header's "open this session's conversation" link. Kept
+   * apart from `error`/`runError` because it says nothing about the session.
+   */
+  const [linkError, setLinkError] = useState<string | null>(null);
+  /** The link's IPC round-trip is in flight (also disables the button). */
+  const [linkBusy, setLinkBusy] = useState(false);
   /** Texts sent from the composer that the transcript does not show yet. */
   const [pending, setPending] = useState<PendingSend[]>([]);
   const pendingSeqRef = useRef(0);
@@ -213,6 +221,8 @@ export function AgentSessionModule({
    * absent from the projection can no longer arrive (see `reconcilePending`).
    */
   const runEndSeqRef = useRef(0);
+  /** Synchronous mirror of `linkBusy` (guards double clicks in one frame). */
+  const linkBusyRef = useRef(false);
 
   const liveRef = useRef<LiveState | null>(null);
   const liveSeqRef = useRef(0);
@@ -613,6 +623,37 @@ export function AgentSessionModule({
     setPending((prev) => prev.filter((item) => item.id !== id));
   }, []);
 
+  /**
+   * Jump to the conversation this session belongs to (the chat title in the
+   * header). Root chats open in the Chat module, task group chats in their own
+   * view — `appStore.openConversationById` owns that routing (it is the same
+   * rule the chat cards and cron jobs use); here we only report failures.
+   *
+   * The session itself stays in the Nav and a running turn is untouched: this
+   * view merely unmounts, and `agentSession.unbind` keeps main-side runs going.
+   */
+  const openConversation = useCallback(async (): Promise<void> => {
+    // Ref-guarded, not just `disabled`: two clicks inside one frame would both
+    // pass a state check and fire two IPC round-trips.
+    if (linkBusyRef.current) return;
+    linkBusyRef.current = true;
+    setLinkBusy(true);
+    setLinkError(null);
+    try {
+      const opened = await appStore.openConversationById(chatId);
+      if (!opened && !disposedRef.current) {
+        setLinkError(t("Conversation unavailable"));
+      }
+    } catch (err) {
+      if (!disposedRef.current) {
+        setLinkError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      linkBusyRef.current = false;
+      if (!disposedRef.current) setLinkBusy(false);
+    }
+  }, [chatId]);
+
   // --- Jump to previous / next "new message" divider -------------------------
   /**
    * Measure the scroll position of every rendered wake divider, in the scroll
@@ -788,7 +829,24 @@ export function AgentSessionModule({
         </div>
         <div className="imb-session-heading">
           <div className="imb-chat-title">{employeeName}</div>
-          <div className="imb-session-subtitle">{chatTitle}</div>
+          {/* The conversation this session belongs to — a button, because the
+              boss wants "click the group title → go to that group". Muted at
+              rest (it is a caption) and accent on hover only: no underline, no
+              permanent icon (boss's call). The tooltip carries the full title,
+              which the row itself may ellipsize. */}
+          <Tooltip placement="bottom" content={chatTitle} disabled={linkBusy}>
+            <button
+              type="button"
+              className="imb-session-subtitle imb-session-chat-link"
+              // The Tooltip is the visible hint; drop the native duplicate.
+              title=""
+              aria-label={`${t("Open chat")}: ${chatTitle}`}
+              disabled={linkBusy}
+              onClick={() => void openConversation()}
+            >
+              {chatTitle}
+            </button>
+          </Tooltip>
         </div>
         {/* Interrupts the current turn of *this* session only (queued work is
             kept, the session stays alive). One click, no confirmation: stopping a
@@ -859,11 +917,11 @@ export function AgentSessionModule({
           <SessionJumpButtons availability={jump} onJump={jumpTo} />
         )}
       </div>
-      {error !== null || runError !== null ? (
+      {error !== null || runError !== null || linkError !== null ? (
         // In flow, above the composer: the shared `.imb-chat-error` is a fixed
         // toast that would land on top of the composer here.
         <p className="imb-error-text imb-session-error" role="alert">
-          {error ?? runError}
+          {error ?? runError ?? linkError}
         </p>
       ) : null}
       {/* The view's only write affordance — injects into this very session
