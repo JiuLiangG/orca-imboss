@@ -24,6 +24,7 @@ import {
   sessionKey,
   useApp,
   type AppModule,
+  type OpenedItemRef,
 } from "../../app-store";
 import { BrandLogo } from "../brand-logo";
 import {
@@ -90,14 +91,28 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 /**
- * Menu of an opened Nav entry: close this entry, or every opened group chat and
- * agent session at once (both Nav menus offer the same "Close all", so the
- * action never depends on which kind was right-clicked).
+ * Menu of an opened Nav entry: close this entry, close every *other* opened
+ * entry, or every opened group chat and agent session at once (both Nav menus
+ * offer the same actions, so they never depend on which kind was right-clicked).
+ *
+ * `ref` is the right-clicked entry — "close others" keeps exactly that one, and
+ * `openedItems.length` is read when the menu opens (a menu is short-lived, so no
+ * state would change under it).
  */
-function closeMenuItems(onCloseOne: () => void): ContextMenuItem[] {
+function closeMenuItems(
+  ref: OpenedItemRef,
+  onCloseOne: () => void,
+): ContextMenuItem[] {
   return [
     { key: "close", label: t("Close"), onSelect: onCloseOne },
-    { divider: true, key: "close-all-divider" },
+    {
+      key: "close-others",
+      label: t("Close others"),
+      // Nothing else to close with a single entry open. Disabled rather than
+      // hidden, so the menu keeps the same shape as "Close all".
+      disabled: appStore.openedItems.length <= 1,
+      onSelect: () => appStore.closeOtherOpenedItems(ref),
+    },
     {
       key: "close-all",
       label: t("Close all"),
@@ -253,7 +268,7 @@ export function Nav(): React.JSX.Element {
                               setCtxMenu({
                                 x: e.clientX,
                                 y: e.clientY,
-                                items: closeMenuItems(() =>
+                                items: closeMenuItems(item, () =>
                                   appStore.closeChat(item.id),
                                 ),
                               });
@@ -283,7 +298,7 @@ export function Nav(): React.JSX.Element {
                             setCtxMenu({
                               x: e.clientX,
                               y: e.clientY,
-                              items: closeMenuItems(() =>
+                              items: closeMenuItems(item, () =>
                                 appStore.closeSession(key),
                               ),
                             });

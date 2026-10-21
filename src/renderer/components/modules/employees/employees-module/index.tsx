@@ -68,7 +68,7 @@ export function EmployeesModule(): React.JSX.Element {
   const [importConfirmOpen, setImportConfirmOpen] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
 
-  const { data } = useApp();
+  const { data, focusEmployeeId } = useApp();
   const loading = data.employees.loading;
   const listError = data.employees.error;
 
@@ -163,6 +163,20 @@ export function EmployeesModule(): React.JSX.Element {
     setSelectedId(nextId);
     selectSelection(nextId);
   }, [employees, loading, clearSelection, selectSelection]);
+
+  // Jump to one employee (the agent-session header's name link). The id arrives
+  // through the store because this module is unmounted on a module switch, and it
+  // is consumed only once the employee is actually part of the list — the filter
+  // reset that came with the jump is debounced, so the target may still be
+  // filtered out on the first render. Declared after the auto-select effect on
+  // purpose: both run in the same commit and the jump wins.
+  useEffect(() => {
+    if (focusEmployeeId === null) return;
+    if (!employees.some((employee) => employee.id === focusEmployeeId)) return;
+    setSelectedId(focusEmployeeId);
+    selectSelection(focusEmployeeId);
+    appStore.focusEmployeeId = null;
+  }, [focusEmployeeId, employees, selectSelection]);
 
   const selected =
     employees.find((employee) => employee.id === selectedId) ?? null;

@@ -1,42 +1,51 @@
-/* Floating "jump to one of my messages" control (bottom-right of the root
-   chat thread). The wrapper `.imb-chat-thread-wrap` is the positioning
-   context — the thread itself scrolls, so an absolutely positioned child of
-   it would scroll away with the messages.
-
-   The container spans the thread's width but is `pointer-events: none`: only
-   the button and the (open) panel are hit-testable, so the empty strip along
-   the bottom edge never swallows clicks on the transcript. `right`/`bottom`
-   keep the button `var(--imb-space-5)` inside the thread's corner, exactly
-   like the agent-session jump buttons. */
+/* Header control listing the boss's own messages (with a 「Latest message」
+   row). It sits immediately left of the header's search entry, so the panel
+   can never cover the transcript: it drops down from the button as an
+   absolutely positioned child of the same wrapper — no portal, and the pointer
+   never crosses a gap between trigger and panel. */
 .imb-my-jump {
-  position: absolute;
-  left: 0;
-  right: var(--imb-space-5);
-  bottom: var(--imb-space-5);
-  z-index: 5;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--imb-space-2);
-  pointer-events: none;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
 }
 
-/* Panel. It is the first flow child and the container is bottom-pinned, so the
-   panel grows upwards and the button never moves. The height expand is a real
-   one: `grid-template-rows: 0fr → 1fr` (Chromium interpolates it) plus an
-   opacity fade, both on `--imb-motion-base` / `--imb-ease-standard`. */
+/* Trigger. `.imb-icon-btn` owns hover / active / focus-visible behaviour; this
+   only pins the box size (the shared component normally sets it inline). */
+.imb-my-jump-btn {
+  width: 28px;
+  height: 28px;
+}
+
+.imb-my-jump-btn .imb-icon-btn-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Panel. `right: 0` aligns it with the trigger's trailing edge and lets it
+   grow leftwards. The vertical offset clears the header's own padding + hairline
+   (`--imb-space-2` + 1px) so the panel never covers the header's bottom border —
+   a notch in that line reads as a layout bug. The height expand is a real one:
+   `grid-template-rows: 0fr → 1fr` (Chromium interpolates it) plus an opacity
+   fade, both on `--imb-motion-base` / `--imb-ease-standard`. Surface recipe is
+   the app's popup one (`.imb-popover` / `.imb-ctx-menu`): opaque highlight
+   surface, not glass — this floats over scrolling content. */
 .imb-my-jump-panel {
+  position: absolute;
+  top: calc(100% + var(--imb-space-1));
+  right: 0;
+  z-index: 7;
   display: grid;
   grid-template-rows: 0fr;
   width: 320px;
-  /* Clamped against the container, i.e. the thread's width minus the inset. */
-  max-width: calc(100% - var(--imb-space-5));
-  border: 1px solid var(--imb-border);
-  border-radius: var(--imb-radius-md);
-  background: var(--imb-surface);
-  /* The panel floats above the transcript, so it takes the overlay elevation
-     (the FAB below keeps the lighter `raised`). */
-  box-shadow: var(--imb-elev-overlay);
+  /* Clamp to the viewport: the pane can be narrower than the panel on a small
+     window, and the panel must never push a horizontal scrollbar. */
+  max-width: calc(100vw - 2 * var(--imb-space-5));
+  padding: 0;
+  border: 1px solid var(--imb-sep-strong);
+  border-radius: var(--imb-radius-card);
+  background: var(--imb-material-popover);
+  box-shadow: var(--imb-highlight-top), var(--imb-shadow-2);
   overflow: hidden;
   opacity: 0;
   pointer-events: none;
@@ -61,6 +70,7 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  padding: var(--imb-space-1);
 }
 
 .imb-my-jump-list {
@@ -71,7 +81,6 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  padding: var(--imb-space-1);
 }
 
 .imb-my-jump-item {
@@ -102,6 +111,21 @@
   box-shadow: var(--imb-focus-ring);
 }
 
+/* 「Latest message」: a fixed action row above the list, separated from it by a
+   hairline. Slightly stronger ink because it is an action, not a transcript
+   excerpt. */
+.imb-my-jump-latest {
+  color: var(--imb-fg);
+  font-weight: 500;
+}
+
+.imb-my-jump-sep {
+  flex: none;
+  height: 1px;
+  margin: var(--imb-space-1) var(--imb-space-2);
+  background: var(--imb-sep);
+}
+
 /* The entry at the top of the viewport ("you are here"). */
 .imb-my-jump-item-current {
   background: var(--imb-accent-soft);
@@ -111,48 +135,6 @@
 
 .imb-my-jump-item-current:hover {
   background: var(--imb-accent-soft);
-}
-
-/* Floating trigger. Same visual language as the agent-session jump buttons
-   (raised pill, opaque hover tint — a translucent tint would show the text
-   scrolling underneath). */
-.imb-my-jump-fab {
-  pointer-events: auto;
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 1px solid var(--imb-border);
-  border-radius: var(--imb-radius-pill);
-  background: var(--imb-surface);
-  color: var(--imb-fg-2);
-  box-shadow: var(--imb-elev-raised);
-  cursor: pointer;
-  transition:
-    color var(--imb-motion-fast) var(--imb-ease-standard),
-    background var(--imb-motion-fast) var(--imb-ease-standard);
-}
-
-.imb-my-jump-fab:hover {
-  background: color-mix(in oklch, var(--imb-fg) 8%, var(--imb-surface));
-  color: var(--imb-fg);
-}
-
-.imb-my-jump-fab:active {
-  background: color-mix(in oklch, var(--imb-fg) 12%, var(--imb-surface));
-}
-
-.imb-my-jump-fab:focus-visible {
-  outline: none;
-  box-shadow: var(--imb-focus-ring);
-}
-
-.imb-my-jump-fab-icon {
-  width: 16px;
-  height: 16px;
 }
 
 /* Landing flash: the keyframes and the `data-quote-target` rule live in the

@@ -62,7 +62,11 @@ import {
 import "../thread.css";
 import { ThreadFindBar } from "../thread-find";
 import { useThreadFind } from "../thread-find/use-thread-find";
-import { PIN_THRESHOLD, scrollThreadToRow } from "../thread-scroll";
+import {
+  PIN_THRESHOLD,
+  prefersReducedMotion,
+  scrollThreadToRow,
+} from "../thread-scroll";
 import { TimeSeparator } from "../time-separator";
 import "./index.css";
 
@@ -811,6 +815,30 @@ export function ChatModule(): React.JSX.Element {
   }, []);
 
   /**
+   * Jump to the newest message and resume following it (the 「Latest message」
+   * row of the my-messages panel). Same end state as sending: `pinned` is set
+   * *before* scrolling, so the follow effect keeps the view on the tail, and the
+   * stored position matches the real one (a programmatic scroll emits `scroll`,
+   * which re-syncs it anyway).
+   */
+  const jumpToLatest = useCallback((): void => {
+    const el = threadRef.current;
+    if (!el) return;
+    pinnedRef.current = true;
+    restoreScrollRef.current = null;
+    if (selectedIdRef.current !== null) {
+      chatScrollStore.set(selectedIdRef.current, {
+        scrollTop: Math.max(0, el.scrollHeight - el.clientHeight),
+        pinned: true,
+      });
+    }
+    el.scrollTo({
+      top: el.scrollHeight,
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+    });
+  }, []);
+
+  /**
    * A find-bar jump cleared the "pinned to the bottom" state (new messages must
    * not yank the view back to the tail while a match is being read) and records
    * the landing position, exactly like `jumpToMessage`.
@@ -1183,38 +1211,47 @@ export function ChatModule(): React.JSX.Element {
             {t(INTEGRATION_LABEL_KEYS[selected.source])}
           </span>
         )}
-        {/* Header search entry: the same action as ⌘F (open + focus, or
-            re-select the term when the bar is already up). `aria-pressed`
-            states whether the bar is open; it never toggles it closed — that
-            would make the button behave differently from the shortcut. */}
-        <Tooltip
-          placement="bottom"
-          content={`${t("Find in chat")} · ${IS_MAC ? "⌘F" : "Ctrl+F"}`}
-        >
-          <IconButton
-            className="imb-chat-find"
-            label={t("Find in chat")}
-            aria-pressed={threadFind.open}
-            // The bubble above is the hint; an empty `title` suppresses the
-            // native (duplicate) one the component would otherwise add.
-            title=""
-            boxSize={28}
-            size={16}
-            onClick={threadFind.openFind}
+        {/* Header trailing actions: the my-messages panel and the search entry.
+            One `margin-left: auto` on the group keeps both pinned right (two
+            auto margins would split the free space and float the group's first
+            button towards the middle). */}
+        <div className="imb-chat-header-actions">
+          <MyMessageJump
+            threadRef={threadRef}
+            entries={myMessages}
+            onSelect={jumpToMessage}
+            onLatest={jumpToLatest}
+          />
+          {/* Header search entry: the same action as ⌘F (open + focus, or
+              re-select the term when the bar is already up). `aria-pressed`
+              states whether the bar is open; it never toggles it closed — that
+              would make the button behave differently from the shortcut. */}
+          <Tooltip
+            placement="bottom"
+            content={`${t("Find in chat")} · ${IS_MAC ? "⌘F" : "Ctrl+F"}`}
           >
-            <IconSearch />
-          </IconButton>
-        </Tooltip>
+            <IconButton
+              className="imb-chat-find"
+              label={t("Find in chat")}
+              aria-pressed={threadFind.open}
+              // The bubble above is the hint; an empty `title` suppresses the
+              // native (duplicate) one the component would otherwise add.
+              title=""
+              boxSize={28}
+              size={16}
+              onClick={threadFind.openFind}
+            >
+              <IconSearch />
+            </IconButton>
+          </Tooltip>
+        </div>
       </div>
-      {/* The thread is the scroll container, so the floating "my messages"
-          control lives in this positioning wrapper instead of inside it (an
-          absolute child of the scroller would scroll away with the messages). */}
+      {/* The thread is the scroll container. The my-messages list lives in the
+          header (a floating control over the transcript was covering message
+          text), so the thread needs no reserved space for it. */}
       <div className="imb-chat-thread-wrap">
         <div
-          className={cls(
-            "imb-thread",
-            myMessages.length > 0 && "imb-has-my-jump",
-          )}
+          className="imb-thread"
           ref={threadRef}
           // Focus target after the find bar closes when nothing better is
           // available (a message row keeps `focus-within` styling intact).
@@ -1242,13 +1279,6 @@ export function ChatModule(): React.JSX.Element {
           )}
         </div>
         {threadFind.open && <ThreadFindBar find={threadFind} />}
-        {myMessages.length > 0 && (
-          <MyMessageJump
-            threadRef={threadRef}
-            entries={myMessages}
-            onSelect={jumpToMessage}
-          />
-        )}
       </div>
       <ChatInputBar
         chatId={selected.id}

@@ -28,3 +28,13 @@
 .imb-ctx-menu-item.imb-danger:hover {
   background: var(--imb-danger-soft);
 }
+
+/* Disabled row (e.g. "Close others" with a single entry open). The shared
+   `.imb-menu-row` hover rule would otherwise still light it up. */
+.imb-menu-row.imb-ctx-menu-item:disabled,
+.imb-menu-row.imb-ctx-menu-item:disabled:hover {
+  background: none;
+  color: var(--imb-muted);
+  opacity: 0.5;
+  cursor: default;
+}

@@ -2,6 +2,12 @@
    interactive chat module and the read-only group-chat module. */
 
 .imb-chat-header {
+  /* Positioning context for header-anchored dropdowns (the root chat's
+     my-messages panel) and the stacking slot that keeps them above the thread:
+     the header is an earlier sibling than the thread wrapper, so without an
+     explicit z-index the later, scrolling content would paint over the panel. */
+  position: relative;
+  z-index: 5;
   flex: none;
   display: flex;
   align-items: center;
@@ -69,6 +75,53 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* Floating "back to top / bottom" control of a long thread (used by the
+   read-only group chat, which has no composer). Bottom-right of the transcript,
+   above thread content and below modals (40) / menus (50) / toasts (60) — the
+   same slot the agent session's jump buttons use. */
+.imb-thread-jumps {
+  position: absolute;
+  right: var(--imb-space-5);
+  bottom: var(--imb-space-5);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: var(--imb-space-2);
+}
+
+/* `IconButton` owns geometry, hover, disabled and focus-visible behaviour; this
+   only adds the raised surface that makes the button readable above the
+   transcript (same recipe as `.imb-session-jump`). */
+.imb-icon-btn.imb-thread-jump {
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-pill);
+  background: var(--imb-surface);
+  color: var(--imb-fg-2);
+  box-shadow: var(--imb-elev-raised);
+}
+
+/* Opaque hover tint on purpose: the button floats over scrolling text, so a
+   translucent `--imb-fg-soft` (what `.imb-icon-btn` uses) would show it. */
+.imb-icon-btn.imb-thread-jump:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--imb-fg) 8%, var(--imb-surface));
+  color: var(--imb-fg);
+}
+
+.imb-icon-btn.imb-thread-jump:focus-visible {
+  box-shadow: var(--imb-focus-ring);
+}
+
+.imb-icon-btn.imb-thread-jump:disabled {
+  opacity: 0.45;
+}
+
+/* Reserve room for that control so it never covers the tail of the last
+   message: 20px inset + two 32px buttons + 8px gap (`--imb-space-4` as the
+   breathing room, exactly like the agent session's jump buttons). */
+.imb-thread.imb-has-jumps {
+  padding-bottom: calc(var(--imb-space-5) + 72px + var(--imb-space-4));
 }
 
 /* Landing flash of a jump (a match, one of the boss's messages): `flashRow`

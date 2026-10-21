@@ -66,6 +66,41 @@
   color: var(--imb-fg-2);
 }
 
+/* Header title = the employee's name. Rendered as a `<button>` (click → that
+   employee's detail pane in the Employees module), so it carries the button
+   reset on top of `.imb-chat-title`; muted-at-rest/accency-on-hover is the same
+   affordance as the chat link below it, so the two links in this header read as
+   one language. */
+.imb-session-employee-link {
+  align-self: flex-start;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  /* Only the family is reset from the UA button style: `.imb-chat-title` (same
+     element) already supplies size and weight, and a `font:` shorthand here
+     would reset them back to the body defaults. */
+  font-family: inherit;
+  text-align: start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-session-employee-link:hover {
+  color: var(--imb-accent);
+}
+
+.imb-session-employee-link:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+  border-radius: var(--imb-radius-sm);
+}
+
 /* Header subtitle = the conversation this session belongs to. Rendered as a
    `<button>` (click → jump to that conversation), so it carries the button
    reset as well as the caption typography. `align-self: flex-start` is load
@@ -371,6 +406,10 @@ button.imb-session-tool-head:hover {
   align-self: stretch;
   display: flex;
   align-items: center;
+  /* Short rules, centred group: a full-width line reads as a section break of
+     the whole view, while a batch boundary only separates two blocks of the
+     transcript. */
+  justify-content: center;
   gap: var(--imb-space-2);
   margin: var(--imb-space-4) 0 0;
   color: var(--imb-accent);
@@ -381,7 +420,7 @@ button.imb-session-tool-head:hover {
 .imb-session-divider::before,
 .imb-session-divider::after {
   content: "";
-  flex: 1 1 0;
+  flex: 0 0 48px;
   height: 1px;
   background: var(--imb-accent);
 }
@@ -429,6 +468,7 @@ button.imb-session-tool-head:hover {
 }
 
 @keyframes imb-session-pulse {
+
   0%,
   100% {
     opacity: 1;
@@ -561,8 +601,7 @@ button.imb-session-tool-head:hover {
   flex: none;
   margin: 0;
   padding: var(--imb-space-2) var(--imb-space-5);
-  border-top: 1px solid
-    color-mix(in oklch, var(--imb-danger) 40%, var(--imb-border));
+  border-top: 1px solid color-mix(in oklch, var(--imb-danger) 40%, var(--imb-border));
   background: color-mix(in oklch, var(--imb-danger) 12%, var(--imb-surface));
   color: var(--imb-danger);
   font-size: var(--imb-text-sm);

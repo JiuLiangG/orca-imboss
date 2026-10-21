@@ -96,7 +96,14 @@ export function registerChatHandlers(): void {
     "chats:updateParticipants",
     (_event, id: unknown, changes: ChatParticipantUpdate) => {
       const safeId = assertInteger(id, "chat id");
-      return dbChats.updateChatParticipants(safeId, changes);
+      const updated = dbChats.updateChatParticipants(safeId, changes);
+      if (updated !== null) {
+        // A member edit changes the chat's composite avatar everywhere (chat
+        // list, Nav opened entries, link cards). Broadcast it like every other
+        // chat mutation; the renderer re-reads one summary and fans it out.
+        sendToRenderer("chats:changed", { chatId: safeId });
+      }
+      return updated;
     },
   );
 

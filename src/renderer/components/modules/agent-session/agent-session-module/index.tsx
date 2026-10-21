@@ -828,7 +828,25 @@ export function AgentSessionModule({
           <EmployeeAvatar employeeId={employeeId} size={30} showName />
         </div>
         <div className="imb-session-heading">
-          <div className="imb-chat-title">{employeeName}</div>
+          {/* The employee's name links to their detail pane (Employees module).
+              Plain text while the employee collection does not resolve the id
+              (a deleted employee has no detail page to open). */}
+          {employee !== undefined ? (
+            <Tooltip placement="bottom" content={t("View employee details")}>
+              <button
+                type="button"
+                className="imb-chat-title imb-session-employee-link"
+                // The tooltip is the visible hint; drop the native duplicate.
+                title=""
+                aria-label={`${t("View employee details")}: ${employeeName}`}
+                onClick={() => void appStore.openEmployeeDetail(employeeId)}
+              >
+                {employeeName}
+              </button>
+            </Tooltip>
+          ) : (
+            <div className="imb-chat-title">{employeeName}</div>
+          )}
           {/* The conversation this session belongs to — a button, because the
               boss wants "click the group title → go to that group". Muted at
               rest (it is a caption) and accent on hover only: no underline, no

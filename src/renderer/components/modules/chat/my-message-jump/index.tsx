@@ -52,34 +52,45 @@ export interface MyMessageJumpProps {
   entries: MyMessageEntry[];
   /** Scroll to a message (the module does the scrolling and the landing flash). */
   onSelect: (messageId: number) => void;
+  /**
+   * Scroll to the newest message and resume following it (the panel's
+   * 「Latest message」 row). Owned by the module: re-pinning is the same thing
+   * sending does.
+   */
+  onLatest: () => void;
 }
 
 /**
- * Floating bottom-right control that expands on hover / focus into a one-line
- * list of the boss's own messages; clicking an entry jumps to it.
+ * Header control that expands (hover / focus / click) into a list of the boss's
+ * own messages — plus a 「Latest message」 row that returns to the tail of the
+ * transcript; clicking a message jumps to it.
  *
- * Layout: the container spans the thread's width but is `pointer-events: none`,
- * so only the button and the (open) panel are hit-testable — the empty strip
- * never blocks the transcript. The panel is the first flow child and the button
- * the last, with the container pinned to the bottom corner, so the panel grows
- * upwards and the button never moves.
+ * Lives in the chat header, immediately left of the search entry, because the
+ * transcript must never be covered by a floating control: the panel drops down
+ * from the button (an absolutely positioned child of the same wrapper), so the
+ * pointer never crosses a gap and the collapsed state keeps the whole thread
+ * interactive.
  *
  * Animation: `grid-template-rows: 0fr → 1fr` (+ opacity) gives a real height
  * expand without a `max-height` guess; the collapsed panel is `inert`, so it
- * can neither be clicked nor reached with Tab. Moving the pointer from the
- * button to the panel crosses the 8px gap, which briefly leaves the container —
- * the `CLOSE_DELAY` debounce absorbs that (and a re-entry cancels it), so the
- * list never flickers while the pointer travels.
+ * can neither be clicked nor reached with Tab. The `CLOSE_DELAY` debounce
+ * absorbs the pointer briefly leaving the wrapper, so the panel does not flicker
+ * when the pointer travels towards it.
  *
  * Order: the entries are in transcript order (oldest first), so opening the list
  * starts scrolled to the bottom — the most recent thing the boss said is what
  * she usually wants. Home/End therefore mean oldest/newest.
+ *
+ * Rendered even when the boss has not written anything yet: 「Latest message」 is
+ * useful in every conversation (it is the keyboard-free way back to the tail
+ * after scrolling up).
  */
 export function MyMessageJump({
   threadRef,
   entries,
   onSelect,
-}: MyMessageJumpProps): React.JSX.Element | null {
+  onLatest,
+}: MyMessageJumpProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
   // The message nearest the top of the viewport; highlighted in the list.
   const [currentId, setCurrentId] = useState<number | null>(null);
@@ -107,8 +118,8 @@ export function MyMessageJump({
     }, CLOSE_DELAY);
   }, [cancelClose]);
 
-  // Drop a pending close timer when the control unmounts (module switch, chat
-  // switch, or the list becoming empty).
+  // Drop a pending close timer when the control unmounts (module switch or chat
+  // switch).
   useEffect(() => cancelClose, [cancelClose]);
 
   /**
@@ -120,7 +131,7 @@ export function MyMessageJump({
    */
   const readCurrentId = useCallback((): number | null => {
     const thread = threadRef.current;
-    if (!thread) return null;
+    if (!thread || entries.length === 0) return null;
     const ids = new Set(entries.map((entry) => entry.id));
     const anchor = thread.getBoundingClientRect().top + MY_JUMP_TOP_GAP;
     let above: number | null = null;
@@ -153,23 +164,16 @@ export function MyMessageJump({
    * `scrollIntoView`, which would also scroll the thread — an ancestor — and
    * misbehaves while the body still has zero height), and computed against the
    * body's final viewport height so the growth of the panel can only clamp it
-   * *downwards* to a still-correct position. No entry ⇒ fall back to the newest
-   * (the bottom).
+   * *downwards* to a still-correct position. No entry ⇒ nothing to reveal.
    */
   const revealEntry = useCallback(
     (messageId: number | null): void => {
       const list = listRef.current;
-      if (!list) return;
-      const row =
-        messageId === null
-          ? null
-          : list.querySelector<HTMLElement>(
-              `.imb-my-jump-item[data-entry-id="${messageId}"]`,
-            );
-      if (!row) {
-        list.scrollTop = list.scrollHeight;
-        return;
-      }
+      if (!list || messageId === null) return;
+      const row = list.querySelector<HTMLElement>(
+        `.imb-my-jump-item[data-entry-id="${messageId}"]`,
+      );
+      if (!row) return;
       const viewport = listViewport(list);
       const listTop = list.getBoundingClientRect().top;
       const rowRect = row.getBoundingClientRect();
@@ -240,9 +244,10 @@ export function MyMessageJump({
     scheduleClose();
   };
 
-  // List rows are in transcript order, so Home lands on the oldest message and
-  // End on the newest; ArrowDown walks towards newer messages, ArrowUp towards
-  // older ones (the direction the transcript reads).
+  // Rows are in transcript order («Latest message», then oldest → newest), so
+  // Home lands on the first row and End on the newest message; ArrowDown walks
+  // towards newer messages, ArrowUp towards older ones (the direction the
+  // transcript reads).
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
     const key = event.key;
     if (
@@ -280,9 +285,10 @@ export function MyMessageJump({
     setCurrentId(messageId);
   };
 
-  // Defensive: the module hides the whole control when there is nothing to
-  // list, so this only guards against a transient empty render.
-  if (entries.length === 0) return null;
+  const handleLatest = (): void => {
+    cancelClose();
+    onLatest();
+  };
 
   const label = t("My messages");
 
@@ -296,6 +302,21 @@ export function MyMessageJump({
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
     >
+      <button
+        ref={buttonRef}
+        type="button"
+        className="imb-icon-btn imb-my-jump-btn"
+        aria-label={label}
+        // aria-label + the panel carry the meaning; no native duplicate tooltip.
+        title=""
+        aria-expanded={open}
+        aria-controls={PANEL_ID}
+        onClick={showPanel}
+      >
+        <span className="imb-icon-btn-icon">
+          <IconList />
+        </span>
+      </button>
       <div
         id={PANEL_ID}
         className="imb-my-jump-panel"
@@ -307,38 +328,37 @@ export function MyMessageJump({
         inert={!open}
       >
         <div className="imb-my-jump-panel-inner">
-          <div className="imb-my-jump-list" ref={listRef}>
-            {entries.map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                data-entry-id={entry.id}
-                className={cls(
-                  "imb-my-jump-item",
-                  entry.id === currentId && "imb-my-jump-item-current",
-                )}
-                aria-current={entry.id === currentId ? "true" : undefined}
-                title={entry.text}
-                onClick={() => handleSelect(entry.id)}
-              >
-                {entry.text}
-              </button>
-            ))}
-          </div>
+          {entries.length > 0 && (
+            <>
+              <div className="imb-my-jump-list" ref={listRef}>
+                {entries.map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    data-entry-id={entry.id}
+                    className={cls(
+                      "imb-my-jump-item",
+                      entry.id === currentId && "imb-my-jump-item-current",
+                    )}
+                    aria-current={entry.id === currentId ? "true" : undefined}
+                    title={entry.text}
+                    onClick={() => handleSelect(entry.id)}
+                  >
+                    {entry.text}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          <button
+            type="button"
+            className="imb-my-jump-item imb-my-jump-latest"
+            onClick={handleLatest}
+          >
+            {t("Go to bottom")}
+          </button>
         </div>
       </div>
-      <button
-        ref={buttonRef}
-        type="button"
-        className="imb-my-jump-fab"
-        aria-label={label}
-        title={label}
-        aria-expanded={open}
-        aria-controls={PANEL_ID}
-        onClick={showPanel}
-      >
-        <IconList className="imb-my-jump-fab-icon" />
-      </button>
     </div>
   );
 }

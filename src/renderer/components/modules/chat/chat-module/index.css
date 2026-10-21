@@ -4,11 +4,22 @@
   margin: var(--imb-space-2) 0;
 }
 
-/* Reserve room for that control so it never covers the tail of the last
-   message (the boss's own bubbles are right-aligned, i.e. exactly where the
-   button sits): 20px inset + 32px button + 20px gap. */
-.imb-thread.imb-has-my-jump {
-  padding-bottom: calc(var(--imb-space-5) + 32px + var(--imb-space-5));
+/* Header trailing group: the my-messages control and the search entry. The
+   group — not each button — owns the `margin-left: auto` that pins it right
+   (two auto margins in one flex row would split the free space and float the
+   first button towards the middle), so `.imb-chat-find`'s own auto margin is
+   cancelled inside it. The shared `.imb-chat-find` rule stays for the other
+   headers (group chat / no composer). */
+.imb-chat-header-actions {
+  flex: none;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--imb-space-2);
+}
+
+.imb-chat-header-actions .imb-chat-find {
+  margin-left: 0;
 }
 
 /* Reserved run-status slot appended below the thread while a run is active.

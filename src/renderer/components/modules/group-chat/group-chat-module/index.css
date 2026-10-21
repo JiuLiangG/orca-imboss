@@ -1,0 +1,54 @@
+/* Group-chat header: two-line heading (own title + the root conversation it was
+   spawned from). Mirrors the agent-session header's `.imb-session-heading` /
+   `.imb-session-subtitle` recipe — a caption-sized subtitle that is muted at
+   rest, turns accent on hover and carries the full title in a tooltip because
+   the row ellipsizes. Kept local to this module instead of being extracted from
+   the session stylesheet, so the already-approved session header cannot regress. */
+.imb-gc-heading {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+/* Button reset over the caption typography. `align-self: flex-start` stops the
+   click target from stretching across the whole (column flex) row; the ellipsis
+   trio moves onto the button, which is the text container. */
+.imb-gc-subtitle {
+  align-self: flex-start;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--imb-muted);
+  font: inherit;
+  font-size: var(--imb-text-sm);
+  text-align: start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imb-gc-root-link {
+  cursor: pointer;
+  transition: color var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-gc-root-link:hover {
+  color: var(--imb-accent);
+}
+
+.imb-gc-root-link:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+  border-radius: var(--imb-radius-sm);
+}
+
+.imb-gc-root-link:disabled,
+.imb-gc-root-link:disabled:hover {
+  color: var(--imb-muted);
+  opacity: 0.6;
+  cursor: default;
+}

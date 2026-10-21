@@ -20,6 +20,8 @@ export interface ContextMenuAction {
   key: string;
   label: ReactNode;
   danger?: boolean;
+  /** Rendered greyed out and inert (the action does not apply right now). */
+  disabled?: boolean;
   onSelect: () => void;
 }
 
@@ -162,6 +164,10 @@ export function ContextMenu({
               "imb-ctx-menu-item imb-menu-row",
               item.danger && "imb-danger",
             )}
+            disabled={item.disabled === true}
+            // With `role="menuitem"` the native `disabled` is not always
+            // announced, so state it explicitly as well.
+            aria-disabled={item.disabled === true || undefined}
             onClick={() => {
               onClose();
               item.onSelect();

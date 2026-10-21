@@ -21,6 +21,10 @@ import { proxy, useSnapshot } from "valtio";
 import { clearAskDraftsForChat } from "./ask-draft";
 import { onChatsDeleted } from "./chat-events";
 import {
+  invalidateChatSummary,
+  setCachedChatSummary,
+} from "./chat-summary-cache";
+import {
   revokeDraftUrls,
   type ChatDraft,
   type PendingAttachment,
@@ -44,6 +48,12 @@ export interface OpenedChat {
   id: number;
   title: string;
   participants: number[];
+  /**
+   * The chat this one was spawned from (`null` for a root chat). Snapshotted at
+   * open time and used by the group-chat view to label itself with the root
+   * conversation's title (see `GroupChatModule`).
+   */
+  fromChatId: number | null;
 }
 
 /** An employee/assistant agent session opened from a chat avatar, shown in the Nav. */
@@ -184,6 +194,10 @@ export const appStore = proxy({
   // Pending chat to select when the chat module is mounted (set by an OS
   // notification click). Cleared once consumed.
   focusChatId: null as number | null,
+
+  // Pending employee to select when the employees module is mounted (set by the
+  // agent-session header's name link). Cleared once consumed.
+  focusEmployeeId: null as number | null,
 
   // Spend module selection: the grouping dimension (conversation list is the
   // default), the time window (only shown for the employee grouping), and the
@@ -410,6 +424,8 @@ export const appStore = proxy({
     if (index >= 0) {
       appStore.data.employees.items.splice(index, 1);
     }
+    // A pending "open this employee's detail" jump cannot resolve any more.
+    if (appStore.focusEmployeeId === id) appStore.focusEmployeeId = null;
   },
 
   // --- Integrations -----------------------------------------------------------
@@ -636,16 +652,36 @@ export const appStore = proxy({
         err instanceof Error ? err.message : String(err);
     }
   },
+  /**
+   * Re-read one chat's summary and apply it to **every** consumer of that data:
+   * the root-chat list cache, the opened Nav entries, and the shared link-card
+   * summary cache (`chat-summary-cache`).
+   *
+   * One IPC read, no matter how many surfaces show the chat. Driven by
+   * `messages:changed` (so a group chat's **participant list** follows an
+   * assistant `imb_add_participant` — the join notice is a message) and by
+   * `chats:changed` (rename / pin / mute / tags / auto title generation).
+   *
+   * Leaving group chats out of the opened-entry refresh is what used to make the
+   * group avatar go stale (and, via a stale snapshot handed back to `openChat`,
+   * revert to fewer members): a group chat is never part of the root-chat list,
+   * but its Nav entry and its link cards are.
+   */
   async refreshChatSummary(id: number): Promise<void> {
+    if (!Number.isSafeInteger(id) || id <= 0) return;
     try {
       const summary = await imb.chats.summary(id);
       if (summary === null) {
         appStore.removeChat(id);
+        invalidateChatSummary(id);
         return;
       }
-      // Group chats (from_chat_id != null) are never cached as root chats.
-      if (summary.fromChatId !== null) return;
-      appStore.replaceChat(summary);
+      // Root chats (from_chat_id == null) are the chat module's list cache;
+      // group chats must never be pushed in there.
+      if (summary.fromChatId === null) appStore.replaceChat(summary);
+      applyChatSummaryToOpenedItems(summary);
+      // Link cards (chat card / progress card / interrupted notice).
+      setCachedChatSummary(summary);
     } catch (err) {
       console.error(
         "[data:chats:refresh]",
@@ -692,6 +728,10 @@ export const appStore = proxy({
     for (const id of deleted) {
       appStore.removeChat(id);
     }
+    // The link cards' shared summary cache must not keep a deleted chat's
+    // snapshot (the cache also invalidates on its own `chats:deleted`
+    // subscription; this keeps the store's path explicit and order-free).
+    for (const id of deleted) invalidateChatSummary(id);
     if (appStore.focusChatId !== null && deleted.has(appStore.focusChatId)) {
       appStore.focusChatId = null;
     }
@@ -835,6 +875,23 @@ export const appStore = proxy({
     await imb.settings.set(SettingKeys.Module, "chat");
   },
 
+  /**
+   * Jump to one employee's detail pane in the Employees module (the agent
+   * session header's name link).
+   *
+   * Same shape as `focusChat`: an explicit jump drops the module's restored
+   * search filter first, then hands the id to the module through
+   * `focusEmployeeId` (the module is unmounted on a switch, so the pending id
+   * has to live in the store). Persisted module choice, like any nav switch.
+   */
+  async openEmployeeDetail(employeeId: number): Promise<void> {
+    if (!Number.isSafeInteger(employeeId) || employeeId < 0) return;
+    appStore.resetFilter("employees");
+    appStore.focusEmployeeId = employeeId;
+    appStore.module = "employees";
+    await imb.settings.set(SettingKeys.Module, "employees");
+  },
+
   /** Open the Settings module on a section (persists the active module). */
   async openSettings(section: SettingsSection): Promise<void> {
     appStore.settingsSection = section;
@@ -862,25 +919,41 @@ export const appStore = proxy({
   },
 
   // --- Opened chats & agent sessions (combined Nav section) -------------------
-  /** Open (or focus) a group chat linked by a `chat`-kind card. */
+  /**
+   * Open (or focus) a group chat linked by a `chat`-kind card.
+   *
+   * The caller's `summary` is only a **snapshot**: the cards that call this hold
+   * one from their own render (`useChatSummary`), which may predate a rename or
+   * a participant edit. Rendering it immediately keeps the click instant, then
+   * one `refreshChatSummary` read brings the Nav entry, the group-chat header
+   * and the card cache in line with the database — a stale snapshot can no
+   * longer overwrite newer data (`existing.participants` used to be clobbered
+   * with the card's old member list).
+   */
   openChat(chat: ChatSummary): void {
+    if (!Number.isSafeInteger(chat.id) || chat.id <= 0) return;
     const existing = appStore.openedItems.find(
       (item) => item.kind === "chat" && item.id === chat.id,
     );
+    const participants = [...chat.participants];
     if (existing?.kind === "chat") {
       existing.title = chat.title;
-      existing.participants = chat.participants;
+      existing.participants = participants;
+      existing.fromChatId = chat.fromChatId;
     } else {
       appStore.openedItems.push({
         kind: "chat",
         id: chat.id,
         title: chat.title,
-        participants: chat.participants,
+        participants,
+        fromChatId: chat.fromChatId,
       });
     }
     appStore.activeChatId = chat.id;
     // Deliberately not persisted: opened entries are session-only.
     appStore.module = "group-chat";
+    // Self-heal against a stale caller snapshot (see the doc comment).
+    void appStore.refreshChatSummary(chat.id);
   },
 
   /** Focus an already-opened group chat (Nav item click). */
@@ -972,58 +1045,6 @@ export const appStore = proxy({
     appStore.ensureEmployees();
   },
 
-  /**
-   * Re-read one chat's title and write it into every opened Nav entry that
-   * labels itself with it: agent sessions (`OpenedSession.chatTitle` — the
-   * session header and its Nav label) **and** opened group chats
-   * (`OpenedChat.title` — its Nav label and the group-chat view's header).
-   *
-   * Both are snapshots taken when the entry was opened (see `openAgentSession`
-   * / `openChat`), yet titles change afterwards: a freshly spawned task group
-   * chat is named by the title-generation job after its first messages, and a
-   * chat can be renamed at any time. Without this, every opened entry keeps the
-   * stale name for the rest of the session. Driven by `chats:changed` (see
-   * `initAppStore`), so it runs for root chats and group chats alike (the
-   * group-chat branch of `refreshChatSummary` returns early for the chat
-   * *list*, which is why the opened entries need their own refresh).
-   *
-   * **One** summary read covers both entry kinds (never one IPC per entry), and
-   * none at all unless an opened entry references this chat. Only titles are
-   * touched — order, unread, pins and tags are other owners' state.
-   *
-   * Best-effort: a renamed-but-deleted chat is handled by `chats:onDeleted`, so
-   * a `null` summary only means "nothing to update".
-   */
-  async refreshOpenedChatTitles(chatId: number): Promise<void> {
-    if (!Number.isSafeInteger(chatId) || chatId <= 0) return;
-    // Cheap guard first: no IPC at all unless an opened entry needs the title.
-    const tracked = appStore.openedItems.some((item) =>
-      item.kind === "chat" ? item.id === chatId : item.chatId === chatId,
-    );
-    if (!tracked) return;
-    try {
-      const summary = await imb.chats.summary(chatId);
-      if (summary === null) return;
-      // Same normalization as `resolveChatTitle`, so a later re-open cannot
-      // flip the label between "" and the fallback.
-      const raw = summary.title.trim();
-      const title = raw.length > 0 ? raw : t("New Chat");
-      for (const item of appStore.openedItems) {
-        if (item.kind === "chat") {
-          if (item.id === chatId && item.title !== title) item.title = title;
-        } else if (item.chatId === chatId && item.chatTitle !== title) {
-          item.chatTitle = title;
-        }
-      }
-    } catch (err) {
-      // Labels only — never surface this (the title on screen simply stays).
-      console.error(
-        "[opened-titles:refresh]",
-        err instanceof Error ? err.message : err,
-      );
-    }
-  },
-
   /** Focus an already-opened agent session (Nav item click). */
   activateSession(key: string): void {
     if (
@@ -1072,6 +1093,38 @@ export const appStore = proxy({
       appStore.module === "agent-session"
     ) {
       appStore.module = "chat";
+    }
+  },
+
+  /**
+   * Close every opened Nav entry except one (Nav 「Close others」).
+   *
+   * The kept entry is the one that was right-clicked, so the view follows the
+   * right-click: whatever is left on screen is exactly what the boss asked to
+   * keep. Like `closeAllOpenedItems`, this is view state only — composer drafts,
+   * unread counts, pins and running agent sessions (their runs continue in main;
+   * the view merely unbinds) are untouched — and it never loops through
+   * `closeChat`/`closeSession`, which would activate neighbours and switch the
+   * module per entry.
+   *
+   * A single opened entry (or an unknown reference) is a no-op.
+   */
+  closeOtherOpenedItems(ref: OpenedItemRef): void {
+    const keepKey = openedItemKey(ref);
+    const kept = appStore.openedItems.find(
+      (item) => openedItemKey(item) === keepKey,
+    );
+    if (!kept || appStore.openedItems.length <= 1) return;
+    appStore.openedItems.splice(0, appStore.openedItems.length, kept);
+    // The kept entry is the only one left, so both pointers are unambiguous.
+    if (kept.kind === "chat") {
+      appStore.activeSessionKey = null;
+      appStore.activeChatId = kept.id;
+      appStore.module = "group-chat";
+    } else {
+      appStore.activeChatId = null;
+      appStore.activeSessionKey = sessionKey(kept.employeeId, kept.chatId);
+      appStore.module = "agent-session";
     }
   },
 
@@ -1161,13 +1214,10 @@ export async function initAppStore(): Promise<void> {
     },
   );
   // Title-only updates (auto title generation lands asynchronously, after the
-  // messages:changed refresh) — same summary refresh keeps list + header in sync.
+  // messages:changed refresh) — same summary refresh keeps list, Nav entries,
+  // group-chat header and link cards in sync with one IPC read.
   imb.chats.onChanged(({ chatId }) => {
     void appStore.refreshChatSummary(chatId);
-    // Opened Nav entries (group chats + agent sessions) label themselves with
-    // this chat's title; their snapshots are not covered by the chat-list
-    // refresh above.
-    void appStore.refreshOpenedChatTitles(chatId);
   });
   // Cascade deletes push the full deleted id set (root + spawned chats) so the
   // list cache, Nav opened chats and the focus target all stay consistent.
@@ -1254,6 +1304,42 @@ function sortChats(): void {
       b.lastMessageAt - a.lastMessageAt ||
       b.id - a.id,
   );
+}
+
+/**
+ * Write one freshly read summary into every opened Nav entry that labels itself
+ * with it: agent sessions (`OpenedSession.chatTitle` — the session header and
+ * its Nav label) and opened group chats (`OpenedChat.title` + `participants` —
+ * its Nav label, its Nav composite avatar and the group-chat view's header).
+ *
+ * Both kinds are snapshots taken when the entry was opened (see
+ * `openAgentSession` / `openChat`), yet they change afterwards: a freshly
+ * spawned task group is named after its first messages, the boss can rename a
+ * chat at any time, and the assistant can add participants to a group mid-run.
+ *
+ * Only changed fields are assigned (valtio re-renders on any write, and a
+ * participant array is always a new reference), and only the fields listed
+ * above are touched — order, unread, pins and tags are other owners' state.
+ */
+function applyChatSummaryToOpenedItems(summary: ChatSummary): void {
+  const raw = summary.title.trim();
+  const title = raw.length > 0 ? raw : t("New Chat");
+  for (const item of appStore.openedItems) {
+    if (item.kind === "chat") {
+      if (item.id !== summary.id) continue;
+      if (item.title !== title) item.title = title;
+      if (item.fromChatId !== summary.fromChatId) {
+        item.fromChatId = summary.fromChatId;
+      }
+      const current = item.participants;
+      const same =
+        current.length === summary.participants.length &&
+        summary.participants.every((id, index) => id === current[index]);
+      if (!same) item.participants = [...summary.participants];
+    } else if (item.chatId === summary.id && item.chatTitle !== title) {
+      item.chatTitle = title;
+    }
+  }
 }
 
 /**
