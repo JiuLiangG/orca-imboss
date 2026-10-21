@@ -19,6 +19,7 @@ import type {
 import { createRef } from "react";
 import { proxy, useSnapshot } from "valtio";
 import { clearAskDraftsForChat } from "./ask-draft";
+import { onChatsDeleted } from "./chat-events";
 import {
   revokeDraftUrls,
   type ChatDraft,
@@ -1170,8 +1171,11 @@ export async function initAppStore(): Promise<void> {
   });
   // Cascade deletes push the full deleted id set (root + spawned chats) so the
   // list cache, Nav opened chats and the focus target all stay consistent.
-  imb.chats.onDeleted(({ chatIds }) => {
-    if (Array.isArray(chatIds)) appStore.removeDeletedChats(chatIds);
+  // App-lifetime subscription (never released), routed through the shared
+  // `chats:deleted` dispatcher so the renderer keeps exactly one IPC listener
+  // no matter how many link cards are mounted — see `chat-events.ts`.
+  onChatsDeleted((chatIds) => {
+    appStore.removeDeletedChats(chatIds);
   });
   imb.chats.onUnreadChanged(({ chatId, unread }) => {
     appStore.setChatUnread(chatId, unread);

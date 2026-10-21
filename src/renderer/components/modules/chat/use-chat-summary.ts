@@ -1,5 +1,6 @@
 import type { ChatSummary } from "@shared/types";
 import { useEffect, useState } from "react";
+import { onChatsDeleted } from "../../../chat-events";
 
 /**
  * Resolved chat summaries, keyed by chat id, shared by every link card that
@@ -13,13 +14,16 @@ const summaryCache = new Map<number, ChatSummary>();
 /**
  * One-time binding that drops shared cache entries for cascade-deleted chats,
  * so a later mount of a card for a deleted chat cannot reuse a stale summary.
+ *
+ * Goes through the shared `chats:deleted` dispatcher (`chat-events`) rather
+ * than subscribing to the IPC channel itself: the per-card subscriptions below
+ * are the reason that channel used to exceed its listener limit.
  */
 let summaryCacheCleanupBound = false;
 function bindSummaryCacheCleanup(): void {
   if (summaryCacheCleanupBound) return;
   summaryCacheCleanupBound = true;
-  imb.chats.onDeleted(({ chatIds }) => {
-    if (!Array.isArray(chatIds)) return;
+  onChatsDeleted((chatIds) => {
     for (const id of chatIds) summaryCache.delete(id);
   });
 }
@@ -74,8 +78,8 @@ export function useChatSummary(
   useEffect(() => {
     bindSummaryCacheCleanup();
     if (chatId === null) return;
-    const off = imb.chats.onDeleted(({ chatIds }) => {
-      if (Array.isArray(chatIds) && chatIds.includes(chatId)) {
+    const off = onChatsDeleted((chatIds) => {
+      if (chatIds.includes(chatId)) {
         summaryCache.delete(chatId);
         setSummary(null);
       }
