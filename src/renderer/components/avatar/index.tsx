@@ -12,6 +12,7 @@ export interface AvatarProps {
   /** Muted ("alt") styling for non-employee avatars. */
   alt?: boolean;
   active?: boolean;
+  showTitle?: boolean;
   className?: string;
 }
 
@@ -22,6 +23,7 @@ export function Avatar({
   size = 40,
   alt = false,
   active = false,
+  showTitle = false,
   className,
 }: AvatarProps): React.JSX.Element {
   // A moved/deleted avatar file must fall back to the letter rather than show
@@ -30,6 +32,7 @@ export function Avatar({
   useEffect(() => setFailed(false), [src]);
 
   const showImage = Boolean(src) && !failed;
+  const title = showTitle ? { title: name } : undefined;
 
   return (
     <span
@@ -40,7 +43,7 @@ export function Avatar({
         className,
       )}
       style={{ width: size, height: size, fontSize: Math.max(11, size * 0.35) }}
-      title={name}
+      {...title}
     >
       {showImage ? (
         <img src={src ?? ""} alt={name ?? ""} onError={() => setFailed(true)} />

@@ -118,6 +118,7 @@ export function MessageItem({
             employeeId={message.senderEmployeeId ?? 0}
             size={34}
             onClick={openSession}
+            showName
           />
           <AckIndicator />
         </div>
@@ -138,6 +139,7 @@ export function MessageItem({
             <EmployeeAvatar
               employeeId={message.senderEmployeeId}
               size={34}
+              showName
               onClick={openSession}
             />
           }

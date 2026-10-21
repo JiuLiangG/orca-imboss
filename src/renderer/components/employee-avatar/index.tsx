@@ -11,6 +11,7 @@ export interface EmployeeAvatarProps {
   alt?: boolean;
   active?: boolean;
   className?: string;
+  showName?: boolean;
   /**
    * When provided, the avatar becomes a button. In the chat thread this opens
    * the employee's agent session for the current chat.
@@ -29,6 +30,7 @@ export function EmployeeAvatar({
   alt,
   active,
   className,
+  showName = false,
   onClick,
 }: EmployeeAvatarProps): React.JSX.Element {
   const { data } = useApp();
@@ -54,6 +56,7 @@ export function EmployeeAvatar({
         alt={alt}
         active={active}
         className={className}
+        showTitle={showName}
       />
     ) : (
       <Avatar
@@ -64,6 +67,7 @@ export function EmployeeAvatar({
         alt={alt}
         active={active}
         className={className}
+        showTitle={showName}
       />
     );
 

@@ -784,7 +784,7 @@ export function AgentSessionModule({
     <>
       <div className="imb-chat-header">
         <div className="imb-chat-header-avatar">
-          <EmployeeAvatar employeeId={employeeId} size={30} />
+          <EmployeeAvatar employeeId={employeeId} size={30} showName />
         </div>
         <div className="imb-session-heading">
           <div className="imb-chat-title">{employeeName}</div>
