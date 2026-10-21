@@ -7,6 +7,8 @@ import { useDropdownPosition } from "../../hooks/use-dropdown-position";
 import { useEscapeKey } from "../../hooks/use-escape-key";
 import { usePopupLayer } from "../../hooks/use-popup-layer";
 import { IconChevronDown, IconX } from "../icons";
+import { SkillDescriptionTip } from "../skill-description-tip";
+import type { Placement } from "../tooltip/position";
 import "./index.css";
 import { MultiSelectPanel, type MultiSelectOption } from "./panel";
 
@@ -20,6 +22,14 @@ export type {
 
 /** Keep the panel readable even when the trigger is a small inline control. */
 const PANEL_MIN_WIDTH = 200;
+const TIP_SHOW_DELAY_MS = 300;
+const TIP_HIDE_DELAY_MS = 180;
+
+interface DescriptionTip {
+  description: string;
+  anchor: HTMLElement;
+  placement: Placement;
+}
 
 export interface MultiSelectProps {
   value: string[];
@@ -77,9 +87,15 @@ export function MultiSelect({
 }: MultiSelectProps): React.JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const tipNodeRef = useRef<HTMLDivElement>(null);
+  const showTimer = useRef<number | null>(null);
+  const hideTimer = useRef<number | null>(null);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [filter, setFilter] = useState("");
+  const [keyNav, setKeyNav] = useState(false);
+  const [tip, setTip] = useState<DescriptionTip | null>(null);
+  const tipState = useRef<DescriptionTip | null>(null);
   const { panelStyle, positionPanel } = useDropdownPosition(
     rootRef,
     PANEL_MIN_WIDTH,
@@ -103,14 +119,85 @@ export function MultiSelect({
     !atCap &&
     !options.some((o) => o.value === filterText || o.label === filterText);
   const rowCount = filtered.length + (canCreate ? 1 : 0);
+  const hasDescriptions = options.some(
+    (option) => (option.description?.trim() ?? "").length > 0,
+  );
 
-  // The panel is portaled to `document.body`, so it lives outside `rootRef`;
-  // both count as "inside" for click-outside purposes.
-  const outsideRefs = useMemo(() => [rootRef, panelRef], []);
+  function clearShowTimer(): void {
+    if (showTimer.current !== null) {
+      window.clearTimeout(showTimer.current);
+      showTimer.current = null;
+    }
+  }
+
+  function clearHideTimer(): void {
+    if (hideTimer.current !== null) {
+      window.clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+  }
+
+  function updateTip(next: DescriptionTip | null): void {
+    tipState.current = next;
+    setTip(next);
+  }
+
+  function armShow(
+    option: MultiSelectOption,
+    anchor: HTMLElement,
+    placement: Placement,
+  ): void {
+    const description = option.description?.trim() ?? "";
+    if (description.length === 0) {
+      scheduleHide();
+      return;
+    }
+    clearHideTimer();
+    const next = { description, anchor, placement };
+    const current = tipState.current;
+    if (current) {
+      clearShowTimer();
+      if (
+        current.anchor !== anchor ||
+        current.description !== description ||
+        current.placement !== placement
+      ) {
+        updateTip(next);
+      }
+      return;
+    }
+    clearShowTimer();
+    showTimer.current = window.setTimeout(
+      () => updateTip(next),
+      TIP_SHOW_DELAY_MS,
+    );
+  }
+
+  function scheduleHide(): void {
+    clearShowTimer();
+    if (hideTimer.current !== null) return;
+    hideTimer.current = window.setTimeout(() => {
+      hideTimer.current = null;
+      updateTip(null);
+    }, TIP_HIDE_DELAY_MS);
+  }
+
+  // The panel and the description card are portaled to `document.body`, so
+  // they live outside `rootRef`. All three count as "inside".
+  const outsideRefs = useMemo(() => [rootRef, panelRef, tipNodeRef], []);
   const closePanel = useMemo(
     () => (): void => {
       setOpen(false);
       setFilter("");
+      setKeyNav(false);
+      setTip((current) => {
+        const next =
+          current && panelRef.current?.contains(current.anchor)
+            ? null
+            : current;
+        tipState.current = next;
+        return next;
+      });
     },
     [],
   );
@@ -132,9 +219,38 @@ export function MultiSelect({
     };
   }, [open, positionPanel]);
 
+  useEffect(() => {
+    return () => {
+      if (showTimer.current !== null) window.clearTimeout(showTimer.current);
+      if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
+    };
+  }, []);
+
+  const activeOption = keyNav && open ? filtered[activeIndex] : undefined;
+  const activeDescription = activeOption?.description?.trim() ?? "";
+  const activeValue = activeOption?.value;
+
+  useEffect(() => {
+    if (!keyNav || !open) return;
+    if (activeDescription.length === 0 || activeValue === undefined) {
+      updateTip(null);
+      return;
+    }
+    const anchor = panelRef.current?.querySelector<HTMLElement>(
+      `[data-ms-value="${CSS.escape(activeValue)}"]`,
+    );
+    if (!anchor) return;
+    clearHideTimer();
+    clearShowTimer();
+    updateTip({ description: activeDescription, anchor, placement: "right" });
+    // The helpers only touch refs and setState.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keyNav, open, activeDescription, activeValue]);
+
   function openPanel(): void {
     positionPanel();
     setFilter("");
+    setKeyNav(false);
     setActiveIndex(options.length > 0 ? 0 : -1);
     setOpen(true);
   }
@@ -178,21 +294,25 @@ export function MultiSelect({
     if (searchable) return; // the filter input owns the panel's keyboard nav
     if (event.key === "ArrowDown") {
       event.preventDefault();
+      setKeyNav(true);
       setActiveIndex(
         options.length > 0 ? (activeIndex + 1) % options.length : -1,
       );
       focusOption(activeIndex + 1);
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
+      setKeyNav(true);
       const next = activeIndex <= 0 ? options.length - 1 : activeIndex - 1;
       setActiveIndex(next);
       focusOption(next);
     } else if (event.key === "Home") {
       event.preventDefault();
+      setKeyNav(true);
       setActiveIndex(0);
       focusOption(0);
     } else if (event.key === "End") {
       event.preventDefault();
+      setKeyNav(true);
       setActiveIndex(options.length - 1);
       focusOption(options.length - 1);
     }
@@ -201,15 +321,19 @@ export function MultiSelect({
   function onSearchKeyDown(event: React.KeyboardEvent): void {
     if (event.key === "ArrowDown") {
       event.preventDefault();
+      setKeyNav(true);
       if (rowCount > 0) setActiveIndex((i) => (i + 1) % rowCount);
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
+      setKeyNav(true);
       if (rowCount > 0) setActiveIndex((i) => (i <= 0 ? rowCount - 1 : i - 1));
     } else if (event.key === "Home") {
       event.preventDefault();
+      setKeyNav(true);
       setActiveIndex(rowCount > 0 ? 0 : -1);
     } else if (event.key === "End") {
       event.preventDefault();
+      setKeyNav(true);
       setActiveIndex(rowCount - 1);
     } else if (event.key === "Enter") {
       event.preventDefault();
@@ -244,11 +368,28 @@ export function MultiSelect({
           {selected.length === 0 ? (
             <span className="imb-placeholder">{placeholder}</span>
           ) : (
-            selected.map((opt) => (
-              <span key={opt.value} className="imb-ms-chip">
-                {opt.label}
-              </span>
-            ))
+            selected.map((opt) => {
+              const description = opt.description?.trim() ?? "";
+              return (
+                <span
+                  key={opt.value}
+                  className="imb-ms-chip"
+                  onMouseEnter={
+                    description.length > 0
+                      ? (event) => {
+                          setKeyNav(false);
+                          armShow(opt, event.currentTarget, "top");
+                        }
+                      : undefined
+                  }
+                  onMouseLeave={
+                    description.length > 0 ? () => scheduleHide() : undefined
+                  }
+                >
+                  {opt.label}
+                </span>
+              );
+            })
           )}
         </span>
         <IconChevronDown
@@ -304,6 +445,7 @@ export function MultiSelect({
                     placeholder: searchPlaceholder,
                     onChange: (next) => {
                       setFilter(next);
+                      setKeyNav(false);
                       setActiveIndex(0);
                     },
                     onKeyDown: onSearchKeyDown,
@@ -319,9 +461,29 @@ export function MultiSelect({
                   }
                 : undefined
             }
+            onOptionPointerEnter={
+              hasDescriptions
+                ? (option, anchor) => {
+                    setKeyNav(false);
+                    armShow(option, anchor, "right");
+                  }
+                : undefined
+            }
+            onOptionPointerLeave={hasDescriptions ? scheduleHide : undefined}
           />,
           document.body,
         )}
+      {tip && (
+        <SkillDescriptionTip
+          tipRef={tipNodeRef}
+          anchor={tip.anchor}
+          description={tip.description}
+          placement={tip.placement}
+          onPointerEnter={clearHideTimer}
+          onPointerLeave={scheduleHide}
+          onDismiss={() => updateTip(null)}
+        />
+      )}
     </div>
   );
 }

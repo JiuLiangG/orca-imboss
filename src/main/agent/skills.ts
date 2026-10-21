@@ -5,6 +5,7 @@ import { readdir, readFile, rm } from "fs/promises";
 import { join, resolve } from "path";
 import { getAgentSkillsDir } from "../data-dir";
 import { isBuiltinSkillName } from "./builtin-skills";
+import { parseSkillFrontmatter } from "./skill-metadata";
 
 /**
  * Install / uninstall of skills under `~/.imboss/agent/skills/<name>/`.
@@ -186,19 +187,7 @@ async function readSkillMetadata(skillFilePath: string): Promise<{
 }> {
   try {
     const head = (await readFile(skillFilePath, "utf8")).slice(0, 4096);
-    const nameMatch = /^name:\s*(.+)$/m.exec(head);
-    const descMatch = /^description:\s*(.+)$/m.exec(head);
-    const clean = (raw: string | undefined): string | null =>
-      raw ? raw.trim().replace(/^["']|["']$/g, "") : null;
-    const name = clean(nameMatch?.[1]);
-    const description = clean(descMatch?.[1]);
-    return {
-      name: name && name.length > 0 ? name : null,
-      description:
-        description && description.length > 0
-          ? description.slice(0, 500)
-          : null,
-    };
+    return parseSkillFrontmatter(head);
   } catch {
     return { name: null, description: null };
   }

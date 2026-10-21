@@ -10,6 +10,7 @@ import type {
   EmployeeImportPreview,
   EmployeeImportResult,
   EmployeeInput,
+  InstalledSkill,
   ModelOption,
 } from "@shared/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -43,6 +44,17 @@ import { EmployeeRecruitModal } from "../employee-recruit-modal";
  * gets 5s — still within the "a few seconds" convention.
  */
 const IMPORT_NOTICE_MS = 5000;
+
+/** Skill names stay the option label. The description is hover text only. */
+function toSkillOptions(
+  skills: readonly InstalledSkill[],
+): MultiSelectOption[] {
+  return skills.map((skill) => ({
+    value: skill.name,
+    label: skill.name,
+    description: skill.description,
+  }));
+}
 
 export function EmployeesModule(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -482,10 +494,7 @@ export function EmployeesModule(): React.JSX.Element {
       key={selected.id}
       employee={selected}
       mcpOptions={mcpOptions}
-      skillOptions={data.skills.items.map((s) => ({
-        value: s.name,
-        label: s.name,
-      }))}
+      skillOptions={toSkillOptions(data.skills.items)}
       models={models}
       defaultModel={defaultModel}
       onPatch={(input) => patch(selected.id, input)}
@@ -523,10 +532,7 @@ export function EmployeesModule(): React.JSX.Element {
         open={recruitOpen}
         onClose={() => setRecruitOpen(false)}
         mcpOptions={mcpOptions}
-        skillOptions={data.skills.items.map((s) => ({
-          value: s.name,
-          label: s.name,
-        }))}
+        skillOptions={toSkillOptions(data.skills.items)}
         models={models}
         defaultModel={defaultModel}
         onCreate={create}

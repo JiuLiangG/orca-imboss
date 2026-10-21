@@ -1,0 +1,86 @@
+/* Hover card for a skill description. The outer padding is the bridge that
+   keeps the card open while the pointer crosses from the row or chip. */
+.imb-skill-tip {
+  position: fixed;
+  z-index: 60;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 8px;
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-skill-tip.imb-is-open {
+  opacity: 1;
+}
+
+.imb-skill-tip-card {
+  width: min(280px, calc(100vw - 32px));
+  padding: var(--imb-space-2) var(--imb-space-3);
+  background: var(--imb-material-popover);
+  border: 1px solid var(--imb-sep-strong);
+  border-radius: var(--imb-radius-card);
+  box-shadow: var(--imb-highlight-top), var(--imb-shadow-2);
+  color: var(--imb-fg);
+  font-size: var(--imb-text-sm);
+  line-height: var(--imb-leading-text);
+}
+
+.imb-skill-tip-body {
+  position: relative;
+}
+
+.imb-skill-tip-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.imb-skill-tip-text.imb-is-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+
+.imb-skill-tip-text.imb-is-expanded {
+  max-height: 240px;
+  overflow: auto;
+}
+
+.imb-skill-tip-measure {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  margin: 0;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.imb-skill-tip-toggle {
+  display: block;
+  margin-top: var(--imb-space-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--imb-accent-active);
+  font: inherit;
+  font-size: var(--imb-text-sm);
+  line-height: var(--imb-leading-ui);
+  cursor: pointer;
+}
+
+.imb-skill-tip-toggle:hover {
+  text-decoration: underline;
+}
+
+.imb-skill-tip-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+  border-radius: var(--imb-radius-sm);
+}
