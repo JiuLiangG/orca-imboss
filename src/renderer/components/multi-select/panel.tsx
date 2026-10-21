@@ -5,6 +5,11 @@ import { IconSearch } from "../icons";
 export interface MultiSelectOption {
   value: string;
   label: string;
+  /**
+   * Hover text. The employee skill set passes the skill's description.
+   * Empty or omitted means no card, which is every other menu.
+   */
+  description?: string | null;
 }
 
 /** Panel-top filter input (`searchable` mode); the caller owns its state. */
@@ -48,6 +53,12 @@ export interface MultiSelectPanelProps {
   panelRef?: RefObject<HTMLDivElement | null>;
   search?: MultiSelectPanelSearch;
   create?: MultiSelectPanelCreate;
+  /** Pointer entered an option row. Used to show that option's description. */
+  onOptionPointerEnter?: (
+    option: MultiSelectOption,
+    anchor: HTMLElement,
+  ) => void;
+  onOptionPointerLeave?: () => void;
 }
 
 /**
@@ -72,6 +83,8 @@ export function MultiSelectPanel({
   panelRef,
   search,
   create,
+  onOptionPointerEnter,
+  onOptionPointerLeave,
 }: MultiSelectPanelProps): React.JSX.Element {
   const selectedSet = new Set(selected);
   const showEmpty = options.length === 0 && create === undefined;
@@ -124,7 +137,12 @@ export function MultiSelectPanel({
               locked && "imb-is-locked",
             )}
             data-ms-option={index}
+            data-ms-value={option.value}
             tabIndex={-1}
+            onMouseEnter={(event) =>
+              onOptionPointerEnter?.(option, event.currentTarget)
+            }
+            onMouseLeave={() => onOptionPointerLeave?.()}
             onMouseDown={(event) => {
               // Keep focus in the caller's own control (filter input / trigger)
               // while clicking options.
