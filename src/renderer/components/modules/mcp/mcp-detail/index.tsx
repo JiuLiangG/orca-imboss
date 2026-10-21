@@ -17,6 +17,12 @@ import {
 
 export interface McpDetailProps {
   server: McpServer;
+  /**
+   * Employees that currently link this server. Drives the delete confirmation
+   * copy — deleting cascades into their `mcp` list, so the boss is told how many
+   * will be unlinked before confirming.
+   */
+  linkedEmployeeCount: number;
   onPatch: (input: McpServerInput) => Promise<void>;
   onRemove: () => void;
 }
@@ -25,6 +31,7 @@ const SAVE_DEBOUNCE_MS = 400;
 
 export function McpDetail({
   server,
+  linkedEmployeeCount,
   onPatch,
   onRemove,
 }: McpDetailProps): React.JSX.Element {
@@ -133,7 +140,11 @@ export function McpDetail({
         }
       >
         <p className="imb-module-note">
-          {t("Linked employees must choose again after removing.")}
+          {linkedEmployeeCount > 0
+            ? t("Used by ${count} employees; they will be unlinked.", {
+                count: String(linkedEmployeeCount),
+              })
+            : t("No employee uses it.")}
         </p>
       </Modal>
     </>

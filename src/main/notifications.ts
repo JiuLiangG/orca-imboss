@@ -11,8 +11,12 @@ export function setMainWindow(win: BrowserWindow | null): void {
   mainWindow = win;
 }
 
-/** Send a payload to the registered main window (no-op before creation). */
-export function sendToRenderer(channel: string, payload: unknown): void {
+/**
+ * Send a payload to the registered main window (no-op before creation).
+ * `payload` is optional for channels that only signal "something changed"
+ * (e.g. `skills:changed`), whose listeners take no argument.
+ */
+export function sendToRenderer(channel: string, payload?: unknown): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, payload);
   }

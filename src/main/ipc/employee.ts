@@ -18,21 +18,29 @@ import {
   cancelEmployeeImport,
   inspectEmployeeExport,
 } from "../employee-transfer/import";
-import { sendToRenderer } from "../notifications";
+import {
+  notifyEmployeesChanged,
+  reconcileEmployeeRefsOnRead,
+} from "../employee-events";
 import { showOpenDialog, showSaveDialog } from "./dialog";
 import { assertInteger, assertString, parsePageQuery } from "./helpers";
 
-/** Notify the renderer that the employees collection changed (name/avatar). */
-function notifyEmployeesChanged(ids: number[]): void {
-  sendToRenderer("employees:changed", { ids });
-}
-
 export function registerEmployeeHandlers(): void {
-  ipcMain.handle("employees:list", () => dbEmployees.listEmployees());
+  // Both list handlers first run one throttled capability-reference self-heal
+  // pass: MCP servers / skills / providers can be removed without going through
+  // the app (the assistant edits `mcp.json` and `rm -rf`s skill folders by
+  // design), so the moment the UI reads the collection is the moment the stored
+  // references can be checked against the truth on disk. It only writes when
+  // something is actually dangling, is idempotent, and never throws.
+  ipcMain.handle("employees:list", () => {
+    reconcileEmployeeRefsOnRead();
+    return dbEmployees.listEmployees();
+  });
 
-  ipcMain.handle("employees:listPage", (_event, page: unknown) =>
-    dbEmployees.listEmployeesPage(parsePageQuery(page)),
-  );
+  ipcMain.handle("employees:listPage", (_event, page: unknown) => {
+    reconcileEmployeeRefsOnRead();
+    return dbEmployees.listEmployeesPage(parsePageQuery(page));
+  });
 
   ipcMain.handle(
     "employees:create",

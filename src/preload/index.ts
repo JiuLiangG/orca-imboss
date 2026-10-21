@@ -6,6 +6,7 @@ import type {
   AgentStreamPayload,
   BackupInfo,
   BackupStatus,
+  CapabilityUnlinkResult,
   Chat,
   ChatParticipantUpdate,
   ChatSummary,
@@ -563,8 +564,9 @@ const api = {
         name,
         input,
       ) as Promise<McpServer | null>,
+    /** Delete a server; the result reports the employees it was unlinked from. */
     remove: (name: string) =>
-      ipcRenderer.invoke("mcp:delete", name) as Promise<boolean>,
+      ipcRenderer.invoke("mcp:delete", name) as Promise<CapabilityUnlinkResult>,
   },
 
   skills: {
@@ -575,8 +577,12 @@ const api = {
       >,
     install: () =>
       ipcRenderer.invoke("skills:install") as Promise<string[] | null>,
+    /** Uninstall a skill folder, unlinking it from the employees that had it. */
     uninstall: (name: string) =>
-      ipcRenderer.invoke("skills:uninstall", name) as Promise<void>,
+      ipcRenderer.invoke(
+        "skills:uninstall",
+        name,
+      ) as Promise<CapabilityUnlinkResult>,
     onChanged: (cb: () => void) => on("skills:changed", cb),
   },
 

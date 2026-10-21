@@ -15,6 +15,11 @@ import type {
   PurgedEmployee,
 } from "@shared/types";
 import { avatarVersion } from "../avatars";
+import {
+  isKnownModelRef,
+  sanitizeRefs,
+  type CapabilityRefKind,
+} from "../capability-refs";
 import { getDB } from "./index";
 import { parseNumberArray, parseStringArray, stringifyArray } from "./json";
 import { escapeLike } from "./text-search";
@@ -109,9 +114,11 @@ export function createEmployee(input: EmployeeInput): Employee {
       validateName(input.name) ?? "",
       validateRole(input.role) ?? "",
       validatePrompt(input.systemPrompt) ?? "",
-      stringifyArray(validateRefList(input.mcp, "mcp") ?? []),
-      stringifyArray(validateRefList(input.skills, "skills") ?? []),
-      validateModelId(input.modelId),
+      stringifyArray(sanitizeRefList("mcp", validateRefList(input.mcp, "mcp"))),
+      stringifyArray(
+        sanitizeRefList("skills", validateRefList(input.skills, "skills")),
+      ),
+      sanitizeModelId(validateModelId(input.modelId)),
       validateThinkingLevel(input.thinkingLevel),
     );
   const created = getEmployee(Number(result.lastInsertRowid));
@@ -138,10 +145,12 @@ export function updateEmployee(
         "The built-in assistant's role and MCP cannot be modified.",
       );
     }
-    const skills =
+    const skills = sanitizeRefList(
+      "skills",
       input.skills !== undefined
-        ? (validateRefList(input.skills, "skills") ?? [])
-        : current.skills;
+        ? validateRefList(input.skills, "skills")
+        : current.skills,
+    );
     getDB()
       .prepare(
         "UPDATE employees SET name = ?, system_prompt = ?, skills = ?, model_id = ?, thinking_level = ? WHERE id = ?",
@@ -152,9 +161,11 @@ export function updateEmployee(
           ? validatePrompt(input.systemPrompt)
           : current.systemPrompt,
         stringifyArray(skills),
-        input.modelId !== undefined
-          ? validateModelId(input.modelId)
-          : current.modelId,
+        sanitizeModelId(
+          input.modelId !== undefined
+            ? validateModelId(input.modelId)
+            : current.modelId,
+        ),
         input.thinkingLevel !== undefined
           ? validateThinkingLevel(input.thinkingLevel)
           : current.thinkingLevel,
@@ -164,12 +175,16 @@ export function updateEmployee(
   }
 
   // Merge patch over current values; helpers validate only changed fields.
-  const mcp =
-    input.mcp !== undefined ? validateRefList(input.mcp, "mcp") : current.mcp;
-  const skills =
+  const mcp = sanitizeRefList(
+    "mcp",
+    input.mcp !== undefined ? validateRefList(input.mcp, "mcp") : current.mcp,
+  );
+  const skills = sanitizeRefList(
+    "skills",
     input.skills !== undefined
       ? validateRefList(input.skills, "skills")
-      : current.skills;
+      : current.skills,
+  );
 
   getDB()
     .prepare(
@@ -181,11 +196,13 @@ export function updateEmployee(
       input.systemPrompt !== undefined
         ? validatePrompt(input.systemPrompt)
         : current.systemPrompt,
-      stringifyArray(mcp ?? []),
-      stringifyArray(skills ?? []),
-      input.modelId !== undefined
-        ? validateModelId(input.modelId)
-        : current.modelId,
+      stringifyArray(mcp),
+      stringifyArray(skills),
+      sanitizeModelId(
+        input.modelId !== undefined
+          ? validateModelId(input.modelId)
+          : current.modelId,
+      ),
       input.thinkingLevel !== undefined
         ? validateThinkingLevel(input.thinkingLevel)
         : current.thinkingLevel,
@@ -372,6 +389,57 @@ function validateRefList(
   return [...new Set(values)];
 }
 
+/**
+ * Write-path reference hygiene: drop entries that no longer resolve before they
+ * are persisted.
+ *
+ * The stored `mcp`/`skills` values are capability *references*, and the
+ * capabilities live outside SQLite (see `capability-refs.ts`). Without this
+ * filter a ghost reference would be written back on every unrelated edit: the
+ * renderer's employee form is only initialised when a different employee is
+ * selected, so a chip that no longer has an option stays in `form.mcp` and is
+ * re-sent by the next debounced patch.
+ *
+ * Silent by design at this layer — the agent-facing tool already rejects
+ * unknown names loudly before calling in (`assertAssignableRefs` in
+ * `agent/builtin-tools.ts`); this is the last line of defence for the UI and
+ * for any future caller. Never throws: hygiene must not fail a write.
+ */
+function sanitizeRefList(
+  kind: CapabilityRefKind,
+  values: string[] | undefined,
+): string[] {
+  const list = values ?? [];
+  try {
+    return sanitizeRefs(kind, list).kept;
+  } catch (err) {
+    console.error(
+      `[employees] failed to sanitize ${kind} refs:`,
+      err instanceof Error ? err.message : err,
+    );
+    return list;
+  }
+}
+
+/**
+ * Drop a `model_id` whose provider no longer exists (it can never resolve, so
+ * the employee falls back to the app default at session build time anyway).
+ * Same defensive rules as `sanitizeRefList`: never throws, and keeps the value
+ * when the provider list cannot be determined.
+ */
+function sanitizeModelId(modelId: string | null): string | null {
+  if (modelId === null) return null;
+  try {
+    return isKnownModelRef(modelId) ? modelId : null;
+  } catch (err) {
+    console.error(
+      "[employees] failed to sanitize model id:",
+      err instanceof Error ? err.message : err,
+    );
+    return modelId;
+  }
+}
+
 /** Validate `model_id` — either NULL/empty or valid model identifier form. */
 function validateModelId(modelId: string | null | undefined): string | null {
   if (modelId == null || modelId === "") return null;
@@ -445,4 +513,3 @@ export function listEmployeeIdentities(): EmployeeIdentity[] {
     .prepare("SELECT id, name, role FROM employees ORDER BY id ASC")
     .all() as EmployeeIdentity[];
 }
-

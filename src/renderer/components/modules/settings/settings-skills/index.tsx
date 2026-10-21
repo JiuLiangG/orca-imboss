@@ -14,6 +14,7 @@ import { ItemList } from "../../../item-list";
 import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
 import { Modal } from "../../../modal";
+import { ModuleNotice, useModuleNotice } from "../../../module-notice";
 import { SearchInput } from "../../../search-input";
 import "../../module-common.css";
 import "../settings-split.css";
@@ -41,6 +42,7 @@ export function SettingsSkills(): React.JSX.Element {
   const [bulkNames, setBulkNames] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
+  const notice = useModuleNotice();
 
   const { data } = useApp();
   const loading = data.skills.loading;
@@ -73,10 +75,13 @@ export function SettingsSkills(): React.JSX.Element {
   }, [clearSelection, debouncedQuery]);
 
   // Re-fetch on every entry: skills live on the filesystem and can change
-  // outside the app, and no `skills:changed` event is emitted. First load
-  // shows the loading state; revisits revalidate silently.
+  // outside the app. Employees are loaded too — the uninstall confirmation
+  // counts the employees that select a skill, and reading the collection is
+  // what triggers the capability-reference self-heal in main. First load shows
+  // the loading state; revisits revalidate silently.
   useEffect(() => {
     void appStore.reloadSkills();
+    appStore.ensureEmployees();
   }, []);
 
   // Auto-select the first skill after the list loads (and recover when the
@@ -117,9 +122,10 @@ export function SettingsSkills(): React.JSX.Element {
   const uninstall = async (skill: InstalledSkill): Promise<void> => {
     setBusy(true);
     try {
-      await imb.skills.uninstall(skill.name);
+      const result = await imb.skills.uninstall(skill.name);
       setUninstallTarget(null);
       await appStore.reloadSkills();
+      reportUnlinked(result.unlinkedEmployeeIds);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -131,11 +137,14 @@ export function SettingsSkills(): React.JSX.Element {
     if (bulkNames.length === 0) return;
     setBusy(true);
     try {
+      const unlinked = new Set<number>();
       for (const name of bulkNames) {
-        await imb.skills.uninstall(name);
+        const result = await imb.skills.uninstall(name);
+        for (const id of result.unlinkedEmployeeIds) unlinked.add(id);
       }
       setBulkOpen(false);
       await appStore.reloadSkills();
+      reportUnlinked([...unlinked]);
       // Drop the just-uninstalled keys so a subsequent bulk action only acts
       // on the live list.
       clearSelection();
@@ -155,6 +164,32 @@ export function SettingsSkills(): React.JSX.Element {
   }, [multi, skills.length]);
 
   const selected = skills.find((skill) => skill.name === selectedName) ?? null;
+
+  /** How many employees currently select any of `names` (drives the copy). */
+  const linkedEmployeeCount = (names: readonly string[]): number => {
+    if (names.length === 0) return 0;
+    const set = new Set(names);
+    let count = 0;
+    for (const employee of data.employees.items) {
+      if (employee.skills.some((name) => set.has(name))) count += 1;
+    }
+    return count;
+  };
+
+  /** Report a cascade result ("unlinked from N employees") as a transient note. */
+  const reportUnlinked = (employeeIds: readonly number[]): void => {
+    if (employeeIds.length === 0) return;
+    notice.show(
+      t("Unlinked from ${count} employees.", {
+        count: String(employeeIds.length),
+      }),
+    );
+  };
+
+  const uninstallAffected = linkedEmployeeCount(
+    uninstallTarget ? [uninstallTarget.name] : [],
+  );
+  const bulkAffected = linkedEmployeeCount(bulkNames);
 
   const list = (
     <ListPane
@@ -284,7 +319,11 @@ export function SettingsSkills(): React.JSX.Element {
         }
       >
         <p className="imb-module-note">
-          {t("Linked employees must choose again after removing.")}
+          {uninstallAffected > 0
+            ? t("Used by ${count} employees; they will be unlinked.", {
+                count: String(uninstallAffected),
+              })
+            : t("No employee uses it.")}
         </p>
       </Modal>
       <Modal
@@ -307,11 +346,18 @@ export function SettingsSkills(): React.JSX.Element {
         }
       >
         <p className="imb-module-note">
-          {t("Linked employees must choose again after removing.")}
+          {bulkAffected > 0
+            ? t("Used by ${count} employees; they will be unlinked.", {
+                count: String(bulkAffected),
+              })
+            : t("No employee uses it.")}
         </p>
       </Modal>
       {error !== null && (
         <p className="imb-error-text imb-module-error">{error}</p>
+      )}
+      {notice.notice !== null && (
+        <ModuleNotice message={notice.notice} onDismiss={notice.dismiss} />
       )}
     </div>
   );

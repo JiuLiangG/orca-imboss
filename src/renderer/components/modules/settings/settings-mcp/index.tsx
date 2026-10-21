@@ -14,6 +14,7 @@ import { ItemList } from "../../../item-list";
 import { ListPane } from "../../../list-pane";
 import { ListRow } from "../../../list-row";
 import { Modal } from "../../../modal";
+import { ModuleNotice, useModuleNotice } from "../../../module-notice";
 import { SearchInput } from "../../../search-input";
 import "../../module-common.css";
 import "../settings-split.css";
@@ -37,6 +38,7 @@ export function SettingsMcp(): React.JSX.Element {
   const [deleteNames, setDeleteNames] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
+  const notice = useModuleNotice();
 
   const { data } = useApp();
   const loading = data.mcp.loading;
@@ -70,8 +72,12 @@ export function SettingsMcp(): React.JSX.Element {
 
   // Re-fetch on every entry (MCP servers can change via the agent/external
   // edits); first load shows the loading state, revisits revalidate silently.
+  // Employees are loaded too: the delete confirmation counts the employees that
+  // link a server, and reading the collection is what triggers the
+  // capability-reference self-heal in main.
   useEffect(() => {
     void appStore.reloadMcp();
+    appStore.ensureEmployees();
   }, []);
 
   // Auto-select the first server after the list loads (and recover when the
@@ -95,6 +101,37 @@ export function SettingsMcp(): React.JSX.Element {
 
   const selected =
     servers.find((server) => server.name === selectedName) ?? null;
+
+  /**
+   * Employees currently linking any of `names`. MCP references are stored per
+   * employee, and the renderer keeps the whole collection in memory, so the
+   * count that drives the confirmation copy needs no extra IPC round trip.
+   */
+  const linkedEmployeeCount = useCallback(
+    (names: readonly string[]): number => {
+      if (names.length === 0) return 0;
+      const set = new Set(names);
+      let count = 0;
+      for (const employee of data.employees.items) {
+        if (employee.mcp.some((name) => set.has(name))) count += 1;
+      }
+      return count;
+    },
+    [data.employees.items],
+  );
+
+  /** Report a cascade result ("unlinked from N employees") as a transient note. */
+  const reportUnlinked = useCallback(
+    (employeeIds: readonly number[]): void => {
+      if (employeeIds.length === 0) return;
+      notice.show(
+        t("Unlinked from ${count} employees.", {
+          count: String(employeeIds.length),
+        }),
+      );
+    },
+    [notice],
+  );
 
   const patch = useCallback(
     async (name: string, input: McpServerInput): Promise<void> => {
@@ -122,30 +159,40 @@ export function SettingsMcp(): React.JSX.Element {
     [],
   );
 
-  const remove = useCallback(async (name: string): Promise<void> => {
-    try {
-      const removed = await imb.mcp.remove(name);
-      if (removed) appStore.removeMcp(name);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }, []);
+  const remove = useCallback(
+    async (name: string): Promise<void> => {
+      try {
+        const result = await imb.mcp.remove(name);
+        if (result.removed) {
+          appStore.removeMcp(name);
+          reportUnlinked(result.unlinkedEmployeeIds);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [reportUnlinked],
+  );
 
   const deleteSelected = useCallback(async (): Promise<void> => {
     if (deleteNames.length === 0) return;
     try {
       setDeleteOpen(false);
+      const unlinked = new Set<number>();
       for (const name of deleteNames) {
-        await imb.mcp.remove(name);
+        const result = await imb.mcp.remove(name);
+        if (!result.removed) continue;
         appStore.removeMcp(name);
+        for (const id of result.unlinkedEmployeeIds) unlinked.add(id);
       }
+      reportUnlinked([...unlinked]);
       // Drop the just-deleted keys so a subsequent bulk action only acts on
       // the live list.
       clearSelection();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [deleteNames, clearSelection]);
+  }, [deleteNames, clearSelection, reportUnlinked]);
 
   const toggleSelectAll = useCallback((): void => {
     if (multi.selectedKeys.size === servers.length && servers.length > 0) {
@@ -236,10 +283,14 @@ export function SettingsMcp(): React.JSX.Element {
     <McpDetail
       key={selected.name}
       server={selected}
+      linkedEmployeeCount={linkedEmployeeCount([selected.name])}
       onPatch={(input) => patch(selected.name, input)}
       onRemove={() => void remove(selected.name)}
     />
   ) : null;
+
+  // How many employees the pending deletion would unlink (drives the copy).
+  const deleteAffected = linkedEmployeeCount(deleteNames);
 
   return (
     <div className="imb-settings-split">
@@ -262,7 +313,11 @@ export function SettingsMcp(): React.JSX.Element {
         }
       >
         <p className="imb-module-note">
-          {t("Linked employees must choose again after removing.")}
+          {deleteAffected > 0
+            ? t("Used by ${count} employees; they will be unlinked.", {
+                count: String(deleteAffected),
+              })
+            : t("No employee uses it.")}
         </p>
       </Modal>
       <McpAddModal
@@ -272,6 +327,9 @@ export function SettingsMcp(): React.JSX.Element {
       />
       {error !== null && (
         <p className="imb-error-text imb-module-error">{error}</p>
+      )}
+      {notice.notice !== null && (
+        <ModuleNotice message={notice.notice} onDismiss={notice.dismiss} />
       )}
     </div>
   );

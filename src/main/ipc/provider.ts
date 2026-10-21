@@ -6,6 +6,11 @@ import type {
 } from "@shared/types";
 import { clipboard, ipcMain, shell, type WebContents } from "electron";
 import { listAvailableModels, refreshModelStore } from "../agent/model-runtime";
+import { reconcileCapabilityRefs } from "../capability-refs";
+import {
+  notifyEmployeesChanged,
+  reconcileEmployeeRefsOnRead,
+} from "../employee-events";
 import {
   loginProviderSubscription,
   submitLoginCode,
@@ -45,11 +50,16 @@ export function registerProviderHandlers(): void {
   });
 
   ipcMain.handle("providers:remove", async (_event, id: unknown) => {
-    // Same for removal: keep the model store in sync after deleting a provider.
+    // Removal cascades into every stored reference to that provider: the
+    // app-wide image model (cleared here, its own single trigger) and — via the
+    // shared capability-reference sweep — employee `model_id`s plus the default
+    // model, which would otherwise be refs that can never resolve again.
     const providerId = assertString(id, "provider id");
     await removeProvider(providerId);
     clearImageModelIfProviderRemoved(providerId);
     await refreshModelStore(new AbortController().signal);
+    const report = reconcileCapabilityRefs({ force: true });
+    notifyEmployeesChanged(report.employeeIds);
   });
 
   ipcMain.handle("providers:listModels", (_event, input: unknown) =>
@@ -58,7 +68,14 @@ export function registerProviderHandlers(): void {
 
   // Full usable-model list from the shared ModelRuntime (built-in + custom,
   // auth-configured only) — backs the default-model / employee model selects.
-  ipcMain.handle("models:list", () => listAvailableModels());
+  ipcMain.handle("models:list", () => {
+    // Read-path self-heal for model references (employee `model_id` + the
+    // app-wide default model) and, in the same pass, for capability refs: a
+    // provider or server removed outside the app is repaired the next time the
+    // UI reads a list. Throttled and never throws.
+    reconcileEmployeeRefsOnRead();
+    return listAvailableModels();
+  });
 
   ipcMain.handle("providers:login", async (event, id: unknown) => {
     if (activeLogin) {

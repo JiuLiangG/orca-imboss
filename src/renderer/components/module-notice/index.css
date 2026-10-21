@@ -1,0 +1,70 @@
+/* Transient module notice (bottom-centre toast, above the module content).
+   Same visual language as the employee-import result notice; auto-dismisses
+   after a few seconds and the × dismisses it immediately. */
+.imb-module-notice {
+  position: fixed;
+  left: 50%;
+  bottom: 44px;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--imb-space-2);
+  background: var(--imb-surface);
+  border: 1px solid var(--imb-border);
+  border-radius: var(--imb-radius-md);
+  padding: 6px 8px 6px 14px;
+  max-width: 60vw;
+  box-shadow: var(--imb-elev-raised);
+  margin: 0;
+  font-size: var(--imb-text-sm);
+  animation: imb-module-notice-in var(--imb-motion-base)
+    var(--imb-ease-standard);
+}
+
+.imb-module-notice > span {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.imb-module-notice-close {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: var(--imb-radius-sm);
+  background: transparent;
+  color: var(--imb-muted);
+  cursor: pointer;
+}
+
+.imb-module-notice-close:hover {
+  color: var(--imb-fg);
+  background: var(--imb-bg-group);
+}
+
+.imb-module-notice-close:focus-visible {
+  outline: none;
+  box-shadow: var(--imb-focus-ring);
+}
+
+@keyframes imb-module-notice-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imb-module-notice {
+    animation: none;
+  }
+}
