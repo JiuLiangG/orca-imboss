@@ -340,9 +340,8 @@ export function EmployeeDetail({
           />
         </Field>
 
-        <Field label={t("Model")} htmlFor={`emp-model-${employee.id}`}>
+        <Field label={t("Model")}>
           <Select
-            id={`emp-model-${employee.id}`}
             value={form.modelId ?? ""}
             options={[
               { value: "", label: t("Default") },
@@ -360,13 +359,11 @@ export function EmployeeDetail({
 
         <Field
           label={t("Thinking level")}
-          htmlFor={`emp-thinking-${employee.id}`}
           hint={t(
             "Unset follows the default thinking level. Only levels this model accepts are listed.",
           )}
         >
           <Select
-            id={`emp-thinking-${employee.id}`}
             value={form.thinkingLevel ?? ""}
             options={[
               { value: "", label: t("Default") },

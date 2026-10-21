@@ -1,9 +1,9 @@
+import type { ModelInputType } from "@shared/constants/providers";
 import {
   DEFAULT_MODEL_INPUT_TYPES,
   MODEL_INPUT_TYPES,
   PROVIDER_API_TYPES,
 } from "@shared/constants/providers";
-import type { ModelInputType } from "@shared/constants/providers";
 import { t } from "@shared/l10n";
 import type {
   ModelInputSpec,
@@ -272,9 +272,8 @@ export function ProviderConfigFields({
 
   return (
     <>
-      <Field label={t("API type")} htmlFor={`${idPrefix}-api-type`}>
+      <Field label={t("API type")}>
         <Select
-          id={`${idPrefix}-api-type`}
           value={value.apiType}
           options={PROVIDER_API_TYPES.map((type) => ({
             value: type,

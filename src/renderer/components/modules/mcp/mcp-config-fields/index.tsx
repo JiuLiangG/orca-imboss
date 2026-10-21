@@ -96,9 +96,8 @@ export function McpConfigFields({
 
   return (
     <>
-      <Field label={t("Transport")} htmlFor={`${idPrefix}-transport`}>
+      <Field label={t("Transport")}>
         <Select
-          id={`${idPrefix}-transport`}
           value={value.transport}
           options={MCP_TRANSPORTS.map((transport) => ({
             value: transport,
