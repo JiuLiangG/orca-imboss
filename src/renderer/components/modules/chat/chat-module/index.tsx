@@ -53,10 +53,10 @@ import {
   MyMessageJump,
   type MyMessageEntry,
 } from "../my-message-jump";
+import { formatChatPreview } from "../preview-text";
 import {
   displayTitle,
   formatChatTime,
-  previewText,
   shouldShowTimeSeparator,
 } from "../relative-time";
 import "../thread.css";
@@ -1113,7 +1113,7 @@ export function ChatModule(): React.JSX.Element {
               </span>
             }
             meta={formatChatTime(chat.lastAt, locale)}
-            sub={previewText(chat.preview ?? "", 80, resolveMention)}
+            sub={formatChatPreview(chat.preview, 80, resolveMention)}
             badge={
               chat.unread > 0 ? (
                 <span className="imb-unread">

@@ -35,7 +35,8 @@ import { SearchInput } from "../../../search-input";
 import { Textarea } from "../../../textarea";
 import { Tooltip } from "../../../tooltip";
 import { ImageLightbox } from "../image-lightbox";
-import { displayTitle, previewText } from "../relative-time";
+import { formatChatPreview } from "../preview-text";
+import { displayTitle } from "../relative-time";
 import "./index.css";
 import { MentionPopup } from "./mention-popup";
 
@@ -1033,8 +1034,8 @@ export function ChatInputBar({
           ) : (
             chatCandidates.map((chat) => {
               const title = displayTitle(chat.title);
-              const preview = previewText(
-                chat.preview ?? "",
+              const preview = formatChatPreview(
+                chat.preview,
                 80,
                 resolveMention,
               );

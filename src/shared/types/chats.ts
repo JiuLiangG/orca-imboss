@@ -1,4 +1,5 @@
 import type { IntegrationPlatform } from "./integrations";
+import type { ChatPreview } from "./messages";
 
 /** Summary view of a chat row (includes unread count). */
 export interface Chat {
@@ -26,8 +27,13 @@ export interface Chat {
 
 /** List item of the chat module: chat + derived last-message preview. */
 export interface ChatSummary extends Chat {
-  /** Last message content, truncated (null when the chat has no messages). */
-  preview: string | null;
+  /**
+   * One-line description of the chat's latest real message, extracted per
+   * message kind (null when the chat has no message yet, or only app-generated
+   * notices). The renderer turns it into the displayed line — see
+   * `ChatPreview` for why extraction and presentation are split.
+   */
+  preview: ChatPreview | null;
   /** UNIX timestamp in seconds of the last message (null when the chat has no messages). */
   lastAt: number | null;
   /**
@@ -57,8 +63,17 @@ export interface ChatRow {
   muted: number;
 }
 
+/**
+ * Raw row behind a `ChatSummary`: the chat plus the payload columns of its
+ * latest real message (all `null` when the chat has none). Keeping the payload
+ * rather than a pre-built string is what lets the preview be derived per kind.
+ */
 export interface ChatSummaryRow extends ChatRow {
-  preview: string | null;
+  last_kind: string | null;
+  last_content: string | null;
+  last_steps: string | null;
+  last_attachments: string | null;
+  last_image_status: string | null;
   last_at: number | null;
   last_message_at: number;
 }

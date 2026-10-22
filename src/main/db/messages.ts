@@ -1,3 +1,4 @@
+import { chatPreviewBodyText } from "@shared/chat-preview";
 import {
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENT_TOTAL,
@@ -11,12 +12,19 @@ import type {
   MessageKind,
   MessageSearchResult,
   MessageStep,
-  StepStatus,
 } from "@shared/types";
 import { sendToRenderer } from "../notifications";
-import { bumpUnread, getChat } from "./chats";
+import { bumpUnread, createChatTitleResolver, getChat } from "./chats";
 import { getDB } from "./index";
-import { parseJsonObject } from "./json";
+import {
+  MAX_ATTACH_PATH_LENGTH,
+  parseAttachmentTotal,
+  parseAttachments,
+  parseGroupChatId,
+  parseImageStatus,
+  parseSteps,
+  STEP_STATUSES,
+} from "./message-payload";
 import { escapeLike, toFtsPhrase } from "./text-search";
 
 interface MessageRow {
@@ -40,7 +48,6 @@ const MAX_STEP_NAME_LENGTH = 256;
 const MAX_STEP_TASK_LENGTH = 256;
 const MAX_ATTACH_NAME_LENGTH = 256;
 const MAX_ATTACH_TYPE_LENGTH = 128;
-const MAX_ATTACH_PATH_LENGTH = 4096;
 const MAX_ATTACH_SIZE = MAX_ATTACHMENT_BYTES; // metadata only
 
 /**
@@ -84,8 +91,6 @@ function emitMessageAppended(message: Message): void {
     }
   }
 }
-
-const STEP_STATUSES: StepStatus[] = ["done", "busy", "pending"];
 
 /**
  * Kinds whose payload may carry the `steps` blob's `chatId` link to a task
@@ -391,50 +396,67 @@ export function updateImageGeneration(
 }
 
 /**
+ * One search hit: the stored row's payload columns, before the excerpt is
+ * derived. Kept private to this module.
+ */
+interface SearchRow {
+  chatId: number;
+  messageId: number;
+  kind: string;
+  content: string;
+  steps: string | null;
+  attachments: string | null;
+  imageStatus: string | null;
+  chatTitle: string;
+  createdAt: number;
+}
+
+/** Columns read by both search paths — they must stay in sync. */
+const SEARCH_COLUMNS =
+  "m.chat_id AS chatId, m.id AS messageId, m.kind AS kind, m.content AS content, " +
+  "m.steps AS steps, m.attachments AS attachments, " +
+  "m.image_status AS imageStatus, c.title AS chatTitle, " +
+  "m.created_at AS createdAt";
+
+/**
  * Search messages by content. Queries of 3+ characters use the FTS5 trigram
- * index (ranked, highlighted snippet); shorter queries fall back to a LIKE
- * substring scan so Chinese 1-2 char queries still work. Returns up to
- * `MAX_SEARCH_RESULTS` matches, newest first in the LIKE path.
+ * index (ranked); shorter queries fall back to a LIKE substring scan so Chinese
+ * 1-2 char queries still work. Returns up to `MAX_SEARCH_RESULTS` matches,
+ * newest first in the LIKE path.
+ *
+ * The excerpt is derived from the **readable** text of the message (the same
+ * per-kind extraction the chat list uses), not from the raw `content`: a hit
+ * inside an `ask`/`answer`/`chat` card must never surface as a JSON or id
+ * fragment. Both paths therefore share `toSearchResult`, and FTS still decides
+ * *which* rows match and in what order.
  */
 export function searchMessages(query: string): MessageSearchResult[] {
   const needle = query.trim().slice(0, MAX_SEARCH_QUERY_LENGTH);
   if (needle.length === 0) return [];
 
   const db = getDB();
+  // `chat` link cards are described by the linked conversation's title, which
+  // needs a lookup; one resolver per search keeps it to one query per chat.
+  const resolveChatTitle = createChatTitleResolver();
   if (needle.length < 3) {
     const pattern = `%${escapeLike(needle)}%`;
     const rows = db
       .prepare(
-        `SELECT m.chat_id AS chatId, m.id AS messageId, m.created_at AS createdAt,
-                m.content AS content, c.title AS chatTitle
+        `SELECT ${SEARCH_COLUMNS}
          FROM messages m JOIN chats c ON c.id = m.chat_id
          WHERE m.content LIKE ? ESCAPE '\\' AND m.kind <> 'ack'
          ORDER BY m.created_at DESC, m.id DESC
          LIMIT ?`,
       )
-      .all(pattern, MAX_SEARCH_RESULTS) as Array<{
-      chatId: number;
-      messageId: number;
-      createdAt: number;
-      content: string;
-      chatTitle: string;
-    }>;
-    return rows.map((row) => ({
-      chatId: row.chatId,
-      messageId: row.messageId,
-      chatTitle: row.chatTitle,
-      snippet: likeSnippet(row.content, needle),
-      createdAt: row.createdAt,
-    }));
+      .all(pattern, MAX_SEARCH_RESULTS) as SearchRow[];
+    return rows.map((row) => toSearchResult(row, needle, resolveChatTitle));
   }
 
   // Treat user input as a literal phrase: quote it and escape inner quotes.
   const phrase = toFtsPhrase(needle);
   const rows = db
     .prepare(
-      `SELECT m.chat_id AS chatId, m.id AS messageId, m.created_at AS createdAt,
-              c.title AS chatTitle,
-              snippet(messages_fts, 0, '«', '»', '…', 24) AS snippet
+      `SELECT ${SEARCH_COLUMNS}
        FROM messages_fts
        JOIN messages m ON m.id = messages_fts.rowid
        JOIN chats c ON c.id = m.chat_id
@@ -442,8 +464,33 @@ export function searchMessages(query: string): MessageSearchResult[] {
        ORDER BY rank
        LIMIT ?`,
     )
-    .all(phrase, MAX_SEARCH_RESULTS) as MessageSearchResult[];
-  return rows;
+    .all(phrase, MAX_SEARCH_RESULTS) as SearchRow[];
+  return rows.map((row) => toSearchResult(row, needle, resolveChatTitle));
+}
+
+function toSearchResult(
+  row: SearchRow,
+  needle: string,
+  resolveChatTitle: (chatId: number) => string | null,
+): MessageSearchResult {
+  const kind = row.kind || "text";
+  const body = chatPreviewBodyText({
+    kind,
+    content: row.content,
+    steps: parseSteps(row.steps),
+    attachments: parseAttachments(row.attachments),
+    attachmentsTotal: parseAttachmentTotal(row.attachments),
+    imageStatus: parseImageStatus(row.imageStatus),
+    resolveChatTitle,
+  });
+  return {
+    chatId: row.chatId,
+    messageId: row.messageId,
+    kind,
+    chatTitle: row.chatTitle,
+    snippet: excerpt(body.length > 0 ? body : row.content, needle),
+    createdAt: row.createdAt,
+  };
 }
 
 function toMessage(row: MessageRow): Message {
@@ -470,13 +517,6 @@ function toMessage(row: MessageRow): Message {
   };
 }
 
-/** Coerce a stored image status to a known value, else `null`. */
-function parseImageStatus(value: string | null): ImageGenStatus | null {
-  return value === "generating" || value === "done" || value === "error"
-    ? value
-    : null;
-}
-
 /**
  * Serialize a linked payload: an optional step list (progress cards) plus the
  * task group it links to. Stored as one object so the link rides along without
@@ -491,115 +531,6 @@ function serializeSteps(
   if (steps !== undefined) payload.steps = steps;
   if (groupChatId !== undefined) payload.chatId = groupChatId;
   return JSON.stringify(payload);
-}
-
-/**
- * Read the optional linked group chat id stored alongside the step list.
- * Stored values are never trusted: only a safe positive integer surfaces,
- * anything else (including absence) becomes `null`.
- */
-function parseGroupChatId(raw: string | null): number | null {
-  if (!raw) return null;
-  const parsed = parseJsonObject(raw);
-  const id = parsed["chatId"];
-  return typeof id === "number" && Number.isSafeInteger(id) && id > 0
-    ? id
-    : null;
-}
-
-function parseSteps(raw: string | null): MessageStep[] | null {
-  if (!raw) return null;
-  const parsed = parseJsonObject(raw);
-  const steps = parsed["steps"];
-  if (!Array.isArray(steps)) return null;
-  const result: MessageStep[] = [];
-  for (const step of steps) {
-    if (typeof step !== "object" || step === null) continue;
-    const record = step as Record<string, unknown>;
-    // `task` superseded the old `role` field. Cards published before the rename
-    // still carry the employee's role there, so fall back to it on read — the
-    // write path (`validateSteps`) only ever produces `task`.
-    const task = record["task"] ?? record["role"];
-    if (
-      typeof record["name"] !== "string" ||
-      typeof task !== "string" ||
-      !STEP_STATUSES.includes(record["status"] as StepStatus)
-    ) {
-      continue;
-    }
-    result.push({
-      name: record["name"],
-      task,
-      status: record["status"] as StepStatus,
-      employeeId:
-        typeof record["employeeId"] === "number" &&
-        Number.isSafeInteger(record["employeeId"]) &&
-        record["employeeId"] >= 0
-          ? record["employeeId"]
-          : null,
-    });
-  }
-  return result;
-}
-
-/**
- * Parse a stored attachments JSON. Stored values are never trusted: entries
- * are validated field by field and invalid ones dropped; `null` is stored as
- * null and only ever surfaces as `[]` when the column held a valid array.
- */
-function parseAttachments(raw: string | null): MessageAttachment[] | null {
-  if (!raw) return null;
-  const parsed = parseJsonObject(raw);
-  const list = parsed["attachments"];
-  if (!Array.isArray(list)) return null;
-  const result: MessageAttachment[] = [];
-  for (const item of list) {
-    if (typeof item !== "object" || item === null) continue;
-    const record = item as Record<string, unknown>;
-    if (typeof record["name"] !== "string" || record["name"].length === 0) {
-      continue;
-    }
-    const path = record["path"];
-    const kind = record["kind"];
-    const chatId = record["chatId"];
-    const parsedKind =
-      kind === "file" || kind === "folder" || kind === "chat"
-        ? kind
-        : undefined;
-    result.push({
-      name: record["name"],
-      size: typeof record["size"] === "number" ? record["size"] : 0,
-      type: typeof record["type"] === "string" ? record["type"] : "",
-      ...(typeof path === "string" &&
-      path.length > 0 &&
-      path.length <= MAX_ATTACH_PATH_LENGTH
-        ? { path }
-        : {}),
-      ...(parsedKind ? { kind: parsedKind } : {}),
-      ...(parsedKind === "chat" &&
-      typeof chatId === "number" &&
-      Number.isSafeInteger(chatId) &&
-      chatId > 0
-        ? { chatId }
-        : {}),
-    });
-  }
-  return result;
-}
-
-/**
- * Read the optional true attachment `total` stored alongside an attachments
- * payload. Returns `null` when absent or invalid; the caller falls back to the
- * number of rows actually stored.
- */
-function parseAttachmentTotal(raw: string | null): number | null {
-  if (!raw) return null;
-  const parsed = parseJsonObject(raw);
-  const total = parsed["total"];
-  if (typeof total !== "number" || !Number.isSafeInteger(total) || total < 0) {
-    return null;
-  }
-  return total;
 }
 
 /**
@@ -779,8 +710,13 @@ function validateAttachmentTotal(
   return total;
 }
 
-/** Wrap the first (case-insensitive) match in the same markers FTS uses. */
-function likeSnippet(content: string, needle: string): string {
+/**
+ * Excerpt of `content` around the first (case-insensitive) match, with the
+ * match wrapped in the markers the search UI highlights (`«`/`»`). Without a
+ * match (the needle only appeared in a payload part that is not part of the
+ * readable text) it degrades to a plain head of the text.
+ */
+function excerpt(content: string, needle: string): string {
   const lower = content.toLowerCase();
   const at = lower.indexOf(needle.toLowerCase());
   if (at < 0) {

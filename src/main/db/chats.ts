@@ -1,7 +1,10 @@
+import { buildChatPreview } from "@shared/chat-preview";
+import { PREVIEW_SKIP_KINDS } from "@shared/constants/messages";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@shared/constants/paged";
 import type {
   Chat,
   ChatParticipantUpdate,
+  ChatPreview,
   ChatRow,
   ChatSummary,
   ChatSummaryRow,
@@ -10,7 +13,13 @@ import type {
 } from "@shared/types";
 import { getDB } from "./index";
 import { parseNumberArray, stringifyArray } from "./json";
-import { tagsForChat, tagsForChats } from "./tags";
+import {
+  parseAttachmentTotal,
+  parseAttachments,
+  parseImageStatus,
+  parseSteps,
+} from "./message-payload";
+import { tagsForChats } from "./tags";
 import { escapeLike, toFtsPhrase } from "./text-search";
 
 const MAX_QUERY_LENGTH = 200;
@@ -69,6 +78,30 @@ export function getRootChatId(chatId: number): number {
 }
 
 /**
+ * `SELECT` + `JOIN` shared by every chat-summary query: the chat row plus the
+ * payload columns of its **latest real message** (app notices are skipped, see
+ * `PREVIEW_SKIP_KINDS`). One correlated subquery selects that message's id —
+ * the previous shape ran the same lookup twice (once for the preview, once for
+ * its timestamp).
+ *
+ * The join carries `?` placeholders (one per skipped kind), so every caller
+ * must pass `PREVIEW_SKIP_KINDS` **first** in its parameter list.
+ */
+const CHAT_SUMMARY_SELECT = `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
+        c.pinned, c.muted, c.source, c.last_message_at,
+        m.kind AS last_kind, m.content AS last_content, m.steps AS last_steps,
+        m.attachments AS last_attachments,
+        m.image_status AS last_image_status, m.created_at AS last_at
+ FROM chats c
+ LEFT JOIN messages m ON m.id = (
+   SELECT lm.id FROM messages lm
+   WHERE lm.chat_id = c.id
+     AND lm.kind NOT IN (${PREVIEW_SKIP_KINDS.map(() => "?").join(", ")})
+   ORDER BY lm.created_at DESC, lm.id DESC
+   LIMIT 1
+ )`;
+
+/**
  * Chat list with the latest-message preview (chat module). Root-only
  * (assistant ↔ user); ordered by last-message time — newest first. A chat
  * that has never received a message falls back to its creation time (set on
@@ -82,21 +115,12 @@ export function getRootChatId(chatId: number): number {
 export function listChatSummaries(): ChatSummary[] {
   const rows = getDB()
     .prepare(
-      `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
-              c.pinned, c.muted, c.source, c.last_message_at,
-              (SELECT m.content FROM messages m
-               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted', 'error')
-               ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
-              (SELECT m.created_at FROM messages m
-               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted', 'error')
-               ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_at
-       FROM chats c
+      `${CHAT_SUMMARY_SELECT}
        WHERE c.from_chat_id IS NULL
        ORDER BY c.pinned DESC, c.last_message_at DESC, c.id DESC`,
     )
-    .all() as ChatSummaryRow[];
-  const tags = tagsForChats(rows.map((row) => row.id));
-  return rows.map((row) => toChatSummary(row, tags.get(row.id) ?? []));
+    .all(...PREVIEW_SKIP_KINDS) as ChatSummaryRow[];
+  return toChatSummaries(rows);
 }
 
 /**
@@ -105,20 +129,10 @@ export function listChatSummaries(): ChatSummary[] {
  */
 export function getChatSummary(id: number): ChatSummary | null {
   const row = getDB()
-    .prepare(
-      `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
-              c.pinned, c.muted, c.source, c.last_message_at,
-              (SELECT m.content FROM messages m
-               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted', 'error')
-               ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
-              (SELECT m.created_at FROM messages m
-               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted', 'error')
-               ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_at
-       FROM chats c
-       WHERE c.id = ?`,
-    )
-    .get(id) as ChatSummaryRow | undefined;
-  return row ? toChatSummary(row, tagsForChat(row.id)) : null;
+    .prepare(`${CHAT_SUMMARY_SELECT} WHERE c.id = ?`)
+    .get(...PREVIEW_SKIP_KINDS, id) as ChatSummaryRow | undefined;
+  if (!row) return null;
+  return toChatSummaries([row])[0] ?? null;
 }
 
 /**
@@ -197,26 +211,15 @@ export function listChatSummariesPage(
 
   const rows = db
     .prepare(
-      `SELECT c.id, c.title, c.participants, c.unread, c.created_at, c.from_chat_id,
-              c.pinned, c.muted, c.source, c.last_message_at,
-              (SELECT m.content FROM messages m
-               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted', 'error')
-               ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
-              (SELECT m.created_at FROM messages m
-               WHERE m.chat_id = c.id AND m.kind NOT IN ('ack', 'interrupted', 'error')
-               ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_at
-       FROM chats c
+      `${CHAT_SUMMARY_SELECT}
        WHERE ${conditions.join(" AND ")}
        ORDER BY c.pinned DESC, c.last_message_at DESC, c.id DESC
        LIMIT ?`,
     )
-    .all(...params, limit + 1) as ChatSummaryRow[];
+    .all(...PREVIEW_SKIP_KINDS, ...params, limit + 1) as ChatSummaryRow[];
 
   const hasMore = rows.length > limit;
-  const tags = tagsForChats(rows.map((row) => row.id));
-  const items = rows
-    .slice(0, limit)
-    .map((row) => toChatSummary(row, tags.get(row.id) ?? []));
+  const items = toChatSummaries(rows.slice(0, limit));
   const last = items[items.length - 1];
   return {
     items,
@@ -442,13 +445,73 @@ function normalizeSource(value: string | null): Chat["source"] {
     : null;
 }
 
-function toChatSummary(row: ChatSummaryRow, tags: string[]): ChatSummary {
+/**
+ * Describe a batch of chat-summary rows: fetch their tags in one query, then
+ * derive each preview from the joined last-message payload.
+ *
+ * The link-card title lookup is created once per batch and memoized, so a page
+ * of summaries costs one extra query per distinct linked conversation (and
+ * none at all unless a chat's last message is a `chat` card).
+ */
+function toChatSummaries(rows: ChatSummaryRow[]): ChatSummary[] {
+  const tags = tagsForChats(rows.map((row) => row.id));
+  const resolveChatTitle = createChatTitleResolver();
+  return rows.map((row) =>
+    toChatSummary(row, tags.get(row.id) ?? [], resolveChatTitle),
+  );
+}
+
+function toChatSummary(
+  row: ChatSummaryRow,
+  tags: string[],
+  resolveChatTitle: (chatId: number) => string | null,
+): ChatSummary {
   return {
     ...toChat(row),
-    preview: row.preview,
+    preview: describeLastMessage(row, resolveChatTitle),
     lastAt: row.last_at,
     lastMessageAt: row.last_message_at,
     tags,
+  };
+}
+
+/**
+ * Preview of the row's joined last message, or `null` when the chat has no
+ * (real) message yet. All payload columns come from the same joined row, so the
+ * description always matches the message it describes.
+ */
+function describeLastMessage(
+  row: ChatSummaryRow,
+  resolveChatTitle: (chatId: number) => string | null,
+): ChatPreview | null {
+  if (row.last_kind === null) return null;
+  return buildChatPreview({
+    kind: row.last_kind,
+    content: row.last_content ?? "",
+    steps: parseSteps(row.last_steps),
+    attachments: parseAttachments(row.last_attachments),
+    attachmentsTotal: parseAttachmentTotal(row.last_attachments),
+    imageStatus: parseImageStatus(row.last_image_status),
+    resolveChatTitle,
+  });
+}
+
+/**
+ * Cached `chat id → title` lookup for previews that describe a link card
+ * (`kind = "chat"`). Returns `null` for a conversation that no longer exists and
+ * `""` for one that exists without a title, so the renderer can tell "deleted"
+ * from "untitled". Callers create one per batch of summaries.
+ */
+export function createChatTitleResolver(): (chatId: number) => string | null {
+  const cache = new Map<number, string | null>();
+  const read = getDB().prepare("SELECT title FROM chats WHERE id = ?");
+  return (chatId: number): string | null => {
+    const cached = cache.get(chatId);
+    if (cached !== undefined) return cached;
+    const row = read.get(chatId) as { title: string | null } | undefined;
+    const title = row ? (row.title ?? "") : null;
+    cache.set(chatId, title);
+    return title;
   };
 }
 

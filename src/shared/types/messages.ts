@@ -105,11 +105,65 @@ export interface Message {
 export interface MessageSearchResult {
   chatId: number;
   messageId: number;
+  /** Kind of the matching message, so a caller can label the hit per card type. */
+  kind: MessageKind;
   chatTitle: string;
-  /** Content excerpt with the match wrapped in `«`/`»` markers. */
+  /**
+   * Readable excerpt of the message with the match wrapped in `«`/`»` markers.
+   * Derived from the same per-kind extraction the chat list uses, so a card
+   * payload (e.g. an `ask` JSON) never shows up as raw JSON here either.
+   */
   snippet: string;
   /** UNIX timestamp in seconds. */
   createdAt: number;
+}
+
+/**
+ * One-line description of a message, as shown under a chat's title in the chat
+ * list (and in the composer's conversation picker).
+ *
+ * The payload is **extracted** in the main process (`buildChatPreview`, no
+ * localization, no formatting) and **presented** by the renderer
+ * (`preview-text.ts`: labels via `t()`, Markdown flattening, mentions,
+ * truncation). Keeping the two apart is what makes a live language switch take
+ * effect immediately, exactly like every other renderer string.
+ *
+ * Optional fields are only present for the kind that defines them; consumers
+ * must treat a missing field as "not applicable" and stay defensive about
+ * unknown kinds (a preview is only a teaser and must never break the list).
+ */
+export interface ChatPreview {
+  /** Message kind; the extractor falls back to `text` for unknown values. */
+  kind: MessageKind;
+  /**
+   * Primary human-readable text of the message (plain body, report, progress
+   * card title, image prompt, …), clamped to a preview-sized length.
+   *
+   * Empty when the kind is described by something else: `ask`/`answer` cards by
+   * their counters, a `chat` link card by its linked conversation. It is also
+   * the *only* place a card's raw payload survives — an `ask`/`answer` payload
+   * that cannot be parsed keeps its stored bytes here so the list still shows
+   * something instead of an empty line.
+   */
+  text: string;
+  /** `ask`: number of questions in the card (>= 1). */
+  questionCount?: number;
+  /** `answer`: number of answered items (>= 1). */
+  answerCount?: number;
+  /** `progress`: how many of the card's steps are `done`. */
+  stepsDone?: number;
+  /** `progress`: number of steps on the card. */
+  stepsTotal?: number;
+  /**
+   * `chat`: the linked conversation. `linkChatTitle` is `null` when that
+   * conversation no longer exists and `""` when it exists without a title.
+   */
+  linkChatId?: number;
+  linkChatTitle?: string | null;
+  /** `image`: picture lifecycle, drives the label prefix. */
+  imageStatus?: ImageGenStatus;
+  /** Attachments on the message (the true total, not the forwarded subset). */
+  attachmentCount?: number;
 }
 
 /** Optional payload for `appendMessage` (all fields validated by the service). */
