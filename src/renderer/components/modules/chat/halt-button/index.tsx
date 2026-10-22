@@ -21,7 +21,8 @@ export interface HaltButtonProps {
  * logging) comes from the shared `halt-button` component; this wrapper only
  * supplies the card semantics and the overlay class.
  *
- * Always shown — no run-state signal is tracked.
+ * Always shown — no run-state signal is tracked. Hover shows "Interrupt task"
+ * and hides when the pointer leaves; the click still opens this confirmation.
  */
 export function HaltButton({
   chatId,
@@ -32,6 +33,7 @@ export function HaltButton({
       className="imb-halt"
       placement={placement}
       label={t("Halt")}
+      hint={t("Interrupt task")}
       confirmText={t("Confirm interrupting this task group chat's sessions?")}
       onInterrupt={() => imb.agentSession.interruptChat(chatId)}
     />

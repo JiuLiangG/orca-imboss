@@ -3,6 +3,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { Button } from "../button";
 import { IconHalt } from "../icons";
 import { Popover } from "../popover";
+import { Tooltip } from "../tooltip";
 import type { Placement } from "../tooltip/position";
 import "./index.css";
 
@@ -28,11 +29,18 @@ export interface HaltButtonProps {
    */
   confirm?: boolean;
   /**
-   * Accessible name, hover title **and** the confirm button's label. Defaults to
-   * `t("Halt")`; views that interrupt something narrower (one turn of one
-   * session) pass their own copy.
+   * Accessible name and the confirm button's label. Defaults to `t("Halt")`;
+   * views that interrupt something narrower (one turn of one session) pass
+   * their own copy. When `hint` is set, the icon's accessible name is the hint
+   * and this label stays on the confirm button only.
    */
   label?: string;
+  /**
+   * Hover text for an icon-only trigger. Shown in a tooltip that closes as soon
+   * as the pointer leaves, and hidden while the confirmation popover is open.
+   * The native `title` is cleared so the two hints do not stack.
+   */
+  hint?: string;
   /** Side the confirmation popup opens on (flips once when it would overflow). */
   placement?: Placement;
   /**
@@ -68,6 +76,7 @@ export function HaltButton({
   confirmText,
   confirm = true,
   label = t("Halt"),
+  hint,
   placement = "left",
   className,
   disabled = false,
@@ -99,22 +108,33 @@ export function HaltButton({
     }
   };
 
+  const trigger = (
+    <button
+      ref={triggerRef}
+      type="button"
+      className={className}
+      aria-label={hint ?? label}
+      disabled={triggerDisabled}
+      {...(confirm
+        ? { "aria-haspopup": "dialog", "aria-expanded": open }
+        : { "aria-busy": busy })}
+      // The tooltip is the visible hint; an empty title drops the native one.
+      title={hint ? "" : label}
+      onClick={confirm ? () => setOpen((value) => !value) : () => void run()}
+    >
+      {children ?? <IconHalt />}
+    </button>
+  );
+
   return (
     <>
-      <button
-        ref={triggerRef}
-        type="button"
-        className={className}
-        aria-label={label}
-        disabled={triggerDisabled}
-        {...(confirm
-          ? { "aria-haspopup": "dialog", "aria-expanded": open }
-          : { "aria-busy": busy })}
-        title={label}
-        onClick={confirm ? () => setOpen((value) => !value) : () => void run()}
-      >
-        {children ?? <IconHalt />}
-      </button>
+      {hint ? (
+        <Tooltip content={hint} placement="top" disabled={open || disabled}>
+          {trigger}
+        </Tooltip>
+      ) : (
+        trigger
+      )}
       {confirm && (
         <Popover
           open={open}

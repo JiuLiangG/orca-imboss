@@ -4,8 +4,10 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type MouseEvent,
   type ReactElement,
   type ReactNode,
+  type Ref,
 } from "react";
 import { createPortal } from "react-dom";
 import { cls } from "reactutils";
@@ -32,10 +34,25 @@ export interface TooltipProps {
   offset?: number;
 }
 
+/** Host props a tooltip must keep when it attaches to the trigger. */
+interface TriggerProps {
+  ref?: Ref<HTMLElement>;
+  onMouseEnter?: (event: MouseEvent<HTMLElement>) => void;
+  onMouseLeave?: (event: MouseEvent<HTMLElement>) => void;
+}
+
+function assignRef<T>(ref: Ref<T> | undefined, value: T | null): void {
+  if (typeof ref === "function") ref(value);
+  else if (ref) ref.current = value;
+}
+
 /**
  * Fixed, body-portalled tooltip that attaches itself to its child trigger via
  * `cloneElement` (preserving the host DOM structure). Hover-only: opens after a
  * short delay on `mouseenter`, closes immediately on `mouseleave`.
+ *
+ * The host's ref and mouse handlers are kept. A trigger that also anchors a
+ * popover (the task-group halt button) still receives its own node.
  */
 export function Tooltip({
   content,
@@ -104,12 +121,23 @@ export function Tooltip({
     setOpen(false);
   }
 
+  const childProps = children.props as TriggerProps;
+
   return (
     <>
       {cloneElement(children, {
-        ref: triggerRef,
-        onMouseEnter: show,
-        onMouseLeave: hide,
+        ref: (node: HTMLElement | null) => {
+          triggerRef.current = node;
+          assignRef(childProps.ref, node);
+        },
+        onMouseEnter: (event: MouseEvent<HTMLElement>) => {
+          childProps.onMouseEnter?.(event);
+          show();
+        },
+        onMouseLeave: (event: MouseEvent<HTMLElement>) => {
+          childProps.onMouseLeave?.(event);
+          hide();
+        },
       })}
       {open &&
         createPortal(
