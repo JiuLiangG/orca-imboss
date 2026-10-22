@@ -1,11 +1,30 @@
 /* Shared conversation layout (header + scrollable thread). Imported by both the
-   interactive chat module and the read-only group-chat module. */
+   interactive chat module and the read-only group-chat module.
+
+   Stacking comes in two ladders, and the wrapper is what separates them:
+
+   - Outer (the root stacking context, shared with the shell and the portaled
+     overlays): header 5 < modal 40 < menu 50 < tooltip / popover / notice 60
+     < image lightbox 300. The header owns a stacking context of its own, so the
+     dropdowns hanging off it can only be ordered inside the header — their
+     outward value is the header's 5, and every overlay meant to cover the
+     header is portaled to `document.body` with a larger value.
+   - Inner (`.imb-chat-thread-wrap`, isolated below): transcript decorations
+     1–20 (halt 1, image cards 10–14, the `+N` badge 20) < controls floating
+     over the transcript 30–31 (the in-thread find bar 30, back-to-top / bottom
+     31). Nothing in here can ever outrank the header again.
+
+   Keep transcript numbers inside the low band: a message-level z-index above
+   the wrapper's own slot competes with the header in the *outer* context unless
+   the wrapper is isolated (see below). */
 
 .imb-chat-header {
   /* Positioning context for header-anchored dropdowns (the root chat's
      my-messages panel) and the stacking slot that keeps them above the thread:
      the header is an earlier sibling than the thread wrapper, so without an
-     explicit z-index the later, scrolling content would paint over the panel. */
+     explicit z-index the later, scrolling content would paint over the panel.
+     The value only has to beat the wrapper (0, isolated) — the transcript's own
+     z-indexes are contained there, so it never has to chase them. */
   position: relative;
   z-index: 5;
   flex: none;
@@ -68,24 +87,36 @@
    while the thread itself scrolls (the in-thread find bar at the top-right, the
    "my messages" control at the bottom-right). An absolutely positioned child of
    the scroller would scroll away with the messages, so the wrapper exists and
-   every thread view uses it. */
+   every thread view uses it.
+
+   Also the transcript's stacking context (`isolation: isolate`). Without it,
+   the message-level z-indexes (the image deck's cards, the `+N` badge) have no
+   stacking context between them and the root, so they are compared directly
+   against the header's 5 — an image attachment would paint over the header's
+   dropdown. Isolation keeps them in here, where only the inner ladder applies.
+   It changes no layout, clipping or hit-testing (unlike `contain: paint` or
+   `overflow: hidden`), so the hover / focus behaviour of every overlay above
+   the transcript stays exactly as it was. */
 .imb-chat-thread-wrap {
   position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  isolation: isolate;
 }
 
 /* Floating "back to top / bottom" control of a long thread (used by the
-   read-only group chat, which has no composer). Bottom-right of the transcript,
-   above thread content and below modals (40) / menus (50) / toasts (60) — the
-   same slot the agent session's jump buttons use. */
+   read-only group chat, which has no composer). Bottom-right of the transcript.
+   31 is the inner ladder's floating-control slot: above every transcript
+   decoration (image cards 10–14, the `+N` badge 20) and just above the find bar
+   (30), so a picture scrolled under the control can never swallow the button.
+   Outward it is the wrapper's value, i.e. still under the header. */
 .imb-thread-jumps {
   position: absolute;
   right: var(--imb-space-5);
   bottom: var(--imb-space-5);
-  z-index: 5;
+  z-index: 31;
   display: flex;
   flex-direction: column;
   gap: var(--imb-space-2);

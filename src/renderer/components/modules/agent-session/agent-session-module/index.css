@@ -152,13 +152,21 @@
 
 /* Thread + floating jump control share one positioned wrapper, so the control
    sits just above the composer (its height is variable) instead of at a fixed
-   distance from the window's bottom edge. */
+   distance from the window's bottom edge.
+
+   The wrapper is also this view's stacking context (`isolation: isolate`), for
+   the same reason as `.imb-chat-thread-wrap` in `chat/thread.css`: a
+   message-level z-index (an image card, a decoration) must be compared inside
+   the transcript, never against the header's 5 up in the root context. Nothing
+   here changes visually today — the session transcript has no positive
+   z-index — it keeps the two conversation views on one rule. */
 .imb-session-thread-wrap {
   position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  isolation: isolate;
 }
 
 /* The transcript itself still scrolls and fills the wrapper. */
@@ -177,13 +185,15 @@
 
 /* Floating "previous / next new message" control, positioned inside the
    thread wrapper: bottom-right of the transcript, above the composer, never on
-   top of it. z-index sits above thread content but below modals (40) / menus
-   (50) / toasts (60). */
+   top of it. 31 is the inner ladder's floating-control slot (see
+   `chat/thread.css`): above every transcript decoration, so scrolled content
+   can never swallow the buttons; outward it is the wrapper's value, i.e. still
+   under the header. */
 .imb-session-jumps {
   position: absolute;
   right: var(--imb-space-5);
   bottom: var(--imb-space-5);
-  z-index: 5;
+  z-index: 31;
   display: flex;
   flex-direction: column;
   gap: var(--imb-space-2);

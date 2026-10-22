@@ -3,13 +3,15 @@
 
    It floats over the thread's top-right corner: the host `.imb-chat-thread-wrap`
    is the positioning context (see `thread.css`), so the bar never takes layout
-   space and opening / closing it cannot shift a single message. z-index sits
-   above the bottom-right "my messages" control (`z-index: 5`). */
+   space and opening / closing it cannot shift a single message. 30 is the inner
+   ladder's first floating-control slot: above every transcript decoration
+   (image cards 10–14, the `+N` badge 20) — a picture scrolled under the bar must
+   not cover it — and below the back-to-top / bottom control (31). */
 .imb-findbar {
   position: absolute;
   top: var(--imb-space-3);
   right: var(--imb-space-5);
-  z-index: 6;
+  z-index: 30;
   display: flex;
   align-items: center;
   gap: var(--imb-space-1);
