@@ -27,11 +27,11 @@
   display: inline;
 }
 
-.imb-markdown > :first-child {
+.imb-markdown> :first-child {
   margin-top: 0;
 }
 
-.imb-markdown > :last-child {
+.imb-markdown> :last-child {
   margin-bottom: 0;
 }
 
@@ -78,7 +78,7 @@
   margin: var(--imb-space-1) 0;
 }
 
-.imb-markdown li > p {
+.imb-markdown li>p {
   margin: 0;
 }
 
@@ -351,6 +351,10 @@ button.imb-mention:focus-visible {
     --md-hl-title: #d2a8ff;
     --md-hl-builtin: #ffa657;
     --md-hl-meta: #8b949e;
+  }
+
+  .imb-self .imb-markdown li::marker {
+    color: #b6b6b6;
   }
 }
 

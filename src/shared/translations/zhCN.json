@@ -155,6 +155,7 @@
   "Download and update": "下载并更新",
   "Download update": "下载更新",
   "Downloading update…": "正在下载更新……",
+  "Downscaled preview (very large image)": "已降采样预览（超大图片）",
   "Drag to position and zoom to crop avatar.": "拖拽平移图片，使用滑块或滚轮缩放裁切头像。",
   "Drop files or folders to attach": "将文件或文件夹拖到此处添加附件",
   "Duplicate model id: ${id}": "模型 ID 重复：${id}",

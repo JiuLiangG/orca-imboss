@@ -49,6 +49,13 @@ export interface ImageStackProps {
    */
   onImageError?: (index: number) => void;
   /**
+   * Reveal a picture's file in the OS file manager, called with its attachment
+   * index from the full-screen viewer. Omitted (e.g. for a picture with no
+   * stored record yet) the viewer renders no reveal button — the callback is
+   * what tells it a trustworthy on-disk location exists.
+   */
+  onRevealImage?: (index: number) => void | Promise<void>;
+  /**
    * Deck edge length in px. Defaults to `DEFAULT_STACK_SIZE` (the bubble's
    * thumbnail); the fan geometry scales with it, so a larger frame (a generated
    * picture) still reads as a stack.
@@ -104,6 +111,7 @@ export function ImageStack({
   images,
   self,
   onImageError,
+  onRevealImage,
   size = DEFAULT_STACK_SIZE,
   pending,
 }: ImageStackProps): React.JSX.Element {
@@ -274,6 +282,11 @@ export function ImageStack({
           origin={origin}
           onIndexChange={setLightbox}
           onClose={() => setLightbox(null)}
+          onReveal={
+            onRevealImage === undefined
+              ? undefined
+              : () => onRevealImage(images[lightbox].index)
+          }
         />
       )}
     </div>

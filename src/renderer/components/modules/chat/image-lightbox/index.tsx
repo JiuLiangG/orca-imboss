@@ -5,11 +5,12 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { createPortal } from "react-dom";
 import { cls } from "reactutils";
-import { IconChevronDown, IconX } from "../../../icons";
+import { IconChevronDown, IconFolder, IconX } from "../../../icons";
 import "./index.css";
 
 export interface LightboxImage {
@@ -29,10 +30,27 @@ export interface ImageLightboxProps {
   origin?: DOMRect | null;
   onIndexChange: (index: number) => void;
   onClose: () => void;
+  /**
+   * Reveal the shown picture in the OS file manager. The callback *is* the
+   * caller's proof that a trustworthy on-disk location exists for it (main
+   * resolves the path from the stored record), so omitting it — the composer's
+   * draft previews, which have no stored message behind them — simply hides the
+   * button.
+   */
+  onReveal?: () => void | Promise<void>;
 }
 
 /** Duration of the open transform animation (the backdrop fades via CSS). */
 const OPEN_MS = 280;
+
+/**
+ * Beat between the end of the open animation and the hand-over to the
+ * full-resolution copy, so the two never overlap.
+ */
+const CRISP_DELAY_MS = 80;
+
+/** Cross-fade duration between the fitted copy and the full-resolution one. */
+const FADE_MS = 180;
 
 /** Fitted (neutral) state: the picture at `1×`, fully visible and centred. */
 interface ZoomState {
@@ -51,14 +69,38 @@ const FIT: ZoomState = { scale: 1, x: 0, y: 0 };
 const FIT_ZOOM = 1;
 
 /**
- * Zoom range. `1×` (FIT) is the layout's fitted size (capped at `90vw × 80vh`);
- * `0.5×` shrinks further so more can be taken in at once; beyond `4×` the picture
- * only pixelates.
+ * Zoom range, both ends expressed on top of the fitted baseline: `0.5×` shrinks
+ * so more can be taken in at once, and the upper end is derived from
+ * {@link MAX_ABS_ZOOM} below.
  */
 const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 4;
 
-/** Double-click target, and the step for the `+` / `-` keys. */
+/**
+ * Largest *absolute* magnification: `1` is the picture's own pixels (one image
+ * pixel per CSS pixel), `4` is 400%. The fitted baseline is usually far below
+ * `1` (a 5000px-wide screenshot fits at ~0.26), so the relative upper bound has
+ * to be derived from the fitted scale — a fixed `4× fit` cap would stop well
+ * short of the original pixels and look blurry for exactly the pictures the
+ * boss zooms into.
+ */
+const MAX_ABS_ZOOM = 4;
+
+/**
+ * Relative upper bound while the picture is painted from a *downsampled* copy
+ * (over the pixel budget): magnifying that copy further only shows mush, so the
+ * cap stays where it was before full-resolution rendering existed.
+ */
+const DEGRADED_MAX_ZOOM = 4;
+
+/**
+ * Pixel budget for rendering the picture at its natural size. A copy this large
+ * still decodes to a sane RGBA bitmap (~256 MB at 64 MP); past it the viewer
+ * keeps the fitted-size decode and says so, instead of risking an out-of-memory
+ * on a panorama.
+ */
+const MAX_CRISP_PIXELS = 64 * 1024 * 1024;
+
+/** Double-click target (on top of the fitted baseline), and the `+` / `-` step. */
 const DOUBLE_CLICK_ZOOM = 2;
 const KEY_ZOOM_FACTOR = 1.25;
 
@@ -89,6 +131,30 @@ type Gesture =
       startY: number;
     };
 
+/**
+ * Intrinsic size of one picture plus the fitted box measured for it.
+ *
+ * The viewer used to lay the picture out at the fitted size, which also pinned
+ * Chromium's *decode* to that size — magnifying it then scaled an already
+ * downsampled bitmap, so the boss never got to the real pixels. Now the fitted
+ * box is a fixed frame and the picture inside it is laid out at its natural
+ * size and scaled down (`scale`): the decode is the original, and `1×` on the
+ * zoom axis above the fitted baseline is a real 1 image px : 1 CSS px.
+ */
+interface FitBox {
+  /** `images` index the measurement belongs to. */
+  index: number;
+  naturalWidth: number;
+  naturalHeight: number;
+  /** Natural size → fitted box. `1` when the picture already fits as-is. */
+  scale: number;
+  /** The fitted box in CSS px — the box the zoom/pan transform lives on. */
+  width: number;
+  height: number;
+  /** Natural pixel count over `MAX_CRISP_PIXELS`: keep the fitted decode. */
+  overBudget: boolean;
+}
+
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(Math.max(value, min), max);
 
@@ -105,15 +171,22 @@ const isFitted = (zoom: ZoomState): boolean =>
  * (`chat-input-bar/`). Rendered into `document.body` so it escapes any
  * stacking context.
  *
+ * Resolution: the picture is painted twice. A fitted-size copy appears first
+ * (cheap decode, and the element the open animation grows out of the
+ * thumbnail); once that has loaded, the fitted box is measured and a second copy
+ * laid out at the picture's natural size cross-fades in. Zooming therefore
+ * magnifies the original pixels, not a resized preview. A picture over
+ * `MAX_CRISP_PIXELS` skips the second copy (memory) and says it is downsampled.
+ *
  * Gestures: the wheel zooms about the pointer (a trackpad pinch arrives as the
- * same wheel path) within `0.5×–4×`, double-click toggles the neutral framing /
- * 2×, `+` `-` `0` zoom in place and reset, and a drag pans the picture at *any*
- * scale — a fitted or shrunk picture can be nudged to a corner, and none of it
- * can ever be moved out of sight. Arrow keys / the on-screen arrows (with the
- * `n / m` counter) step between images — the wheel no longer does. A click on
- * the backdrop closes; Esc undoes a zoom/pan first and closes on the second
- * press. Switching images always resets the framing, so one picture's zoom can
- * never leak into another's.
+ * same wheel path) within `0.5×` of the fitted size up to 400% of the original
+ * pixels, double-click toggles the neutral framing / `2×`, `+` `-` `0` zoom in
+ * place and reset, and a drag pans the picture at *any* scale — a fitted or
+ * shrunk picture can be nudged to a corner, and none of it can ever be moved out
+ * of sight. Arrow keys / the on-screen arrows (with the `n / m` counter) step
+ * between images — the wheel no longer does. A click on the backdrop closes;
+ * Esc undoes a zoom/pan first and closes on the second press. Switching images
+ * always resets the framing, so one picture's zoom can never leak into another's.
  */
 export function ImageLightbox({
   images,
@@ -121,11 +194,17 @@ export function ImageLightbox({
   origin,
   onIndexChange,
   onClose,
+  onReveal,
 }: ImageLightboxProps): React.JSX.Element | null {
   const count = images.length;
   const closeRef = useRef<HTMLButtonElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
-  const imageRef = useRef<HTMLImageElement>(null);
+  /** The fitted box the zoom/pan transform lives on (measured, never scaled). */
+  const frameRef = useRef<HTMLDivElement>(null);
+  /** The fitted-size copy, and the element the open animation drives. */
+  const fittedRef = useRef<HTMLImageElement>(null);
+  /** The full-resolution copy painted from the picture's own pixels. */
+  const fullRef = useRef<HTMLImageElement>(null);
 
   const [zoom, setZoomState] = useState<ZoomState>(FIT);
   /** Mirrors `zoom` for listeners and gestures (never re-bound per frame). */
@@ -135,6 +214,47 @@ export function ImageLightbox({
   /** Live pointers, keyed by `pointerId` (one = pan, two = pinch). */
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const gesture = useRef<Gesture | null>(null);
+
+  /** Intrinsic size of the loaded fitted copy, keyed by image. */
+  const [loaded, setLoaded] = useState<{
+    index: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  /** Measured fitted box, keyed by image (a switch invalidates it). */
+  const [fitState, setFitState] = useState<FitBox | null>(null);
+  const fit = fitState !== null && fitState.index === index ? fitState : null;
+  /** The full-resolution copy has finished loading. */
+  const [hiLoaded, setHiLoaded] = useState<{ index: number } | null>(null);
+  /**
+   * The open animation has finished. Until then the full-resolution copy waits,
+   * so a re-decode never plays against the FLIP.
+   */
+  const [flipDone, setFlipDone] = useState(true);
+  /** The fitted copy can be dropped once the cross-fade is over. */
+  const [fittedGone, setFittedGone] = useState<{ index: number } | null>(null);
+
+  /** A reveal request is in flight (the button is disabled meanwhile). */
+  const [revealing, setRevealing] = useState(false);
+  const [revealError, setRevealError] = useState<{
+    index: number;
+    message: string;
+  } | null>(null);
+
+  const fitScale = fit?.scale ?? 1;
+  const degraded = fit?.overBudget ?? false;
+  const crisp = fit !== null && hiLoaded?.index === index && flipDone;
+  // The fitted copy is dropped once the original pixels are up — but it is also
+  // what the fitted box is measured from, so it comes back whenever the shown
+  // picture has no measurement of its own (e.g. flipping back to a picture whose
+  // measurement was replaced by the one in between).
+  const showFitted = fit === null || fittedGone?.index !== index;
+  const maxZoom = degraded
+    ? DEGRADED_MAX_ZOOM
+    : Math.max(DEGRADED_MAX_ZOOM, MAX_ABS_ZOOM / fitScale);
+  /** Absolute magnification, in the same unit Preview.app uses for "100%". */
+  const percent = Math.round(zoom.scale * fitScale * 100);
+  const error = revealError?.index === index ? revealError.message : null;
 
   const commitZoom = useCallback((next: ZoomState): void => {
     zoomRef.current = next;
@@ -149,17 +269,17 @@ export function ImageLightbox({
    * clamp and the zoom anchor must use the picture's own box.
    */
   const imageCenter = useCallback((): { x: number; y: number } | null => {
-    const image = imageRef.current;
+    const frame = frameRef.current;
     const overlay = overlayRef.current;
-    if (!image || !overlay) return null;
+    if (!frame || !overlay) return null;
     const box = overlay.getBoundingClientRect();
-    if (image.offsetParent !== overlay) {
+    if (frame.offsetParent !== overlay) {
       // Defensive: offset* would be relative to something else.
       return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
     }
     return {
-      x: box.left + image.offsetLeft + image.offsetWidth / 2,
-      y: box.top + image.offsetTop + image.offsetHeight / 2,
+      x: box.left + frame.offsetLeft + frame.offsetWidth / 2,
+      y: box.top + frame.offsetTop + frame.offsetHeight / 2,
     };
   }, []);
 
@@ -176,17 +296,21 @@ export function ImageLightbox({
    * own centre (they just swap which one is the minimum), which is also why
    * panning works at 1× — and why a shrunk picture (scale < 1) stays fully
    * visible and yet freely movable: the same formula covers every scale in
-   * `[MIN_ZOOM, MAX_ZOOM]`.
+   * `[MIN_ZOOM, maxZoom]`.
+   *
+   * `offsetWidth/Height` is the *fitted* box, which is what the transform
+   * scales, so the formula is unchanged by rendering the picture at its natural
+   * size inside it.
    */
   const clampOffset = useCallback(
     (scale: number, x: number, y: number): { x: number; y: number } => {
-      const image = imageRef.current;
+      const frame = frameRef.current;
       const overlay = overlayRef.current;
       const center = imageCenter();
-      if (!image || !overlay || !center) return { x, y };
+      if (!frame || !overlay || !center) return { x, y };
       const box = overlay.getBoundingClientRect();
-      const halfWidth = (image.offsetWidth * scale) / 2;
-      const halfHeight = (image.offsetHeight * scale) / 2;
+      const halfWidth = (frame.offsetWidth * scale) / 2;
+      const halfHeight = (frame.offsetHeight * scale) / 2;
       const nearX = halfWidth - (center.x - box.left);
       const farX = overlay.clientWidth - halfWidth - (center.x - box.left);
       const nearY = halfHeight - (center.y - box.top);
@@ -206,7 +330,7 @@ export function ImageLightbox({
   const zoomAt = useCallback(
     (nextScale: number, clientX: number, clientY: number): void => {
       const current = zoomRef.current;
-      const scale = clamp(nextScale, MIN_ZOOM, MAX_ZOOM);
+      const scale = clamp(nextScale, MIN_ZOOM, maxZoom);
       if (Math.abs(scale - current.scale) < 0.001) return;
       const center = imageCenter();
       if (!center) return;
@@ -220,7 +344,7 @@ export function ImageLightbox({
       );
       commitZoom({ scale, ...offset });
     },
-    [clampOffset, commitZoom, imageCenter],
+    [clampOffset, commitZoom, imageCenter, maxZoom],
   );
 
   /**
@@ -266,6 +390,63 @@ export function ImageLightbox({
   useEffect(() => {
     resetZoom();
   }, [index, resetZoom]);
+
+  // Measure the fitted box while the fitted copy is still the one laid out at
+  // that size — the natural-size copy is scaled into exactly this box, so the
+  // two never differ by a pixel. `useLayoutEffect` so the hand-over is set up
+  // before the frame paints (no flash at the old size).
+  useLayoutEffect(() => {
+    const image = fittedRef.current;
+    if (!loaded || loaded.index !== index || !image) return;
+    const width = image.offsetWidth;
+    const height = image.offsetHeight;
+    if (width === 0 || height === 0) return;
+    if (loaded.width === 0 || loaded.height === 0) return;
+    setFitState({
+      index,
+      naturalWidth: loaded.width,
+      naturalHeight: loaded.height,
+      scale: Math.min(1, width / loaded.width),
+      width,
+      height,
+      overBudget: loaded.width * loaded.height > MAX_CRISP_PIXELS,
+    });
+  }, [loaded, index]);
+
+  // A picture served from the cache can finish before React attaches `onLoad`
+  // (the deck thumbnail has usually fetched the same `imb-file:` URL already),
+  // so read the sizes off the elements as well: neither the measurement nor the
+  // hand-over to the original pixels may depend on catching the event.
+  useEffect(() => {
+    const fitted = fittedRef.current;
+    if (
+      fitted !== null &&
+      loaded?.index !== index &&
+      fitted.complete &&
+      fitted.naturalWidth > 0
+    ) {
+      setLoaded({
+        index,
+        width: fitted.naturalWidth,
+        height: fitted.naturalHeight,
+      });
+    }
+    const full = fullRef.current;
+    if (full !== null && hiLoaded?.index !== index && full.complete) {
+      if (full.naturalWidth > 0) setHiLoaded({ index });
+    }
+  });
+
+  // Drop the fitted copy once the full-resolution one has faded in: two
+  // decoded bitmaps of the same picture is pure memory.
+  useEffect(() => {
+    if (!crisp) return;
+    const timer = window.setTimeout(
+      () => setFittedGone({ index }),
+      FADE_MS + 40,
+    );
+    return () => window.clearTimeout(timer);
+  }, [crisp, index]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -321,12 +502,12 @@ export function ImageLightbox({
     return () => element.removeEventListener("wheel", onWheel);
   }, [zoomAt]);
 
-  // FLIP the image out of the thumbnail: place it at the thumbnail's box for
-  // the first paint, then release it to its natural size on the next frame so
-  // the transform transitions. Zoom/pan live on the wrapper, so they never
-  // fight this animation.
+  // FLIP the fitted copy out of the thumbnail: place it at the thumbnail's box
+  // for the first paint, then release it to its natural size on the next frame
+  // so the transform transitions. Zoom/pan live on the wrapper, so they never
+  // fight this animation; the full-resolution copy waits for it to finish.
   useLayoutEffect(() => {
-    const image = imageRef.current;
+    const image = fittedRef.current;
     if (!image || !origin) return;
     if (!image.complete || image.naturalWidth === 0) return;
     const target = image.getBoundingClientRect();
@@ -338,11 +519,22 @@ export function ImageLightbox({
       origin.top + origin.height / 2 - (target.top + target.height / 2);
     image.style.transition = "none";
     image.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
+    setFlipDone(false);
     const frame = requestAnimationFrame(() => {
       image.style.transition = `transform ${OPEN_MS}ms var(--imb-ease-standard)`;
       image.style.transform = "translate(0, 0) scale(1)";
     });
-    return () => cancelAnimationFrame(frame);
+    const timer = window.setTimeout(() => {
+      // Hand the element back to CSS: the inline transform would otherwise
+      // outlive the animation and shadow any later styling.
+      image.style.transition = "";
+      image.style.transform = "";
+      setFlipDone(true);
+    }, OPEN_MS + CRISP_DELAY_MS);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
   }, [origin]);
 
   const capturePointer = (element: HTMLElement, pointerId: number): void => {
@@ -424,7 +616,7 @@ export function ImageLightbox({
     const scale = clamp(
       (current.startScale * distance) / current.startDistance,
       MIN_ZOOM,
-      MAX_ZOOM,
+      maxZoom,
     );
     const midX = (a.x + b.x) / 2;
     const midY = (a.y + b.y) / 2;
@@ -476,6 +668,22 @@ export function ImageLightbox({
     else zoomAt(DOUBLE_CLICK_ZOOM, event.clientX, event.clientY);
   };
 
+  const reveal = useCallback(async (): Promise<void> => {
+    if (!onReveal || revealing) return;
+    setRevealError(null);
+    setRevealing(true);
+    try {
+      await onReveal();
+    } catch (err) {
+      setRevealError({
+        index,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setRevealing(false);
+    }
+  }, [index, onReveal, revealing]);
+
   const current = images[index];
   if (!current) return null;
 
@@ -515,34 +723,105 @@ export function ImageLightbox({
 
       <figure className="imb-lightbox-figure">
         <div
+          ref={frameRef}
           className={cls(
             "imb-lightbox-zoom",
             grabbing && "imb-lightbox-grabbing",
           )}
-          style={{
-            transform: `translate3d(${zoom.x}px, ${zoom.y}px, 0) scale(${zoom.scale})`,
-          }}
+          style={
+            {
+              width: fit ? `${fit.width}px` : undefined,
+              height: fit ? `${fit.height}px` : undefined,
+              ...(fit ? { "--imb-lightbox-fit": String(fit.scale) } : {}),
+              // A plain 2D transform on purpose: `translate3d` promotes the layer,
+              // and a promoted layer can be painted from a raster computed at the
+              // pre-zoom scale — which is what makes a magnified picture look
+              // like a preview instead of its own pixels.
+              transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})`,
+            } as CSSProperties
+          }
           onPointerDown={onZoomPointerDown}
           onPointerMove={onZoomPointerMove}
           onPointerUp={onZoomPointerEnd}
           onPointerCancel={onZoomPointerEnd}
           onDoubleClick={onZoomDoubleClick}
         >
-          <img
-            key={index}
-            ref={imageRef}
-            className="imb-lightbox-image"
-            src={current.src}
-            alt={current.name}
-            draggable={false}
-          />
+          {/* The fitted-size copy: what the viewer opens with, and the element
+              the thumbnail grows into. Dropped once the real pixels are up. */}
+          {showFitted && (
+            <img
+              key={`fitted-${index}`}
+              ref={fittedRef}
+              className={cls(
+                "imb-lightbox-image",
+                "imb-lightbox-image-fitted",
+                crisp && "imb-lightbox-image-out",
+              )}
+              src={current.src}
+              alt={crisp ? "" : current.name}
+              draggable={false}
+              onLoad={(event) => {
+                const image = event.currentTarget;
+                setLoaded({
+                  index,
+                  width: image.naturalWidth,
+                  height: image.naturalHeight,
+                });
+              }}
+            />
+          )}
+          {/* The original pixels: laid out at the natural size and scaled down
+              into the fitted box, so `1×` of absolute zoom is 1 image px. */}
+          {fit !== null && !degraded && (
+            <img
+              key={`full-${index}`}
+              ref={fullRef}
+              className={cls(
+                "imb-lightbox-image",
+                "imb-lightbox-image-full",
+                crisp && "imb-lightbox-image-in",
+              )}
+              style={{
+                width: `${fit.naturalWidth}px`,
+                height: `${fit.naturalHeight}px`,
+              }}
+              src={current.src}
+              alt={crisp ? current.name : ""}
+              aria-hidden={crisp ? undefined : "true"}
+              draggable={false}
+              onLoad={() => setHiLoaded({ index })}
+            />
+          )}
         </div>
         <figcaption className="imb-lightbox-caption">
           <span className="imb-lightbox-name">{current.name}</span>
           {count > 1 && (
             <span className="imb-lightbox-count">{`${index + 1} / ${count}`}</span>
           )}
+          <span className="imb-lightbox-zoom-level">{`${percent}%`}</span>
+          {degraded && (
+            <span
+              className="imb-lightbox-note"
+              title={t("Downscaled preview (very large image)")}
+            >
+              {t("Downscaled preview (very large image)")}
+            </span>
+          )}
+          {onReveal !== undefined && (
+            <button
+              type="button"
+              className="imb-lightbox-reveal"
+              onClick={() => void reveal()}
+              disabled={revealing}
+              aria-label={t("Show in folder")}
+              title={t("Show in folder")}
+            >
+              <IconFolder />
+              <span>{t("Show in folder")}</span>
+            </button>
+          )}
         </figcaption>
+        {error !== null && <p className="imb-lightbox-error">{error}</p>}
       </figure>
 
       {count > 1 && (

@@ -110,6 +110,9 @@ export function ImageMessage({
             images={pictures}
             self={self}
             size={IMAGE_FRAME_SIZE}
+            onRevealImage={(index) =>
+              imb.messages.revealAttachment(message.id, index)
+            }
             pending={generating ? <Placeholder failed={false} /> : undefined}
           />
         ) : (

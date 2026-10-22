@@ -174,6 +174,9 @@ export function MessageBubble({
                 images={stack}
                 self={self}
                 onImageError={markImageFailed}
+                onRevealImage={(index) =>
+                  imb.messages.revealAttachment(messageId, index)
+                }
               />
             )}
             {(chips.length > 0 || hidden > 0) && (

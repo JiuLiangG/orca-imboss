@@ -43,24 +43,63 @@
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
   background: rgba(255, 255, 255, 0.04);
   transform-origin: center;
-  /* Also the cross-fade when stepping between images (the element is keyed by
-     index, so it remounts and replays this). */
+  -webkit-user-drag: none;
+}
+
+/*
+ * The fitted-size copy: what the viewer opens with. It is also the element the
+ * open animation drives (its inline transform), and it cross-fades when
+ * stepping between images (keyed by index, so it remounts and replays this).
+ */
+.imb-lightbox-image-fitted {
   animation: imb-lightbox-image-fade var(--imb-motion-fast)
     var(--imb-ease-standard);
-  -webkit-user-drag: none;
+  transition: opacity var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-lightbox-image-out {
+  opacity: 0;
+}
+
+/*
+ * The original pixels. Laid out at the picture's natural size and scaled down
+ * into the fitted box (`--imb-lightbox-fit`), which is what makes the decode —
+ * and therefore the zoomed-in detail — the real image instead of a preview.
+ * Fades in over the fitted copy once it has loaded.
+ */
+.imb-lightbox-image-full {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: none;
+  max-height: none;
+  transform-origin: 0 0;
+  transform: scale(var(--imb-lightbox-fit, 1));
+  opacity: 0;
+  transition: opacity var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-lightbox-image-in {
+  opacity: 1;
 }
 
 /*
  * Zoom/pan wrapper around the picture. The transform lives here (not on the
  * `<img>`) so it never collides with the FLIP open animation, which drives the
- * image's own inline transform. The wrapper shrink-wraps the picture, so the
- * zoom origin and the pan bounds are the picture's box.
+ * fitted copy's own inline transform. Once the picture has been measured the
+ * wrapper carries the fitted box as an explicit size, so the zoom origin and the
+ * pan bounds are the picture's box even though the picture inside it is laid out
+ * at its natural size.
+ *
+ * Deliberately *no* `will-change: transform`: promoting the layer would pin its
+ * raster resolution, and a magnified layer painted from the pre-zoom raster is
+ * exactly the blur this viewer exists to avoid.
  */
 .imb-lightbox-zoom {
   display: block;
+  position: relative;
   line-height: 0;
   transform-origin: center;
-  will-change: transform;
   /* Own every touch gesture over the picture (no browser scroll/zoom). */
   touch-action: none;
   user-select: none;
@@ -89,7 +128,7 @@
 
 .imb-lightbox-caption {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
   max-width: 90vw;
   color: rgba(255, 255, 255, 0.82);
@@ -97,14 +136,68 @@
 }
 
 .imb-lightbox-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.imb-lightbox-count {
+.imb-lightbox-count,
+.imb-lightbox-zoom-level,
+.imb-lightbox-note {
   flex: none;
   opacity: 0.7;
+}
+
+/* Tabular figures keep the live zoom reading from jittering while wheeling. */
+.imb-lightbox-zoom-level {
+  font-variant-numeric: tabular-nums;
+}
+
+.imb-lightbox-reveal {
+  flex: none;
+  /* Push the reveal action to the row's end, away from the file name. */
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--imb-radius-pill);
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: var(--imb-text-sm);
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--imb-motion-fast) var(--imb-ease-standard);
+}
+
+.imb-lightbox-reveal:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.imb-lightbox-reveal:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.imb-lightbox-reveal:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.imb-lightbox-reveal svg {
+  width: 16px;
+  height: 16px;
+}
+
+.imb-lightbox-error {
+  margin: 0;
+  max-width: 90vw;
+  color: #ff8a80;
+  font-size: var(--imb-text-sm);
 }
 
 .imb-lightbox-close,
