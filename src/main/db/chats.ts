@@ -60,6 +60,14 @@ export function getChat(id: number): Chat | null {
   return row ? toChat(row) : null;
 }
 
+/** Direct task groups spawned from a boss chat, oldest first. */
+export function listChildChatIds(parentId: number): number[] {
+  const rows = getDB()
+    .prepare("SELECT id FROM chats WHERE from_chat_id = ? ORDER BY id")
+    .all(parentId) as Array<{ id: number }>;
+  return rows.map((row) => row.id);
+}
+
 /**
  * Resolve the root (user) chat of a chat by walking `from_chat_id` upward.
  * Cycle-safe: a malformed self/circular chain returns the last id visited. A

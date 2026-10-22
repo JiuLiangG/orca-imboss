@@ -396,6 +396,79 @@ export function updateImageGeneration(
 }
 
 /**
+ * Progress cards already posted for one task group, oldest first.
+ * `json_extract` matches the `chatId` stored beside the steps.
+ */
+export function listGroupProgressCards(
+  chatId: number,
+  groupChatId: number,
+): Array<{ id: number; steps: MessageStep[] }> {
+  const rows = getDB()
+    .prepare(
+      "SELECT id, steps FROM messages " +
+        "WHERE chat_id = ? AND kind = 'progress' AND json_extract(steps, '$.chatId') = ? " +
+        "ORDER BY id",
+    )
+    .all(chatId, groupChatId) as Array<{ id: number; steps: string | null }>;
+  return rows.map((row) => ({
+    id: row.id,
+    steps: parseSteps(row.steps) ?? [],
+  }));
+}
+
+/**
+ * Revise one progress card in place: title and the full step list.
+ *
+ * Unlike an append, this does not bump unread, move the chat in the list, or
+ * emit a new message (so a linked messenger is not sent another copy). The
+ * open thread still reloads, quietly, through `messages:changed`.
+ */
+export function updateProgressCard(
+  messageId: number,
+  content: string,
+  steps: MessageStep[],
+  groupChatId: number,
+): Message | null {
+  if (content.length === 0) {
+    throw new Error("Message content must be a non-empty string.");
+  }
+  if (content.length > MAX_CONTENT_LENGTH) {
+    throw new Error("Message is too long.");
+  }
+  const validated = validateSteps(steps);
+  if (validated === undefined || validated.length === 0) {
+    throw new Error("Progress messages need at least one step.");
+  }
+  const db = getDB();
+  const row = db
+    .prepare("SELECT kind, steps FROM messages WHERE id = ?")
+    .get(messageId) as { kind: string; steps: string | null } | undefined;
+  if (!row) return null;
+  if (row.kind !== "progress") {
+    throw new Error("Only progress messages can be revised this way.");
+  }
+  if (parseGroupChatId(row.steps) !== groupChatId) {
+    throw new Error("Progress card belongs to a different task group.");
+  }
+  db.prepare("UPDATE messages SET content = ?, steps = ? WHERE id = ?").run(
+    content,
+    serializeSteps(validated, groupChatId),
+    messageId,
+  );
+  const updated = getMessageById(messageId);
+  if (updated !== null) {
+    const chat = getChat(updated.chatId);
+    sendToRenderer("messages:changed", {
+      chatId: updated.chatId,
+      senderEmployeeId: updated.senderEmployeeId,
+      silent: true,
+      root: chat === null || chat.fromChatId === null,
+    });
+  }
+  return updated;
+}
+
+/**
  * One search hit: the stored row's payload columns, before the excerpt is
  * derived. Kept private to this module.
  */

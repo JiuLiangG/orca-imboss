@@ -150,12 +150,17 @@ export const ASSISTANT_REPORT_PROMPT = `## Tracking Progress and Reporting
 
 You keep the boss informed about a task's progress.
 - **The card is the update.** Everything the card already says — which step went to which employee, its status, how far the whole task is — is carried by \`imb_progress\` alone; never follow a card with an \`imb_send_message\` text restating it. A text message is for what the card cannot express: a question that genuinely needs the boss's decision (\`imb_ask\`), substantive new information or a conclusion that is not a step status, and the final report once every step is \`done\`.
-- When you assign work in a task group chat or when you are woken by a \`report\` message from an employee, call \`imb_progress\` to report progress to the boss. Every \`imb_progress\` call carries the full, current step list:
+- When you assign work in a task group chat or when you are woken by a \`report\` message from an employee, call \`imb_progress\` with the full, current step list. You do not choose which card is revised. The program does:
+  - the same set of \`employeeId\`s as that group's latest card revises that card in place (status and task text). One employee may occupy several steps and still counts once;
+  - a set that group has not used yet inserts a new card, and later updates for those employees revise the new card;
+  - a list that repeats an earlier card's set, or names someone who is not a participant of the group, is rejected and changes nothing.
+- \`groupChatId\` must be the one task group this turn is about: the group named when you were woken, the single group you just created with \`imb_create_chat\`, or the only task group in this chat. Any other id is rejected and nothing is written.
+- Call shape:
   - \`chatId\` = the boss's chat (the chat id in your session identity block);
-  - \`groupChatId\` = the id of the task group this progress reports on — the card links to that group so the boss can jump straight into it;
+  - \`groupChatId\` = the task group, as above;
   - \`steps\` = every step, each with that employee's \`employeeId\`, that employee's \`name\`, a \`task\` describing what that employee is doing on this step (a short phrase), and a \`status\` of \`pending\` (not started, the default), \`busy\` (when work is assigned to the employee) or \`done\` (when a \`report\` from the employee is received);
   - \`content\` = a short title for the progress card.
-- If you are unsure of the current step list, read the latest \`progress\` message in the boss's chat (\`imb_read_chat\` with your session's chat id) and reuse it.
+- If you are unsure who is on the task now, read that task group with \`imb_read_chat\`. Do not reconstruct the list from an older progress card.
 - Once every step is \`done\`, post a final summary to the boss in that same chat with \`imb_send_message\` (\`kind: "report"\`, \`senderEmployeeId: 0\`, no \`notify\`) and call \`imb_notify\` so the boss is alerted.`;
 
 export const MENTION_HANDLING_PROMPT = `## Handling @-Mentions

@@ -11,6 +11,7 @@ import * as dbChats from "../db/chats";
 import * as dbMessages from "../db/messages";
 import { errorEvent, sendEventTo, toStreamEvent } from "./agent-events";
 import { getAgentEnvironment } from "./environment";
+import { beginProgressSegment } from "./progress-authority";
 import { recordRunFailure } from "./run-failure";
 import type { AgentSession as AppAgentSession } from "./session";
 import { ensureSessionFile } from "./session-files";
@@ -768,6 +769,9 @@ async function drain(state: QueueState): Promise<void> {
         state.lastAssistantStop = undefined;
         state.retryAttempts = 0;
         state.abortRequested = false;
+        // Progress writes during this run may name only the group this prompt
+        // authorizes. A later steered wake replaces that, once it is persisted.
+        beginProgressSegment(state.employeeId, state.chatId, text);
         await state.session?.prompt(text);
         // A failed run does not reject: Pi retries the turn itself and then ends
         // the run with an `error`-stopped assistant message. Read that off the
@@ -927,7 +931,17 @@ function forwardEvent(state: QueueState, event: AgentSessionEvent): void {
       errorMessage?: unknown;
     };
     if (message?.role === "user" && state.pendingSteers.length > 0) {
-      state.deliveredSteers.push(userMessageText(message.content));
+      const text = userMessageText(message.content);
+      state.deliveredSteers.push(text);
+      // A persisted steer opens the next stretch. Writes after it belong to
+      // the group that wake names; writes already made stay where they were.
+      // The run's own opening prompt is not in `pendingSteers`, so it does
+      // not clear a segment that tool calls have already extended.
+      if (
+        state.pendingSteers.some((pending) => pending.trim() === text.trim())
+      ) {
+        beginProgressSegment(state.employeeId, state.chatId, text);
+      }
     }
     if (message?.role === "assistant") {
       // Remembered so `drain()` can tell a finished run from a failed one. The

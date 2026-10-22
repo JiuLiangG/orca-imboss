@@ -47,6 +47,12 @@ import {
 } from "../image-gen";
 import { readMcpServers } from "../mcp-store";
 import { notifyUnread, sendToRenderer } from "../notifications";
+import {
+  decideProgressWrite,
+  noteCreatedProgressGroup,
+  progressSegment,
+  resolveAuthorizedProgressGroup,
+} from "./progress-authority";
 import { materializeSessionFile, sessionPathFor } from "./session-files";
 import {
   interruptTurnDiscardingQueue,
@@ -618,6 +624,7 @@ function createChatTool(
 
       // Best-effort: materialize session files; never roll back committed DB.
       await materializeSessions(sessionRecords);
+      noteCreatedProgressGroup(ASSISTANT_ID, callingChatId, chat.id);
 
       // Link the new chat back to its spawning chat with a `chat`-kind card.
       // No `notify` on purpose: creating a chat must NOT start any participant's
@@ -701,19 +708,22 @@ function sendMessageTool(env: AgentEnvironment): AnyPiTool {
  * its participant check, which the assistant satisfies in every chat it posts
  * to.
  */
-function progressTool(env: AgentEnvironment): AnyPiTool {
+function progressTool(env: AgentEnvironment, callingChatId: number): AnyPiTool {
   return {
     name: "imb_progress",
     label: "Post progress",
     description:
-      "Post a task-progress card into a chat as the assistant. `chatId` is the chat the card is " +
-      "posted into (the boss's chat) and `groupChatId` is the task group the card reports on — the " +
-      "card links to that group so the boss can open it. `content` is the card title and `steps` is " +
-      "the full, current step list (one step per employee, each carrying that employee's " +
-      "`employeeId`, that employee's `name`, and a `task` — a short phrase saying what that employee " +
-      "is doing on this step, not their role/title; `status` `pending` before work is assigned, " +
-      "`busy` once it is assigned and running, `done` when finished). Always resend the whole list " +
-      "on every update; no participant is notified.",
+      "Report task progress to the boss. `chatId` is this session's boss chat and `groupChatId` is " +
+      "the one task group this turn is about (the group you were woken for, the single group you " +
+      "just created, or the only task group in this chat). Any other group is rejected and nothing " +
+      "is written. `content` is the card title and `steps` is the full, current step list — one step " +
+      "per row, each with that employee's `employeeId`, `name`, and a `task` (a short phrase for what " +
+      "they are doing on this step, not their role/title; `status` `pending` before work is assigned, " +
+      "`busy` once it is assigned and running, `done` when a report arrives). Send the whole list " +
+      "every time. The same set of employee ids as the group's latest card revises that card in " +
+      "place; a set this group has not used yet inserts a new card. One employee may occupy several " +
+      "steps and still counts once. A list that repeats an earlier card, or names someone who is not " +
+      "in the task group, is rejected and the current card is left unchanged. No participant is notified.",
     promptSnippet: "post a progress card",
     parameters: Type.Object({
       chatId: Type.Integer({ minimum: 1 }),
@@ -745,27 +755,83 @@ function progressTool(env: AgentEnvironment): AnyPiTool {
         content: string;
         steps: MessageStep[];
       };
-      // Validate the link and every step employee before anything is written:
-      // a dangling id would render as a dead click target the model can no
-      // longer repair, so it must be corrected in this call instead.
-      if (!dbChats.getChat(input.groupChatId)) {
-        throw new Error(`Chat ${input.groupChatId} does not exist.`);
+      // The boss chat and the task group are fixed by this turn. A mismatched
+      // id is refused before any row is written, so a wrong guess cannot
+      // revise another card.
+      if (input.chatId !== callingChatId) {
+        throw new Error(
+          "Progress cards are posted into this session's boss chat. The card was not written.",
+        );
       }
-      for (const step of input.steps) {
-        const employeeId = step.employeeId ?? -1;
+      const segment = progressSegment(ASSISTANT_ID, callingChatId);
+      const authorizedGroupId = resolveAuthorizedProgressGroup({
+        namedGroupId: segment.namedGroupId,
+        createdGroupIds: segment.createdGroupIds,
+        childGroupIds: dbChats.listChildChatIds(callingChatId),
+      });
+      const group =
+        authorizedGroupId === null ? null : dbChats.getChat(authorizedGroupId);
+      if (
+        authorizedGroupId !== null &&
+        (group === null || group.fromChatId !== callingChatId)
+      ) {
+        throw new Error(
+          `Task group ${authorizedGroupId} is not a group of this chat. The card was not written.`,
+        );
+      }
+      const declaredEmployeeIds = input.steps.map((step) => {
+        if (step.employeeId === null) {
+          throw new Error(
+            "Progress steps need an employee id. The card was not written.",
+          );
+        }
+        return step.employeeId;
+      });
+      const decision = decideProgressWrite({
+        authorizedGroupId,
+        requestedGroupId: input.groupChatId,
+        participantIds: group?.participants ?? [],
+        declaredEmployeeIds,
+        existingCards: dbMessages
+          .listGroupProgressCards(callingChatId, input.groupChatId)
+          .map((card) => ({
+            id: card.id,
+            employeeIds: card.steps.flatMap((step) =>
+              step.employeeId === null ? [] : [step.employeeId],
+            ),
+          })),
+      });
+      if (decision.action === "reject") {
+        throw new Error(decision.reason);
+      }
+      for (const employeeId of declaredEmployeeIds) {
         if (!dbEmployees.getEmployee(employeeId)) {
           throw new Error(`Employee ${employeeId} does not exist.`);
         }
       }
+      if (decision.action === "update") {
+        const updated = dbMessages.updateProgressCard(
+          decision.messageId,
+          input.content,
+          input.steps,
+          input.groupChatId,
+        );
+        if (!updated) {
+          throw new Error(
+            "Progress card no longer exists. The card was not written.",
+          );
+        }
+        return toolResult({ id: updated.id, revised: true });
+      }
       const message = await performSendMessage(env, {
         senderEmployeeId: ASSISTANT_ID,
-        chatId: input.chatId,
+        chatId: callingChatId,
         kind: "progress",
         content: input.content,
         steps: input.steps,
         groupChatId: input.groupChatId,
       });
-      return toolResult({ id: message.id });
+      return toolResult({ id: message.id, revised: false });
     },
   };
 }
@@ -1732,7 +1798,7 @@ export function createTeamToolDefinitions(
     tools.push(notifyTool());
     // Progress cards are assistant-only: the tool hardcodes the sender to the
     // assistant and participants have no way to post one (they lack `steps`).
-    tools.push(progressTool(env));
+    tools.push(progressTool(env, chatId));
     // `imb_ask` is assistant-only (it asks the boss); employees exchange
     // questions and answers as plain text messages.
     tools.push(askTool(env));
