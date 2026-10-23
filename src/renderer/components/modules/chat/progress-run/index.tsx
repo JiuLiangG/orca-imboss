@@ -34,7 +34,6 @@ export function ProgressRun({
     return null;
   }
   const older = messages.slice(0, -1);
-  const olderCount = older.length;
   const beforeLatest = older[older.length - 1];
 
   return (
@@ -63,22 +62,22 @@ export function ProgressRun({
       {!expanded && shouldShowTimeSeparator(previous, latest) && (
         <TimeSeparator secs={latest.createdAt} />
       )}
-      <button
-        type="button"
-        className="imb-progress-run-toggle"
-        aria-expanded={expanded}
-        onClick={() => onToggle(first.id)}
-      >
-        {expanded
-          ? t("Show latest card")
-          : t("${count} earlier cards", { count: String(olderCount) })}
-      </button>
       {expanded &&
         beforeLatest !== undefined &&
         shouldShowTimeSeparator(beforeLatest, latest) && (
           <TimeSeparator secs={latest.createdAt} />
         )}
-      <MessageItem message={latest} onAnswered={onAnswered} showHalt />
+      <div className="imb-progress-run-tail">
+        <MessageItem message={latest} onAnswered={onAnswered} showHalt />
+        <button
+          type="button"
+          className="imb-progress-run-toggle"
+          aria-expanded={expanded}
+          onClick={() => onToggle(first.id)}
+        >
+          {expanded ? t("Show latest progress only") : t("Show all progress")}
+        </button>
+      </div>
     </div>
   );
 }
