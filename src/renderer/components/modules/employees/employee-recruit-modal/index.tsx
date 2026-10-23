@@ -10,6 +10,7 @@ import { MultiSelect, type MultiSelectOption } from "../../../multi-select";
 import { Select } from "../../../select";
 import { Textarea } from "../../../textarea";
 import {
+  defaultModelSelectNote,
   modelRef,
   thinkingLevelsFor,
   thinkingSelectOptions,
@@ -162,7 +163,11 @@ export function EmployeeRecruitModal({
         <Select
           value={modelId}
           options={[
-            { value: "", label: t("Default") },
+            {
+              value: "",
+              label: t("Default"),
+              note: defaultModelSelectNote(defaultModel, models),
+            },
             ...models.map((model) => ({
               value: modelRef(model),
               label: modelRef(model),

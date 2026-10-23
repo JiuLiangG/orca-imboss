@@ -53,6 +53,28 @@
   white-space: nowrap;
 }
 
+.imb-select-value.imb-has-note,
+.imb-select-option-label.imb-has-note {
+  display: flex;
+  align-items: baseline;
+  gap: var(--imb-space-4);
+  flex: 1;
+  min-width: 0;
+}
+
+.imb-select-value-main {
+  flex: none;
+}
+
+.imb-select-note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--imb-muted);
+  font-weight: 400;
+}
+
 .imb-select-value.imb-is-placeholder {
   color: var(--imb-muted);
 }

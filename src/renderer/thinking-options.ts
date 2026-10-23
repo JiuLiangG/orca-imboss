@@ -13,6 +13,21 @@ export function modelRef(model: ModelOption): string {
 }
 
 /**
+ * Gloss beside an employee's "Default" model choice. Names the app default
+ * only while that model is still listed; otherwise says where to set one.
+ */
+export function defaultModelSelectNote(
+  defaultModel: string,
+  models: readonly ModelOption[],
+): string {
+  const ref = defaultModel.trim();
+  if (ref.length > 0 && models.some((model) => modelRef(model) === ref)) {
+    return ref;
+  }
+  return t("Set a default model in Settings → General → Default model");
+}
+
+/**
  * Levels to offer for `modelId`. An empty id uses `fallbackModelId` (the app
  * default). When neither model is known, the union of every configured
  * model's levels is used, still in Pi's order.

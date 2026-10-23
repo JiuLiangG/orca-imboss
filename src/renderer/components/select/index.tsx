@@ -10,6 +10,11 @@ import "./index.css";
 export interface SelectOption {
   value: string;
   label: string;
+  /**
+   * Muted gloss after `label` on the same row. The closed control shows it
+   * too, because that control repeats the selected option's text.
+   */
+  note?: string;
 }
 
 export interface SelectProps {
@@ -212,9 +217,23 @@ export function Select({
         onKeyDown={onTriggerKeyDown}
       >
         <span
-          className={cls("imb-select-value", !selected && "imb-is-placeholder")}
+          className={cls(
+            "imb-select-value",
+            !selected && "imb-is-placeholder",
+            selected?.note && "imb-has-note",
+          )}
+          title={selected?.note}
         >
-          {selected ? selected.label : placeholder}
+          {selected?.note ? (
+            <>
+              <span className="imb-select-value-main">{selected.label}</span>
+              <span className="imb-select-note">{selected.note}</span>
+            </>
+          ) : selected ? (
+            selected.label
+          ) : (
+            placeholder
+          )}
         </span>
         <IconChevronDown
           className={cls(
@@ -263,7 +282,23 @@ export function Select({
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => commit(index)}
               >
-                <span className="imb-select-option-label">{option.label}</span>
+                <span
+                  className={cls(
+                    "imb-select-option-label",
+                    option.note && "imb-has-note",
+                  )}
+                >
+                  {option.note ? (
+                    <>
+                      <span className="imb-select-value-main">
+                        {option.label}
+                      </span>
+                      <span className="imb-select-note">{option.note}</span>
+                    </>
+                  ) : (
+                    option.label
+                  )}
+                </span>
                 {option.value === value && (
                   <span className="imb-select-check" aria-hidden="true">
                     ✓

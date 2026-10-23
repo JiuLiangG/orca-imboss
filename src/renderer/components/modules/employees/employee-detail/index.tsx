@@ -4,6 +4,7 @@ import type { Employee, EmployeeInput, ModelOption } from "@shared/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cls } from "reactutils";
 import {
+  defaultModelSelectNote,
   modelRef,
   thinkingLevelsFor,
   thinkingSelectOptions,
@@ -344,7 +345,11 @@ export function EmployeeDetail({
           <Select
             value={form.modelId ?? ""}
             options={[
-              { value: "", label: t("Default") },
+              {
+                value: "",
+                label: t("Default"),
+                note: defaultModelSelectNote(defaultModel, models),
+              },
               ...models.map((model) => ({
                 value: modelRef(model),
                 label: modelRef(model),
