@@ -15,6 +15,7 @@ export * from "./paged_lists";
 export * from "./projects";
 export * from "./providers";
 export * from "./sessions";
+export * from "./shortcut";
 export * from "./spend";
 export * from "./themes";
 export * from "./updater";

@@ -70,6 +70,52 @@ export function loadWindowBounds(): WindowBounds | null {
   return null;
 }
 
+/**
+ * Overlap (px, in each dimension) with a display's work area that counts as
+ * "the user can see this window". A smaller sliver is not grabbable, so it is
+ * treated as off-screen.
+ */
+const MIN_VISIBLE_PX = 48;
+
+/**
+ * Make sure the window sits on a connected display.
+ *
+ * A window whose bounds no longer intersect any display's work area (monitor
+ * unplugged, resolution changed) is "shown" while the user sees nothing — the
+ * exact failure the show/hide feature must not have. Such a window is re-centred
+ * (and clamped) into the primary display's work area.
+ *
+ * Returns `true` when the window had to be moved.
+ */
+export function ensureWindowOnScreen(win: BrowserWindow): boolean {
+  if (win.isDestroyed()) return false;
+  // Maximized / full-screen geometry belongs to the OS.
+  if (win.isMaximized() || win.isFullScreen()) return false;
+
+  const bounds = win.getBounds();
+  const onScreen = screen.getAllDisplays().some(({ workArea }) => {
+    const overlapX =
+      Math.min(bounds.x + bounds.width, workArea.x + workArea.width) -
+      Math.max(bounds.x, workArea.x);
+    const overlapY =
+      Math.min(bounds.y + bounds.height, workArea.y + workArea.height) -
+      Math.max(bounds.y, workArea.y);
+    return overlapX >= MIN_VISIBLE_PX && overlapY >= MIN_VISIBLE_PX;
+  });
+  if (onScreen) return false;
+
+  const area = screen.getPrimaryDisplay().workArea;
+  const width = Math.min(bounds.width, area.width);
+  const height = Math.min(bounds.height, area.height);
+  win.setBounds({
+    x: area.x + Math.round((area.width - width) / 2),
+    y: area.y + Math.round((area.height - height) / 2),
+    width,
+    height,
+  });
+  return true;
+}
+
 /** Persist the window's normal (unmaximized) bounds when it closes. */
 export function saveWindowBounds(win: BrowserWindow): void {
   if (win.isDestroyed()) return;

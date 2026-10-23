@@ -5,7 +5,8 @@ import { app, Notification } from "electron";
 import electronUpdater from "electron-updater";
 import { basename } from "path";
 import { getSetting, setSetting } from "./db/settings";
-import { focusMainWindow, sendToRenderer } from "./notifications";
+import { markQuitting, showMainWindow } from "./main-window";
+import { sendToRenderer } from "./notifications";
 
 // electron-updater is a CommonJS module; use the default-import interop to
 // reliably obtain the singleton `autoUpdater` and `CancellationToken`.
@@ -226,6 +227,10 @@ export function cancelUpdateDownload(): void {
 /** Quit and install a downloaded update, then relaunch (silent on Windows). */
 export function installUpdate(): void {
   if (state.status !== "downloaded") return;
+  // Closing the window only hides it now, so mark the app as quitting *before*
+  // the updater tears the windows down; otherwise the process would survive the
+  // close and never install.
+  markQuitting();
   autoUpdater.quitAndInstall(true, true);
 }
 
@@ -253,7 +258,7 @@ function notifyUpdateAvailable(version: string): void {
     body: t("Click to view and update to v${version}.", { version }),
   });
   notification.on("click", () => {
-    focusMainWindow();
+    showMainWindow();
     sendToRenderer("settings:focus", "about");
   });
   notification.show();

@@ -76,11 +76,6 @@
   color: var(--imb-fg);
 }
 
-.imb-nav-item:focus-visible {
-  outline: none;
-  box-shadow: var(--imb-focus-ring);
-}
-
 .imb-nav-item.imb-is-active {
   background: var(--imb-sel-bg);
   color: var(--imb-fg);
@@ -177,7 +172,7 @@
   position: relative;
 }
 
-.imb-nav-sortable > .imb-nav-item {
+.imb-nav-sortable>.imb-nav-item {
   cursor: grab;
 }
 
@@ -185,7 +180,7 @@
   z-index: 1;
 }
 
-.imb-nav-sortable.imb-is-dragging > .imb-nav-item {
+.imb-nav-sortable.imb-is-dragging>.imb-nav-item {
   opacity: 0.5;
   cursor: grabbing;
 }
@@ -196,7 +191,7 @@
 
 /* Mini-app and opened-session groups are siblings inside `.imb-scroll`; when both
    exist they get the same space-only separation. */
-.imb-nav-sortable-list + .imb-nav-sortable-list {
+.imb-nav-sortable-list+.imb-nav-sortable-list {
   margin-top: var(--imb-space-3);
 }
 

@@ -1,7 +1,11 @@
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "@shared/constants/locales";
 import { SettingKeys } from "@shared/constants/settings";
 import { t } from "@shared/l10n";
-import type { ModelOption, WorkDirState } from "@shared/types";
+import type {
+  ModelOption,
+  WindowShortcutState,
+  WorkDirState,
+} from "@shared/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useApp } from "../../../../app-store";
 import { setLocale } from "../../../../locale";
@@ -11,6 +15,7 @@ import { Field } from "../../../field";
 import { IconPlus, IconTrash } from "../../../icons";
 import { Input } from "../../../input";
 import { Select } from "../../../select";
+import { ShortcutInput, shortcutRejectMessage } from "../../../shortcut-input";
 import {
   modelRef,
   thinkingLevelsFor,
@@ -37,6 +42,14 @@ export function SettingsGeneral(): React.JSX.Element {
   const [models, setModels] = useState<ModelOption[]>([]);
   const [workdir, setWorkdir] = useState<WorkDirState | null>(null);
   const [workdirError, setWorkdirError] = useState<string | null>(null);
+  // Global show/hide shortcut: the main process owns the OS registration, so the
+  // value is read from (and written through) the dedicated `window:setShortcut`
+  // channel rather than the generic settings KV.
+  const [windowShortcut, setWindowShortcut] =
+    useState<WindowShortcutState | null>(null);
+  const [windowShortcutError, setWindowShortcutError] = useState<string | null>(
+    null,
+  );
   const envTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const persistEnv = useCallback((next: EnvVar[]): void => {
@@ -56,6 +69,7 @@ export function SettingsGeneral(): React.JSX.Element {
         envStored,
         models,
         workDir,
+        windowShortcut,
       ] = await Promise.all([
         imb.settings.get(SettingKeys.DefaultModel),
         imb.settings.get(SettingKeys.ImageModel),
@@ -63,6 +77,7 @@ export function SettingsGeneral(): React.JSX.Element {
         imb.settings.get(SettingKeys.UserEnv),
         imb.models.list(),
         imb.workdir.get(),
+        imb.windowControls.getShortcut(),
       ]);
       if (!alive) return;
       setDefaultModel(defaultModelStored ?? "");
@@ -71,6 +86,7 @@ export function SettingsGeneral(): React.JSX.Element {
       setEnvVars(parseEnv(envStored));
       setModels(models);
       setWorkdir(workDir);
+      setWindowShortcut(windowShortcut);
     })();
     return () => {
       alive = false;
@@ -102,6 +118,25 @@ export function SettingsGeneral(): React.JSX.Element {
       setWorkdirError(err instanceof Error ? err.message : String(err));
     }
   }
+
+  const commitWindowShortcut = useCallback(
+    async (accelerator: string): Promise<void> => {
+      try {
+        const update = await imb.windowControls.setShortcut(accelerator);
+        setWindowShortcut(update.state);
+        // `rejected` is the precise reason for *this* attempt; `state.error`
+        // only describes the registration the app ended up with.
+        setWindowShortcutError(
+          update.rejected ? shortcutRejectMessage(update.rejected) : null,
+        );
+      } catch (err) {
+        setWindowShortcutError(
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    },
+    [],
+  );
 
   function updateEnv(next: EnvVar[]): void {
     setEnvVars(next);
@@ -235,6 +270,25 @@ export function SettingsGeneral(): React.JSX.Element {
               {t("Browse…")}
             </button>
           </div>
+        </Field>
+
+        <Field
+          label={t("Show/hide window shortcut")}
+          hint={t(
+            "A system-wide shortcut that hides the main window while the app keeps running, and brings it back from any state. Turn it off and use the tray icon instead.",
+          )}
+        >
+          <ShortcutInput
+            value={windowShortcut?.accelerator ?? null}
+            defaultAccelerator={windowShortcut?.defaultAccelerator ?? ""}
+            error={
+              windowShortcutError ??
+              (windowShortcut?.error
+                ? shortcutRejectMessage(windowShortcut.error)
+                : null)
+            }
+            onCommit={commitWindowShortcut}
+          />
         </Field>
 
         <div className="imb-settings-env-section">

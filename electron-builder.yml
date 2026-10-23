@@ -5,6 +5,11 @@ directories:
   buildResources: build
 files:
   - "out/**"
+  # Runtime assets referenced through `?asset` imports (window icon on Linux,
+  # tray icons): `path.join(__dirname, "../../resources/…")` only resolves in a
+  # packaged build when these are actually shipped. The `asarUnpack` entry below puts them
+  # next to the asar, which Electron resolves transparently.
+  - "resources/**"
   - "!**/.DS_Store"
   - "!**/node_modules/.cache/**"
   - "!**/*.{ttf,woff}"
