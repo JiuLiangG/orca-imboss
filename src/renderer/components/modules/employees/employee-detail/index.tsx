@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { cls } from "reactutils";
 import {
   defaultModelSelectNote,
+  defaultThinkingSelectNote,
   modelRef,
   thinkingLevelsFor,
   thinkingSelectOptions,
@@ -30,6 +31,8 @@ export interface EmployeeDetailProps {
   models: ModelOption[];
   /** App default model (`provider/id`), used when this employee follows it. */
   defaultModel: string;
+  /** App default thinking level, inherited when this employee leaves it unset. */
+  defaultThinking: string;
   onPatch: (input: EmployeeInput) => Promise<boolean>;
   onRemove: () => void;
   /** Called when the avatar file is replaced (keeps appStore in sync). */
@@ -44,6 +47,7 @@ export function EmployeeDetail({
   skillOptions,
   models,
   defaultModel,
+  defaultThinking,
   onPatch,
   onRemove,
   onAvatarUpdated,
@@ -371,7 +375,16 @@ export function EmployeeDetail({
           <Select
             value={form.thinkingLevel ?? ""}
             options={[
-              { value: "", label: t("Default") },
+              {
+                value: "",
+                label: t("Default"),
+                note: defaultThinkingSelectNote(
+                  defaultThinking,
+                  models,
+                  form.modelId ?? "",
+                  defaultModel,
+                ),
+              },
               ...thinkingSelectOptions(
                 thinkingLevelsFor(models, form.modelId ?? "", defaultModel),
                 form.thinkingLevel ?? "",

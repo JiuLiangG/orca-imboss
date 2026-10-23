@@ -105,14 +105,18 @@ export function EmployeesModule(): React.JSX.Element {
   // Model options still come via IPC (models out of scope); loaded once.
   const [models, setModels] = useState<ModelOption[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
+  // App default thinking level: named beside the employee's "Default" choice.
+  const [defaultThinking, setDefaultThinking] = useState("");
   useEffect(() => {
     void Promise.all([
       imb.models.list(),
       imb.settings.get(SettingKeys.DefaultModel),
+      imb.settings.get(SettingKeys.DefaultThinkingLevel),
     ])
-      .then(([loaded, storedDefault]) => {
+      .then(([loaded, storedDefault, storedThinking]) => {
         setModels(loaded);
         setDefaultModel(storedDefault ?? "");
+        setDefaultThinking(storedThinking ?? "");
       })
       .catch(() => {
         // Best-effort: model selects stay empty on failure.
@@ -497,6 +501,7 @@ export function EmployeesModule(): React.JSX.Element {
       skillOptions={toSkillOptions(data.skills.items)}
       models={models}
       defaultModel={defaultModel}
+      defaultThinking={defaultThinking}
       onPatch={(input) => patch(selected.id, input)}
       onRemove={() => void remove(selected.id)}
       onAvatarUpdated={(employee) => appStore.replaceEmployee(employee)}
@@ -535,6 +540,7 @@ export function EmployeesModule(): React.JSX.Element {
         skillOptions={toSkillOptions(data.skills.items)}
         models={models}
         defaultModel={defaultModel}
+        defaultThinking={defaultThinking}
         onCreate={create}
       />
       <EmployeeImportModal

@@ -47,6 +47,50 @@ export function thinkingLevelsFor(
   return union.length > 0 ? [...union] : [...THINKING_LEVELS];
 }
 
+/**
+ * Level the agent actually ends up with when `requested` is clamped onto
+ * `levels`. Mirrors Pi's `clampThinkingLevel`: walk up to the nearest stronger
+ * level, then down, and only then fall back to the weakest one available.
+ */
+function clampToLevels(
+  levels: readonly ThinkingLevel[],
+  requested: ThinkingLevel,
+): ThinkingLevel {
+  if (levels.includes(requested)) return requested;
+  const requestedIndex = THINKING_LEVELS.indexOf(requested);
+  if (requestedIndex === -1) return levels[0] ?? "off";
+  for (let i = requestedIndex; i < THINKING_LEVELS.length; i++) {
+    const candidate = THINKING_LEVELS[i];
+    if (levels.includes(candidate)) return candidate;
+  }
+  for (let i = requestedIndex - 1; i >= 0; i--) {
+    const candidate = THINKING_LEVELS[i];
+    if (levels.includes(candidate)) return candidate;
+  }
+  return levels[0] ?? "off";
+}
+
+/**
+ * Gloss beside an employee's "Default" thinking level. Empty while the app
+ * default is unset (the row then reads as a plain "Default"); otherwise names
+ * the level the agent really uses, i.e. the app default clamped to the levels
+ * the employee's model accepts.
+ */
+export function defaultThinkingSelectNote(
+  defaultThinking: string,
+  models: readonly ModelOption[],
+  modelId: string,
+  fallbackModelId = "",
+): string {
+  // Unset/corrupt stored values are not an error: the SDK picks its own
+  // default then, so there is nothing this row can name.
+  const requested = defaultThinking.trim();
+  if (!isThinkingLevel(requested)) return "";
+  const levels = thinkingLevelsFor(models, modelId, fallbackModelId);
+  if (levels.length === 0) return t(THINKING_LEVEL_LABEL_KEYS[requested]);
+  return t(THINKING_LEVEL_LABEL_KEYS[clampToLevels(levels, requested)]);
+}
+
 /** Select rows for `levels`, keeping a stored value visible even if this model rejects it. */
 export function thinkingSelectOptions(
   levels: readonly ThinkingLevel[],

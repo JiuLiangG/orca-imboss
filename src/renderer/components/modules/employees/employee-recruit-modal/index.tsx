@@ -11,6 +11,7 @@ import { Select } from "../../../select";
 import { Textarea } from "../../../textarea";
 import {
   defaultModelSelectNote,
+  defaultThinkingSelectNote,
   modelRef,
   thinkingLevelsFor,
   thinkingSelectOptions,
@@ -24,6 +25,8 @@ export interface EmployeeRecruitModalProps {
   models: ModelOption[];
   /** App default model (`provider/id`), used when the recruit follows it. */
   defaultModel: string;
+  /** App default thinking level, inherited when the recruit leaves it unset. */
+  defaultThinking: string;
   onCreate: (input: EmployeeInput) => Promise<Employee | null>;
 }
 
@@ -34,6 +37,7 @@ export function EmployeeRecruitModal({
   skillOptions,
   models,
   defaultModel,
+  defaultThinking,
   onCreate,
 }: EmployeeRecruitModalProps): React.JSX.Element {
   const [name, setName] = useState("");
@@ -185,7 +189,16 @@ export function EmployeeRecruitModal({
         <Select
           value={thinkingLevel}
           options={[
-            { value: "", label: t("Default") },
+            {
+              value: "",
+              label: t("Default"),
+              note: defaultThinkingSelectNote(
+                defaultThinking,
+                models,
+                modelId,
+                defaultModel,
+              ),
+            },
             ...thinkingSelectOptions(
               thinkingLevelsFor(models, modelId, defaultModel),
               thinkingLevel,
