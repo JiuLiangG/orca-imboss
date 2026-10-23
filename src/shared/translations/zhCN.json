@@ -441,6 +441,7 @@
   "Send": "发送",
   "Server names are set when created and cannot be changed.": "服务名称在创建后不可更改。",
   "Server URL": "服务地址",
+  "Set a default model in Settings → General → Default model": "请到「设置 → 通用 → 默认模型」中设定默认模型",
   "Set cron job": "设置定时任务",
   "Settings": "设置",
   "Show details": "查看详情",
