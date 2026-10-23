@@ -11,7 +11,7 @@ import { cls } from "reactutils";
 import { useDropdownPosition } from "../../hooks/use-dropdown-position";
 import { useEscapeKey } from "../../hooks/use-escape-key";
 import { usePopupLayer } from "../../hooks/use-popup-layer";
-import { IconChevronDown } from "../icons";
+import { IconChevronDown, IconStar } from "../icons";
 import "./index.css";
 
 function optionMatchesTypeahead(option: SelectOption, buffer: string): boolean {
@@ -36,6 +36,13 @@ export interface SelectOption {
   menuLabel?: string;
   /** Non-selectable heading inserted before the first row of a run. */
   group?: string;
+  /** Thin rule before this row's heading. Ignored when it has no `group`. */
+  dividerBefore?: boolean;
+  /** Shows a star button. The row click still selects. */
+  starable?: boolean;
+  starred?: boolean;
+  /** Accessible name of the star button. */
+  starLabel?: string;
 }
 
 export interface SelectProps {
@@ -47,6 +54,8 @@ export interface SelectProps {
   disabled?: boolean;
   id?: string;
   label?: string;
+  /** Star click. Does not select the row or close the menu. */
+  onToggleStar?: (value: string) => void;
 }
 
 /**
@@ -67,6 +76,7 @@ export function Select({
   disabled = false,
   id,
   label,
+  onToggleStar,
 }: SelectProps): React.JSX.Element {
   const uid = useId();
   const listboxId = `select-${uid}`;
@@ -302,6 +312,12 @@ export function Select({
               const menuText = option.menuLabel ?? option.label;
               return (
                 <Fragment key={option.value}>
+                  {option.dividerBefore && showGroup && (
+                    <li
+                      className="imb-select-sep imb-menu-sep"
+                      role="presentation"
+                    />
+                  )}
                   {showGroup && (
                     <li className="imb-select-group" role="presentation">
                       {option.group}
@@ -342,10 +358,40 @@ export function Select({
                         menuText
                       )}
                     </span>
-                    {option.value === value && (
-                      <span className="imb-select-check" aria-hidden="true">
-                        ✓
+                    {option.starable && onToggleStar ? (
+                      <span className="imb-select-option-side">
+                        <span
+                          className="imb-select-check imb-select-check-slot"
+                          aria-hidden="true"
+                        >
+                          {option.value === value ? "✓" : ""}
+                        </span>
+                        <button
+                          type="button"
+                          className={cls(
+                            "imb-select-star",
+                            option.starred && "imb-is-on",
+                          )}
+                          aria-pressed={option.starred === true}
+                          aria-label={option.starLabel}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onToggleStar(option.value);
+                          }}
+                        >
+                          <IconStar
+                            className="imb-icon imb-sm"
+                            filled={option.starred === true}
+                          />
+                        </button>
                       </span>
+                    ) : (
+                      option.value === value && (
+                        <span className="imb-select-check" aria-hidden="true">
+                          ✓
+                        </span>
+                      )
                     )}
                   </li>
                 </Fragment>

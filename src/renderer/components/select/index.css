@@ -136,6 +136,46 @@
   flex: none;
 }
 
+.imb-select-option-side {
+  display: flex;
+  align-items: center;
+  gap: var(--imb-space-1);
+  flex: none;
+  margin-left: var(--imb-space-2);
+}
+
+.imb-select-check-slot {
+  width: 14px;
+  text-align: center;
+}
+
+.imb-select-star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--imb-radius-control);
+  background: none;
+  color: var(--imb-muted);
+  cursor: pointer;
+  flex: none;
+}
+
+.imb-select-star:hover,
+.imb-select-star:focus-visible {
+  color: var(--imb-fg);
+  outline: none;
+}
+
+.imb-select-star.imb-is-on,
+.imb-select-star.imb-is-on:hover,
+.imb-select-star.imb-is-on:focus-visible {
+  color: #e2b340;
+}
+
 .imb-select-empty {
   padding: var(--imb-space-2) var(--imb-space-3);
   color: var(--imb-muted);
