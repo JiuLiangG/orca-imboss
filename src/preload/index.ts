@@ -43,6 +43,8 @@ import type {
   StagedRestore,
   ThemeState,
   UpdaterState,
+  WindowShortcutState,
+  WindowShortcutUpdate,
   WorkDirState,
 } from "@shared/types";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
@@ -147,6 +149,7 @@ const api = {
   windowControls: {
     minimize: () => ipcRenderer.invoke("window:minimize"),
     toggleMaximize: () => ipcRenderer.invoke("window:toggleMaximize"),
+    /** Hides the window — it does not quit the app (see the tray menu to quit). */
     close: () => ipcRenderer.invoke("window:close"),
     isMaximized: () =>
       ipcRenderer.invoke("window:isMaximized") as Promise<boolean>,
@@ -154,6 +157,28 @@ const api = {
       on<boolean>("window:maximized", cb),
     /** Fired when the OS window regains focus (used to re-clear unread). */
     onFocus: (cb: () => void) => on<undefined>("window:focus", cb),
+
+    /** Global show/hide shortcut state (persisted value + OS registration). */
+    getShortcut: () =>
+      ipcRenderer.invoke("window:getShortcut") as Promise<WindowShortcutState>,
+    /**
+     * Register a recorded accelerator (`""` turns the feature off). Rejected
+     * values are not persisted and leave the previous shortcut active.
+     */
+    setShortcut: (accelerator: string) =>
+      ipcRenderer.invoke(
+        "window:setShortcut",
+        accelerator,
+      ) as Promise<WindowShortcutUpdate>,
+    /**
+     * Drop / restore the OS registration while the settings recorder is
+     * listening, so pressing the current combination does not hide the window.
+     */
+    suspendShortcut: (suspended: boolean) =>
+      ipcRenderer.invoke(
+        "window:suspendShortcut",
+        suspended,
+      ) as Promise<WindowShortcutState>,
   },
 
   theme: {

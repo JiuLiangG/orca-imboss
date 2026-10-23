@@ -1,6 +1,4 @@
-import { app, BrowserWindow, shell } from "electron";
-import { join } from "path";
-import icon from "../../resources/icon.png?asset";
+import { app } from "electron";
 import { ASSISTANT_ID } from "@shared/constants/employees";
 import { READ_CHAT_PROMPT } from "@shared/constants/prompts";
 import { materializeBuiltinSkills } from "./agent/builtin-skills";
@@ -25,19 +23,21 @@ import {
 } from "./imb-file-protocol";
 import { initIntegrations, shutdownIntegrations } from "./integrations";
 import { registerIpcHandlers } from "./ipc";
-import { getResolvedLocale, initLocale } from "./locale";
+import { initLocale } from "./locale";
+import {
+  createMainWindow,
+  disposeTray,
+  initTray,
+  markQuitting,
+  showMainWindow,
+} from "./main-window";
 import { stopAllMiniAppServers, syncMiniAppIndex } from "./mini-apps";
-import { setMainWindow } from "./notifications";
 import { initTheme } from "./theme";
 import { initUpdater } from "./updater";
 import {
-  DEFAULT_WINDOW_HEIGHT,
-  DEFAULT_WINDOW_WIDTH,
-  loadWindowBounds,
-  MIN_WINDOW_HEIGHT,
-  MIN_WINDOW_WIDTH,
-  saveWindowBounds,
-} from "./window-state";
+  initWindowShortcut,
+  unregisterWindowShortcut,
+} from "./window-shortcut";
 
 // Keep the Pi SDK's own agent-dir defaults (MCP OAuth credentials and MCP logs)
 // inside the app's isolated data dir instead of the host's `~/.pi/agent`. The
@@ -68,24 +68,32 @@ if (singleInstanceLock) {
   }
 }
 
-// Single window
+/**
+ * False until startup has created the window and the services behind it. The
+ * OS can emit `activate` / `second-instance` while we are still initialising;
+ * revealing the window then would build it before the database (locale, window
+ * bounds) exists.
+ */
+let started = false;
+
+// Single window. A second launch is "bring the app back", not "open another one"
+// — the same entry point as the global shortcut and the tray icon, so a hidden
+// or minimized window comes back instead of silently staying away.
 app.on("second-instance", () => {
-  const win = BrowserWindow.getAllWindows()[0];
-  if (win) {
-    if (win.isMinimized()) win.restore();
-    win.focus();
-  }
+  if (!started) return;
+  showMainWindow();
 });
 
-// Closing the last window quits the app on every platform, including macOS:
-// the app has no reason to keep running in the background, so the red close
-// button (and the custom title-bar close) fully exits instead of leaving a
-// dock-persistent process.
-app.on("window-all-closed", () => {
-  app.quit();
-});
+// No `window-all-closed` handler on purpose: closing the window only hides it
+// (see `main-window.ts`), so the app keeps running in the tray. Quitting is
+// explicit — tray menu, the app menu / Cmd+Q, or `app.quit()` from an update
+// install or a backup restore.
 
 app.on("before-quit", () => {
+  // Let the window's `close` handler really close (it hides instead otherwise).
+  markQuitting();
+  unregisterWindowShortcut();
+  disposeTray();
   cancelRunRecovery();
   cron.stopAll();
   stopAllMiniAppServers();
@@ -93,8 +101,11 @@ app.on("before-quit", () => {
   void shutdownIntegrations();
 });
 
+// macOS: clicking the Dock icon (or being reactivated) must bring a hidden
+// window back; `showMainWindow()` also re-creates it when there is none.
 app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  if (!started) return;
+  showMainWindow();
 });
 
 app.whenReady().then(() => {
@@ -123,7 +134,11 @@ app.whenReady().then(() => {
   // Start enabled IM integrations (WeChat / QQ / Telegram) in the background.
   void initIntegrations();
 
-  createWindow();
+  createMainWindow();
+  // Tray icon: the second entry point for showing a hidden window, and the only
+  // way to quit with the window hidden on Windows / Linux.
+  initTray();
+  started = true;
 
   // Keep `index.json` in sync (append new apps, prune stale ids).
   void syncMiniAppIndex();
@@ -142,6 +157,11 @@ app.whenReady().then(() => {
       wakeAgent(ASSISTANT_ID, chatId, READ_CHAT_PROMPT, { mode: "queue" }),
   });
 
+  // Register the global show/hide shortcut (after the database, so the stored
+  // accelerator is readable). A registration failure is surfaced in
+  // Settings › General instead of being fatal.
+  initWindowShortcut();
+
   void purgeDisabledEmployeesOnStartup();
 
   void refreshModelStore(new AbortController().signal);
@@ -150,135 +170,6 @@ app.whenReady().then(() => {
   // (inside `initUpdater`), but the renderer's manual check also works in dev.
   initUpdater();
 });
-
-/**
- * Only these schemes are ever handed to the OS. Chat content is model- and
- * user-authored, so an arbitrary `shell.openExternal` target (custom protocol,
- * `file:`, …) must never be reachable from a link.
- */
-function isSafeExternalUrl(rawUrl: string): boolean {
-  try {
-    const { protocol } = new URL(rawUrl);
-    return (
-      protocol === "http:" || protocol === "https:" || protocol === "mailto:"
-    );
-  } catch {
-    return false;
-  }
-}
-
-/**
- * True when `rawUrl` belongs to the app itself: the current window URL (a
- * reload) or the Vite dev-server origin (a full HMR reload in development).
- */
-function isAppOwnUrl(win: BrowserWindow, rawUrl: string): boolean {
-  if (win.isDestroyed() || rawUrl === win.webContents.getURL()) return true;
-  const devUrl = process.env["ELECTRON_RENDERER_URL"];
-  return devUrl !== undefined && rawUrl.startsWith(devUrl);
-}
-
-function createWindow(): void {
-  const locale = getResolvedLocale();
-  const savedBounds = loadWindowBounds();
-
-  const mainWindow = new BrowserWindow({
-    ...(savedBounds ?? {
-      width: DEFAULT_WINDOW_WIDTH,
-      height: DEFAULT_WINDOW_HEIGHT,
-    }),
-    minWidth: MIN_WINDOW_WIDTH,
-    minHeight: MIN_WINDOW_HEIGHT,
-    show: false,
-    autoHideMenuBar: true,
-    titleBarStyle: "hidden",
-    ...(process.platform === "linux" ? { icon } : {}),
-    // macOS chrome glass (design route A).
-    //
-    // The native `NSVisualEffectView` sits *behind* the web contents; the
-    // renderer paints only the chrome band translucent over it
-    // (`--imb-material-chrome`) and keeps every content surface opaque, so the
-    // material can never bleed into text. `followWindow` lets the system
-    // brighten/desaturate the material with the window's key state.
-    //
-    // `under-window` (not `sidebar`): the app owns a full-window layout rather
-    // than an AppKit source list, and the whole-window background material is
-    // the more translucent of the two — the boss read `sidebar` as too solid on
-    // a real window. The CSS layer above it is 60% window colour, so ~40% of the
-    // material shows through; see `--imb-material-chrome` in tokens.css for the
-    // tuning band (55–65%).
-    //
-    // Deliberately NOT `transparent: true`: that path needs a private corner
-    // mask to keep the window corners smooth and previously spiked
-    // WindowServer GPU load. The alpha background below is only "let the
-    // material through", not a see-through window.
-    ...(process.platform === "darwin"
-      ? {
-          vibrancy: "under-window" as const,
-          visualEffectState: "followWindow" as const,
-          backgroundColor: "#00000000",
-          roundedCorners: true,
-        }
-      : {}),
-    webPreferences: {
-      preload: join(__dirname, "../preload/index.js"),
-      spellcheck: false,
-      additionalArguments: [`--locale=${locale}`],
-    },
-  });
-
-  mainWindow.on("ready-to-show", () => {
-    mainWindow?.show();
-  });
-
-  // Forward maximize state to the renderer (drives the custom window buttons).
-  mainWindow.on("maximize", () =>
-    mainWindow.webContents.send("window:maximized", true),
-  );
-  mainWindow.on("unmaximize", () =>
-    mainWindow.webContents.send("window:maximized", false),
-  );
-
-  // Forward focus regain to the renderer: the chat module clears the selected
-  // conversation's unread again on focus, because an `imb_notify` bump while
-  // the window was in the background only pushes `chats:unreadChanged` (no
-  // `messages:changed`), so the selection never changes and the selectedId
-  // effect never runs again.
-  mainWindow.on("focus", () => mainWindow.webContents.send("window:focus"));
-
-  mainWindow.on("close", () => saveWindowBounds(mainWindow));
-
-  // Register the window for OS notification click-to-focus + jump-to-chat.
-  setMainWindow(mainWindow);
-  mainWindow.on("closed", () => setMainWindow(null));
-
-  // Open external links in the OS browser; never allow in-app popups. Only
-  // known-safe schemes are forwarded.
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    if (isSafeExternalUrl(details.url)) {
-      void shell.openExternal(details.url);
-    }
-    return { action: "deny" };
-  });
-
-  // Defense-in-depth: a Markdown link without `target="_blank"` would otherwise
-  // navigate the app window away from the UI (and a `file:` target could load
-  // local HTML with the preload bridge attached). Allow only the app's own
-  // URL / dev-server origin (reloads, HMR) and forward safe external URLs to
-  // the OS; everything else is dropped.
-  mainWindow.webContents.on("will-navigate", (event, url) => {
-    if (isAppOwnUrl(mainWindow, url)) return;
-    event.preventDefault();
-    if (isSafeExternalUrl(url)) {
-      void shell.openExternal(url);
-    }
-  });
-
-  if (process.env["ELECTRON_RENDERER_URL"]) {
-    mainWindow.loadURL(process.env["ELECTRON_RENDERER_URL"]);
-  } else {
-    mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
-  }
-}
 
 async function purgeDisabledEmployeesOnStartup(): Promise<void> {
   try {

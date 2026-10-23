@@ -20,5 +20,11 @@ export const SettingKeys = {
   WindowState: "ui.window",
   /** Folder id of the last opened mini app (restored on next launch). */
   MiniAppActive: "ui.miniAppActive",
+  /**
+   * Global accelerator that shows / hides the main window. A missing row means
+   * "never configured" (the platform default applies); an empty string means
+   * the user turned the shortcut off. See `src/shared/shortcut.ts`.
+   */
+  WindowShortcut: "app.windowShortcut",
   UpdateNotifiedVersion: "app.updateNotifiedVersion",
 };
